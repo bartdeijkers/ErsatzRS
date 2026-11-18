@@ -5,12 +5,13 @@ status     = 'In progress'
 adr        = ['0010', '0020', '0097', '0098']
 
 summary    = '''
-The Classic baseline covers engine dispatch, SQL loading, typed items,
-collections, filler, anchors, fill groups, and scheduling-context persistence.
-Regressions cover filler placement and whole-item advancement.
-UCU-16 is accepted on 2026-11-13: discard, real groups/resume, immutable
-chapters, persisted Random Count and ADR0098 fallback. Milestone ucu-16 owns
-required proof/delivery; separate deterministic-profile debt is unchanged.
+Row294 accepts per-build smart collection reuse and batched artist membership.
+Milestone ucu-16-continuation owns the continuity proof.
+
+Classic covers dispatch, SQL loading, typed items, collections, filler,
+anchors, fill groups and persisted context. Tests cover placement and whole-item
+advancement. UCU-16 rows286–289 cover discard, group resume, immutable chapters,
+persisted Random Count and ADR0098 fallback. Milestone ucu-16 owns that proof.
 
 Continue-build fix (2026-06-08): persist the post-build anchor and trim only
 before `request.start - 4h`, preserving future items without overlap.

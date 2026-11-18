@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `c41969b3bba66f14bf1d0be9e041b52218f65871` |
-| **Commit subject** | `fix: classic filler expression and random count (#3139)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/c41969b3bba66f14bf1d0be9e041b52218f65871 |
+| **Pinned commit** | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` |
+| **Commit subject** | `chore: update next (#3146)` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9c6b3deaca1feb0639134b880e8dd5eed225ee6d |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -114,6 +114,15 @@ Rows290/291 come afterward by explicit maintainer instruction; this closure
 neither processes them nor authorizes a later-tip chase, release or installation.
 The shared upstream checkout remains untouched; ordinary gap discovery checks
 this authoritative Pin table before selecting source.
+
+The UCU-16 continuation accepts rows290–296 on 2026-11-18 through the fixed
+terminal in the Pin table. The ledger has **296 processed and zero pending
+in-scope rows**. The qualified source preserves Native and Next outputs,
+selected international tracks, persisted schedules and the
+four required private application packages. Source PR165 landed as24c1fe6e.
+Milestone `ucu-16-continuation` owns exact full CI, ordered review, runtime
+acquisition and original failures. Native ARM and other platform deferrals
+retain their approved scopes.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not

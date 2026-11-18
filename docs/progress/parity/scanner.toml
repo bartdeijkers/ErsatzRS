@@ -2,16 +2,16 @@ feature    = 'Scanner'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.Scanner/`'
 rs_target  = '`crates/ersatzrs-scanner`'
 status     = 'In progress'
-adr        = ['0057', '0060', '0062', '0108']
+adr        = ['0057', '0060', '0062', '0108', '0137']
 
 summary    = '''
-Local filesystem scanning dispatches by `Library.MediaKind` for movies, other
-videos, songs, images, TV, artists, music videos, and remote streams. It writes
-provider-shaped media, metadata, artwork, GUID, genre/tag/studio/person,
-`MediaStream`, `LibraryFolder`, and fallback metadata rows using ErsatzTV enum
-values and path hashes. Local TV now mirrors `TelevisionFolderScanner.cs`
-folder-etag behavior, show/season folder persistence, trashed-item restore
-guarding, and stale-folder cleanup.
+Rows290 and295 accept DateAdded backfill and stable Jellyfin track IDs with
+a physical map. Milestone ucu-16-continuation owns the proof.
+
+Local scans dispatch supported media by `Library.MediaKind`. They write
+provider-shaped metadata, relationships, streams, folders and fallback rows
+with ErsatzTV enums and path hashes. Local TV matches folder ETags, show and
+season persistence, guarded restoration and stale-folder cleanup.
 
 Local show identity preserves ErsatzTV's title/year baseline while adding ADR
 0060's folder and NFO GUID precedence. Full scans transactionally
