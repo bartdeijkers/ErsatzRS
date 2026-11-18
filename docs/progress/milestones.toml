@@ -42828,6 +42828,19 @@ validate. It still restores and verifies the artifacts before reusing proof.
 The earlier real Jiff publisher records pass this validation. The pending
 full candidate keeps running to gather its own completed results.
 
+Executable qualification for source8861d7f5 is Complete. Run44240611155
+passes all runtime and browser checks, including the same 16 earlier Next
+failures within 555 current passing Next cases and both decoded playback
+smokes. Level 1.5 passes2533 workspace and18 real Next runtime cases. All four
+browser jobs pass against the matching SSR/WASM products. The original
+inventory-harness failure and aggregate failure are retained. Full recovery
+run44268846381 then verifies both archives and the eight successful unchanged
+jobs. All seven fresh required recovery checks pass, including the corrected
+documentation gate and CI ok. Verified full-tree marker14412470614 binds the
+composed job identities and artifact digests to the exact recovery source.
+The receipt is row296-runtime-publication/ci/run-44268846381-composed-proof.json.
+Protected PR165, source merge, and the seven ordered dispositions remain due.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.

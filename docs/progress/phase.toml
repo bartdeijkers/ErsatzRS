@@ -9,9 +9,9 @@ Current UCU-16 delivery checkpoint. The standalone Jiff migration reached
 origin/main at7dfbf348 through PR167. Full run44213461124 and protected PR
 run44240132857 passed. PR165 candidate485bbf81 includes that exact main
 commit and matches the refreshed four-platform producer outside progress
-records. The full CI run44240611155 is collecting the combined proof. Its
-CI inventory harness failure has a verified local correction. Milestone
-ucu-16-continuation owns exact source, evidence and remaining gates.
+records. The full CI run44268846381 passes with eight verified results reused
+from44240611155 and seven fresh gates. Milestone ucu-16-continuation owns
+exact source, evidence and remaining protected delivery gates.
 
 The 2026-11-16 continuation selected UCU-16 rows290–296 through
 fixed9c6b3dea. Direct GitHub verification confirms exactly seven commits after
