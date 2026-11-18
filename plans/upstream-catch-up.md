@@ -32,7 +32,7 @@ of non-applicability. Earlier accepted UCU windows and Phase9 stay closed.
 | UCU-16 | 286–289 | `c41969b3bba66f14bf1d0be9e041b52218f65871` | Complete; Native retained |
 | UCU-16 continuation | 290–296 | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` | Complete |
 
-The ledger has **305 observed commits, 304 processed and 1 pending**. Row 305 is outside the current window.
+The ledger has **305 observed commits, 304 processed and 1 pending**. Row 305 has been assessed and awaits Next worker qualification.
 Each row has an individual disposition. Approved Deferred rows retain their
 recorded scope. The source maps below preserve the original checkpoints.
 
@@ -7088,4 +7088,4 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 302 | `8b2af35c` | fix: remove jwt streaming auth (#3152) | Port | mpeg-ts-channel-streaming | `20ff1b69` | Removed streaming JWT generation, propagation and validation. IPTV and HDHomeRun refuse requests while either legacy signing-key variable is present. The admin shell gives localized removal instructions. With the key removed, public streaming URLs carry no access token. |
 | 303 | `ab318c5c` | ci: build macOS arm64 on macos-26 runners (#3154) | N/A | upstream-baseline-catch-up | `docs(status): assess dependency and runner changes through row 304` | Upstream changes macOS artifact, Next pin and PR runner images. Both macOS CI targets are deferred under the supported-platform decision in AGENTS.md. |
 | 304 | `ebcf9fa6` | fix: troubleshooting results without report (#3153) | Port | support-pages | `39127368` | A Next failure before FFmpeg starts now yields a downloadable troubleshooting ZIP when logs.txt, outcome.txt or ffmpeg_stderr.log is present. Three focused archive tests cover each marker, original paths, report compatibility and metadata-only rejection. |
-| 305 | `ba432329` | chore: update next (#3155) |  |  |  | Pending outside the rows 297–304 window. |
+| 305 | `ba432329` | chore: update next (#3155) |  |  |  | Assessed as Adapt (ADR 0135). Next 614dc9be..9133cd28 changes NVIDIA probe startup, macOS CI and pre-FFmpeg troubleshooting dossiers. Row 304 can archive an existing dossier. Worker adoption is open under upstream-baseline-catch-up debt ucu16-next-row305. |

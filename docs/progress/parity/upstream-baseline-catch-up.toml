@@ -543,3 +543,28 @@ description = 'Remove unmaintained chrono from the application dependency graph 
 discovered = '2026-11-17'
 evidence = 'ADR 0138 is implemented at source50403405. The locked all-feature/all-target graph has no chrono dependency and Cargo deny passes unchanged. Compatibility, database reopen, Classic continuity, packaged add-on source, matched headed browsers, Native/Next smoke and 93/86 transport controls pass in the recorded local scope. Milestone ucu-16-continuation retains the exact evidence and the required integrated CI and ordered delivery.'
 resolved = true
+
+[[debt]]
+id = 'ucu16-next-row305'
+adr = '0135'
+discovered = '2026-11-18'
+resolved = false
+description = 'Qualify a managed Next worker for ErsatzTV row 305. The current worker can exit before FFmpeg starts without writing the troubleshooting dossier, and lacks the updated NVIDIA startup probe.'
+evidence = '''
+ErsatzTV ba432329 moves the Next pin from 614dc9be to 9133cd28.
+Next 6f33f247 moves NVIDIA probe teardown off the startup path and waits for it
+at process exit. Commit 82dd16cd changes only the deferred macOS CI runners.
+Commit 9133cd28 preserves invalid scheduled item JSON in playout_item.json and
+writes a dossier on troubleshooting errors before FFmpeg starts. Row 304
+accepts existing logs or an outcome and includes JSON files in the ZIP.
+
+The current manifest's 13 checked patches apply to 6c9e0cf7 and reproduce the
+pinned Cargo.lock digest. That prepared source still returns the troubleshooting
+error directly and lacks the invalid-item dossier builder and NVIDIA shutdown
+guard. On 9133cd28 the first two patches apply. Patch 0003-update-worker-security-lock.patch
+fails at Cargo.lock:75. Reconcile the lock and remaining patches against the
+successor, retaining their regression checks. Verify an invalid scheduled item
+produces a downloadable dossier with its input JSON and outcome before FFmpeg
+starts, and verify the NVIDIA probe lifecycle within the existing hardware and
+platform scope. ADR 0135 governs package qualification and managed adoption.
+'''
