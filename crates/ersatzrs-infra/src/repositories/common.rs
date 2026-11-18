@@ -187,7 +187,7 @@ pub fn decode_datetime(kind: &'static str, value: &str) -> Result<DateTime<Utc>>
         .map(|parsed| parsed.with_timezone(&Utc))
         .or_else(|_| {
             ersatzrs_time::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
-                .map(|parsed| parsed.and_utc())
+                .map(ersatzrs_time::NaiveDateTime::and_utc)
         })
         .or_else(|_| {
             ersatzrs_time::NaiveDate::parse_from_str(value, "%Y-%m-%d")

@@ -42804,6 +42804,16 @@ reusing the four-platform proof. Exact integrated CI and ordered delivery
 remain required. Previously qualified Next/FFmpeg payloads and publication
 proof retain their original source and scope.
 
+The standalone Jiff PR167 reached origin/main at7dfbf348 after full CI
+44213461124 passed all15 jobs and protected PR run44240132857 reused its exact
+verified marker. Integration of that main commit into PR165 preserves the
+four-platform producer's complete build, runtime and browser input tree.
+Only milestones.toml and sessions.ndjson differ from producer3f615954.
+This satisfies source equivalence for the refreshed private platform evidence.
+The two earlier red PR165 runs retain their completed diagnostic and passing
+job results. The current exact integrated full CI and ordered delivery remain
+required for the continuation.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.

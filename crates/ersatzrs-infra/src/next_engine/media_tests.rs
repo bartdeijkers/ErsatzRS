@@ -154,7 +154,7 @@ fn assert_canvas_tampering(
             "out" => changed.out_point_ms += 1,
             "session" => changed.session = Some(Uuid::nil()),
             "playout_start" => {
-                changed.playout_start = Some(start + ersatzrs_time::TimeDelta::seconds(1))
+                changed.playout_start = Some(start + ersatzrs_time::TimeDelta::seconds(1));
             }
             "video_stream_index" => changed.video_stream_index = Some(1),
             "region" => {
