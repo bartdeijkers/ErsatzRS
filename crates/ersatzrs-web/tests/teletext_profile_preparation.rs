@@ -37,7 +37,7 @@ use ersatzrs_infra::{
     repositories::make_repositories,
 };
 use ersatzrs_time::{TimeZone as _, Utc};
-use ersatzrs_web::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+use ersatzrs_web::host::state::{AppState, SystemStartup};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use uuid::Uuid;
@@ -343,7 +343,7 @@ impl Fixture {
             ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             2,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             sender,
             EntityLocker::new(),
         );
@@ -393,7 +393,7 @@ impl Fixture {
             ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             2,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             sender,
             EntityLocker::new(),
         );

@@ -26,9 +26,7 @@ fn observed_control(
     TeletextOutputControl,
     Arc<ersatzrs_app::ApplicationServices>,
 ) {
-    let state = crate::host::state::AppState::for_tests(
-        crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
-    );
+    let state = crate::host::state::AppState::for_tests(false);
     control.observe_native_output(ObservationContext {
         application: state.application.clone(),
         channel_id: 44,

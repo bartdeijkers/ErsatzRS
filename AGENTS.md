@@ -280,8 +280,8 @@ cargo run --bin ersatzrs-web
 # Verify the server is up.
 curl http://127.0.0.1:8409/healthz
 
-# Run the full mediaserver with IPTV JWT enforcement enabled.
-JWT__IssuerSigningKey=dev-secret cargo run --bin ersatzrs-web
+# IPTV streams are unauthenticated. Remove legacy JWT signing-key variables
+# and restart the server. Use a VPN or authenticated reverse proxy for remote access.
 
 # Run a one-shot media scan against the same database.
 # Defaults to ~/.ersatzrs/ErsatzRS.db when DATABASE_URL is unset.

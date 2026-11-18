@@ -9,7 +9,7 @@ use ersatzrs_app::commands::{
 };
 use ersatzrs_core::locking::EntityLocker;
 use ersatzrs_domain::{ManagedLibraryOperationState, MediaSourceKind};
-use ersatzrs_web::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+use ersatzrs_web::host::state::{AppState, SystemStartup};
 use futures_util::FutureExt as _;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Executor as _, SqlitePool};
@@ -246,7 +246,7 @@ fn application_state(pool: SqlitePool) -> (AppState, UnboundedReceiver<ScanWorkR
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         Uuid::nil(),
         1,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         playout_tx,
         scan_tx,
         EntityLocker::new(),

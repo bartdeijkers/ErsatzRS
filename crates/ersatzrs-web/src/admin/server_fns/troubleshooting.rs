@@ -2506,8 +2506,8 @@ mod tests {
 
     #[tokio::test]
     async fn local_mpeg_sample_url_uses_the_bound_listener_for_each_mode() {
-        use crate::host::state::{AppState, IptvAccessTokenVerifier};
-        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        use crate::host::state::AppState;
+        let state = AppState::for_tests(false);
         assert!(local_mpeg_sample_url(&state, "7", "internal-legacy").is_err());
         assert!(local_mpeg_sample_url(&state, "7", "public-ts").is_err());
         state

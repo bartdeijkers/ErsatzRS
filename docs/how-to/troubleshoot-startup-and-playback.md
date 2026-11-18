@@ -144,11 +144,7 @@ http://127.0.0.1:8409/iptv/channel/1.m3u8
 http://127.0.0.1:8409/iptv/channel/1.ts
 ```
 
-When IPTV JWT protection is enabled, an unauthenticated probe correctly returns
-`401 Unauthorized`. Send `Authorization: Bearer <jwt>` or add
-`?access_token=<jwt>`. Never paste the token into logs, screenshots, or support
-reports; the [HTTP endpoint reference](../reference/http-endpoints.md#iptv-authentication)
-owns the accepted request forms.
+IPTV and HDHomeRun streams are unauthenticated. For remote access, use a VPN or an authenticated reverse proxy. If either `JWT__IssuerSigningKey` or `JWT:IssuerSigningKey` is set, remove it and restart ErsatzRS to enable streaming.
 
 After reproducing the failure through **Support** -> **Troubleshooting**, select
 **Download Results** and attach the redacted archive to a support report. Review

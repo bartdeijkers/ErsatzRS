@@ -1,4 +1,15 @@
-pub mod access_token;
+pub(crate) async fn require_streaming_available(
+    axum::extract::State(state): axum::extract::State<crate::host::state::AppState>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    if state.legacy_streaming_key_configured {
+        return (axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            "Remove JWT__IssuerSigningKey or JWT:IssuerSigningKey and restart ErsatzRS to enable IPTV and HDHomeRun.").into_response();
+    }
+    next.run(request).await
+}
 pub mod guide;
 pub mod hls;
 pub mod identifier;

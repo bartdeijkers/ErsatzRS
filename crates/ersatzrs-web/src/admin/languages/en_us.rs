@@ -2685,7 +2685,7 @@ TextKey::NonPlayableItems => "Non-playable items",
         }
         TextKey::Troubleshooting => "Troubleshooting",
         TextKey::TunerCount => "Tuner Count",
-        TextKey::HdhrDisabledByJwt => "HDHomeRun endpoints are disabled because IPTV JWT protection is enabled. These settings have no effect.",
+        TextKey::HdhrDisabledByJwt => "Remove JWT__IssuerSigningKey / JWT:IssuerSigningKey and restart ErsatzRS to enable IPTV and HDHomeRun. Streams are unauthenticated. Use a VPN or an authenticated reverse proxy for remote access.",
         TextKey::TvShows => "TV Shows",
         TextKey::Ui => "UI",
         TextKey::UnavailableLocalMediaMessage => "There are {count} items that are unavailable because ErsatzRS cannot find them on disk, including the following: {items}",

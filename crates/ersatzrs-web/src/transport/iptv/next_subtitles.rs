@@ -1,55 +1,31 @@
 //! Next's bounded `WebVTT` playlist transport, under the existing IPTV auth layer.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use ersatzrs_core::hls::{HlsSessionRegistry, HlsStartupReadiness};
 use tokio::io::AsyncReadExt;
 
-use super::{access_token::AccessToken, hls};
+use super::hls;
 use crate::host::state::AppState;
 
-pub async fn get_playlist(
-    State(state): State<AppState>,
-    Path(number): Path<String>,
-    Query(query): Query<hls::HlsQuery>,
-) -> Response {
-    serve_playlist(
-        &*state.hls_sessions,
-        &number,
-        false,
-        AccessToken::for_request(
-            query.access_token,
-            state.iptv_access_token_verifier.is_enabled(),
-        ),
-    )
-    .await
+pub async fn get_playlist(State(state): State<AppState>, Path(number): Path<String>) -> Response {
+    serve_playlist(&*state.hls_sessions, &number, false).await
 }
 
 pub async fn get_preview_playlist(
     State(state): State<AppState>,
     Path(number): Path<String>,
-    Query(query): Query<hls::HlsQuery>,
 ) -> Response {
-    serve_playlist(
-        &*state.preview_hls_sessions,
-        &number,
-        true,
-        AccessToken::for_request(
-            query.access_token,
-            state.iptv_access_token_verifier.is_enabled(),
-        ),
-    )
-    .await
+    serve_playlist(&*state.preview_hls_sessions, &number, true).await
 }
 
 async fn serve_playlist(
     registry: &dyn HlsSessionRegistry,
     number: &str,
     preview: bool,
-    access_token: AccessToken,
 ) -> Response {
     if !hls::is_safe_channel_number_path_component(number) {
         return StatusCode::BAD_REQUEST.into_response();
@@ -72,10 +48,7 @@ async fn serve_playlist(
     if handle.startup_readiness() != HlsStartupReadiness::Ready {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     }
-    hls::hls_response(hls::propagate_playlist_access_token(
-        &playlist,
-        &access_token,
-    ))
+    hls::hls_response(playlist)
 }
 
 async fn read_playlist(path: &std::path::Path) -> Option<String> {

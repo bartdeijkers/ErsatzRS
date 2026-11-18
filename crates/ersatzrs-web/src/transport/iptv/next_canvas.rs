@@ -125,9 +125,7 @@ mod tests {
     #[tokio::test]
     async fn canvas_boundary_rejects_invalid_admission_before_rendering() {
         use ersatzrs_infra::next_engine::protocol::{ProbeHint, Source};
-        let state = crate::host::state::AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::disabled(),
-        );
+        let state = crate::host::state::AppState::for_tests(false);
         let host = &state.next_engine;
         host.media
             .configure("127.0.0.1:8409".parse().unwrap())

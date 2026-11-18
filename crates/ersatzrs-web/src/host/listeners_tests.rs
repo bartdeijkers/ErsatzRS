@@ -1,7 +1,7 @@
 use super::*;
 
 fn test_state() -> AppState {
-    AppState::for_tests(super::super::state::IptvAccessTokenVerifier::disabled())
+    AppState::for_tests(false)
 }
 
 #[tokio::test]

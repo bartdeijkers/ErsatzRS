@@ -16,7 +16,7 @@ use tracing_subscriber::registry::Registry;
 use tracing_subscriber::{layer::SubscriberExt, reload, util::SubscriberInitExt, EnvFilter};
 use uuid::Uuid;
 
-use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+use crate::host::state::{AppState, SystemStartup};
 
 /// Upper bound on how long shutdown waits for background tasks to drain before
 /// forcing exit, so a stuck task cannot hang the tray "Exit" / `docker stop`.
@@ -281,7 +281,7 @@ pub async fn run() {
 
     let task_handles = super::tasks::spawn_background_tasks(
         super::tasks::HdhrTaskInputs {
-            enabled: !app_state.iptv_access_token_verifier.is_enabled(),
+            enabled: !app_state.legacy_streaming_key_configured,
             device_uuid: app_state.device_uuid,
             tuner_count: app_state.tuner_count.clone(),
             listen_port: listeners.streaming_addr.port(),
@@ -1045,8 +1045,7 @@ async fn build_app_state(
         tracing::warn!(%error, "failed to reconcile enabled add-on media sources");
     }
     let repositories = ersatzrs_infra::repositories::make_repositories(pool.clone());
-    let iptv_access_token_verifier =
-        IptvAccessTokenVerifier::from_optional_secret(load_iptv_jwt_signing_key());
+    let legacy_streaming_key_configured = legacy_streaming_key_configured();
 
     let device_uuid = if let Some(value) = load_config_value(
         &repositories.config,
@@ -1085,7 +1084,7 @@ async fn build_app_state(
         ffmpeg_runtime,
         device_uuid,
         tuner_count,
-        iptv_access_token_verifier,
+        legacy_streaming_key_configured,
         playout_build_tx,
         scan_work_tx,
         next_engine.locker,
@@ -1095,11 +1094,11 @@ async fn build_app_state(
     Ok(state)
 }
 
-fn load_iptv_jwt_signing_key() -> Option<String> {
+fn legacy_streaming_key_configured() -> bool {
     #[allow(clippy::disallowed_methods)]
-    std::env::var("JWT__IssuerSigningKey")
-        .ok()
-        .or_else(|| std::env::var("JWT:IssuerSigningKey").ok())
+    ["JWT__IssuerSigningKey", "JWT:IssuerSigningKey"]
+        .iter()
+        .any(|name| std::env::var_os(name).is_some())
 }
 
 async fn load_config_value(

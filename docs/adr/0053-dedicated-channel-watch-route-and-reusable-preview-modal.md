@@ -62,10 +62,7 @@ away destroys only that browser player. Shared server workers retain the
 existing channel idle policy and are cancelled only by the explicit Stop
 Transcode Session action.
 
-When IPTV JWT enforcement is active, the admin server issues a short-lived
-token scoped to one channel. The token authorizes only that channel's master,
-session playlist, and segment paths. Existing unscoped IPTV tokens keep their
-current behavior.
+The 2026-11-18 row 302 decision supersedes preview JWT issuance. The server returns a tokenless preview URL. A configured legacy signing key disables all IPTV playback until the operator removes it and restarts the server.
 
 The application layer owns the bounded channel-watch query. Infrastructure
 owns SQL, playout selection, row decoding, and media-title enrichment. The web

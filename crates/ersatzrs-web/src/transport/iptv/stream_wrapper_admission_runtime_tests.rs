@@ -235,7 +235,7 @@ async fn provider(path: &Path, reads: Arc<SourceReads>) -> Server {
 }
 
 async fn application(root: &Path, provider: &Server) -> AppState {
-    use crate::host::state::{IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::SystemStartup;
     use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus};
 
     let pool = ersatzrs_infra::db::init(&format!("sqlite:{}", root.join("admission.db").display()))
@@ -314,7 +314,7 @@ async fn application(root: &Path, provider: &Server) -> AppState {
         FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         1,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         tx,
         ersatzrs_core::locking::EntityLocker::default(),
     )

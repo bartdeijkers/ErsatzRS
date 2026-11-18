@@ -406,7 +406,6 @@ fn render_hdhr(data: HdhrSettingsPageData) -> impl IntoView {
     view! {
         <SettingsForm title=tr(TextKey::HdHomeRun) action="/admin-api/settings/hdhr/save" disabled=disabled>
             <SettingsSection title=tr(TextKey::General)>
-                <p class=style::warning role="status" hidden=!disabled>{tr(TextKey::HdhrDisabledByJwt)}</p>
                 <Field label=tr(TextKey::Uuid)>
                     <input class=style::input name="uuid" disabled value=form.uuid/>
                 </Field>

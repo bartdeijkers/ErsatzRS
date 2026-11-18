@@ -1167,11 +1167,9 @@ ${keys.map((key) => `INSERT OR REPLACE INTO "ConfigElement" ("Key", "Value") VAL
     }
   });
 
-  test('Next converted captions are authenticated and toggle real browser cues', async ({ page }, testInfo) => {
-    // Run the disposable host and this spec with ETV_NEXT_FOLDER and a synthetic
-    // JWT__IssuerSigningKey so tokenless media requests exercise authentication.
-    test.skip(!process.env.ETV_NEXT_FOLDER || !process.env.JWT__IssuerSigningKey,
-      'Requires the real Next engine and JWT authentication on the disposable host');
+  test('Next converted captions use tokenless URLs and toggle real browser cues', async ({ page }, testInfo) => {
+    test.skip(!process.env.ETV_NEXT_FOLDER || process.env.E2E_HDHR_JWT_ENABLED === '1',
+      'Requires the real Next engine and available IPTV endpoints');
     test.setTimeout(120_000);
     const clipPath = makeCalibrationClip(testInfo);
     const subtitlePath = testInfo.outputPath('next-preview.nl.srt');
@@ -1202,10 +1200,7 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
     const renditionPath = rendition?.match(/URI="([^"]+)"/)?.[1];
     expect(renditionPath).toBeTruthy();
     const renditionUrl = new URL(renditionPath!, master.url());
-    expect(renditionUrl.searchParams.has('access_token')).toBe(true);
-    const unauthenticated = new URL(renditionUrl);
-    unauthenticated.search = '';
-    expect((await page.request.get(unauthenticated.href)).status()).toBe(401);
+    expect(renditionUrl.searchParams.has('access_token')).toBe(false);
     let subtitlePlaylist = '';
     await expect.poll(async () => {
       const response = await page.request.get(renditionUrl.href);
@@ -1215,12 +1210,10 @@ VALUES (${channel.id + 104}, 1, 'Dutch', 0, 'subrip', 1, 0, 0, 'nld', 0,
     }, { timeout: 30_000 }).toBe(true);
     const segment = subtitlePlaylist.split('\n').find((line) => line.trim() && !line.startsWith('#'))!;
     const segmentUrl = new URL(segment.trim(), renditionUrl);
-    expect(segmentUrl.searchParams.has('access_token')).toBe(true);
+    expect(segmentUrl.searchParams.has('access_token')).toBe(false);
     const vtt = await page.request.get(segmentUrl.href);
     expect(vtt.ok()).toBe(true);
     expect(await vtt.text()).toContain('Next browser caption proof');
-    segmentUrl.search = '';
-    expect((await page.request.get(segmentUrl.href)).status()).toBe(401);
 
     const root = page.locator('.channel-watch-js [data-channel-preview]');
     const video = root.locator('video');

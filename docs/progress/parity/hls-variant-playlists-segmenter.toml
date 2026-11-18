@@ -1,6 +1,6 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/{FFmpegStreamSelector,HlsPlaylistFilter}.cs`'
-rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
+rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
 adr        = ['0015', '0016', '0061', '0084', '0106', '0132']
 summary    = '''
@@ -29,7 +29,7 @@ profile-derived mux-rate and 20 ms PCR-period helper with direct `.ts`,
 legacy concat, and hybrid wrapper outputs, and preserves adaptation-only PCR
 packet continuity-counter semantics when CBR muxing inserts PCR-only packets.
 
-Access control ports `ConditionalIptvAuthorizeFilter`; subtitles burn/overlay
+Row 302 disables streaming when a legacy JWT key is configured. Subtitles burn/overlay
 for the segmenter and HLS-direct copies compatible embedded image subtitles.
 Native subtitle preparation (ADRs 0061/0132) normalizes Unicode and assessed/
 declared legacy encodings, including position zero. Rewriting keeps straddling

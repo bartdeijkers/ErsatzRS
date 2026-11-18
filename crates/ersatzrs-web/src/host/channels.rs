@@ -213,9 +213,7 @@ mod tests {
 
     #[tokio::test]
     async fn preview_segment_status_uses_only_preview_registry_without_touching() {
-        let state = crate::host::state::AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
-        );
+        let state = crate::host::state::AppState::for_tests(false);
         let runtime = NativeChannelRuntime::new(
             state.pool,
             state.hls_sessions.clone(),
@@ -248,9 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn replaced_preview_worker_cannot_return_its_stale_error() {
-        let state = crate::host::state::AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
-        );
+        let state = crate::host::state::AppState::for_tests(false);
         let runtime = NativeChannelRuntime::new(
             state.pool,
             state.hls_sessions,

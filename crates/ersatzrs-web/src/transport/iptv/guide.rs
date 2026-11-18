@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io::Cursor;
 
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
 };
@@ -22,18 +22,13 @@ use quick_xml::writer::Writer;
 
 use crate::api::artwork::{artwork_reference_url, ArtworkUrlKind};
 use crate::host::state::AppState;
-use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::hls::{request_host, request_scheme};
 use crate::transport::iptv::identifier::{channel_identifier, parse_channel_number};
-use crate::transport::iptv::playlist::{channel_logo_url, load_channel_logo_paths, PlaylistQuery};
+use crate::transport::iptv::playlist::{channel_logo_url, load_channel_logo_paths};
 
 const DEFAULT_GUIDE_WINDOW_DAYS: i64 = 2;
 
-pub async fn get_xmltv_xml(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<PlaylistQuery>,
-) -> Response {
+pub async fn get_xmltv_xml(State(state): State<AppState>, headers: HeaderMap) -> Response {
     let channels = match state.repositories.channel.list_enabled().await {
         Ok(channels) => channels,
         Err(error) => {
@@ -74,10 +69,6 @@ pub async fn get_xmltv_xml(
 
     let scheme = request_scheme(&headers);
     let host = request_host(&headers);
-    let access_token = AccessToken::for_request(
-        query.access_token,
-        state.iptv_access_token_verifier.is_enabled(),
-    );
 
     match build_xmltv(
         &channels,
@@ -87,7 +78,6 @@ pub async fn get_xmltv_xml(
         &logo_paths,
         &scheme,
         &host,
-        &access_token,
     ) {
         Ok(body) => {
             let mut response = body.into_response();
@@ -139,7 +129,6 @@ pub fn build_xmltv(
     logo_paths: &HashMap<i64, String>,
     scheme: &str,
     host: &str,
-    access_token: &AccessToken,
 ) -> Result<String, quick_xml::Error> {
     let mut ordered_channels: Vec<&Channel> = channels.iter().filter(|c| c.show_in_epg).collect();
     ordered_channels.sort_by(|a, b| {
@@ -153,19 +142,9 @@ pub fn build_xmltv(
     tv_start.push_attribute(("generator-info-name", "ersatzrs"));
     writer.write_event(Event::Start(tv_start))?;
 
-    let token_uri = access_token.query();
-    let token_uri_amp = access_token.query_amp();
-
     for channel in &ordered_channels {
         let channel_id = channel_identifier(&channel.number);
-        let icon_url = channel_logo_url(
-            scheme,
-            host,
-            channel,
-            logo_paths,
-            &token_uri,
-            &token_uri_amp,
-        );
+        let icon_url = channel_logo_url(scheme, host, channel, logo_paths);
         let categories = split_categories(channel.categories.as_deref());
         let channel_artwork_path = logo_paths.get(&channel.id).map(String::as_str);
         let channel_name_encoded = urlencoding::encode(&channel.name);
@@ -209,7 +188,7 @@ pub fn build_xmltv(
             .and_then(|path| {
                 artwork_reference_url(path, artwork_kind_for(programme.content.icon_size_hint))
             })
-            .map(|resolved| guide_artwork_url(scheme, host, &resolved, access_token));
+            .map(|resolved| guide_artwork_url(scheme, host, &resolved));
         let thumbnail_url = programme
             .content
             .thumbnail_artwork
@@ -220,7 +199,7 @@ pub fn build_xmltv(
                     artwork_kind_for(programme.content.thumbnail_size_hint),
                 )
             })
-            .map(|resolved| guide_artwork_url(scheme, host, &resolved, access_token));
+            .map(|resolved| guide_artwork_url(scheme, host, &resolved));
         let input = RenderProgrammeInput {
             programme_start: &programme_start,
             programme_stop: &programme_stop,
@@ -340,11 +319,10 @@ fn absolute_url(scheme: &str, host: &str, relative_or_absolute: &str) -> String 
     }
 }
 
-fn guide_artwork_url(scheme: &str, host: &str, resolved: &str, token: &AccessToken) -> String {
+fn guide_artwork_url(scheme: &str, host: &str, resolved: &str) -> String {
     if let Some(artwork) = resolved.strip_prefix("/artwork/") {
-        // Use the transport listener's routes, and never attach IPTV credentials
-        // to an external image URL or forward them to a provider.
-        format!("{scheme}://{host}/iptv/artwork/{artwork}{}", token.query())
+        // Serve local artwork through the transport listener.
+        format!("{scheme}://{host}/iptv/artwork/{artwork}")
     } else {
         absolute_url(scheme, host, resolved)
     }
@@ -370,22 +348,15 @@ mod tests {
 
     #[test]
     fn guide_artwork_uses_transport_routes_without_leaking_tokens_to_external_images() {
-        let token = AccessToken::new(Some("fixture-token"));
         assert_eq!(
-            guide_artwork_url(
-                "https",
-                "example.test",
-                "/artwork/posters/jellyfin/42",
-                &token
-            ),
-            "https://example.test/iptv/artwork/posters/jellyfin/42?access_token=fixture-token"
+            guide_artwork_url("https", "example.test", "/artwork/posters/jellyfin/42",),
+            "https://example.test/iptv/artwork/posters/jellyfin/42"
         );
         assert_eq!(
             guide_artwork_url(
                 "https",
                 "example.test",
                 "https://images.example.test/poster.jpg",
-                &token
             ),
             "https://images.example.test/poster.jpg"
         );
@@ -463,7 +434,6 @@ mod tests {
             &HashMap::new(),
             "http",
             "example.test",
-            &AccessToken::default(),
         )
         .expect("xmltv render");
 
@@ -520,7 +490,6 @@ mod tests {
             &HashMap::new(),
             "http",
             "example.test",
-            &AccessToken::default(),
         )
         .expect("xmltv render");
         // Normalize template-only blank lines for a whitespace-clean snapshot.
@@ -587,7 +556,6 @@ mod tests {
             &HashMap::new(),
             "http",
             "example.test",
-            &AccessToken::default(),
         )
         .expect("xmltv render");
 
@@ -645,7 +613,6 @@ mod tests {
             &HashMap::new(),
             "http",
             "example.test",
-            &AccessToken::default(),
         )
         .unwrap();
         let doc = roxmltree::Document::parse(&output).unwrap();
@@ -716,7 +683,6 @@ mod tests {
             &HashMap::new(),
             "http",
             "example.test",
-            &AccessToken::default(),
         )
         .unwrap();
         let doc = roxmltree::Document::parse(&output).unwrap();
@@ -756,7 +722,6 @@ mod tests {
             &HashMap::new(),
             "http",
             "example.test",
-            &AccessToken::default(),
         )
         .unwrap();
         assert_eq!(

@@ -2,7 +2,7 @@
 mod tests {
     use crate::host::{
         router,
-        state::{AppState, IptvAccessTokenVerifier, SystemStartup},
+        state::{AppState, SystemStartup},
     };
     use axum::{
         body::Body,
@@ -51,7 +51,7 @@ mod tests {
                 FfmpegRuntimeReport::for_tests(),
                 Uuid::nil(),
                 1,
-                IptvAccessTokenVerifier::disabled(),
+                false,
                 tx,
                 ersatzrs_core::locking::EntityLocker::default(),
             );

@@ -169,10 +169,7 @@ running on that branch. Mixed focused modes are rejected, and an audit-only
 success never proves full CI or skips a later full gate. Reuse unaffected
 evidence and separately recheck behavior affected by the dependency correction.
 
-Native JWT cryptography statically links AWS-LC through `aws-lc-rs`. A C/C++
-compiler is required; Windows x64 builds also use NASM. The selected non-FIPS
-backend does not change the application's HS256-only token contract. See the
-[upstream build requirements](https://aws.github.io/aws-lc-rs/requirements/index.html).
+IPTV and HDHomeRun streams are unauthenticated. For remote access, use a VPN or an authenticated reverse proxy. If either `JWT__IssuerSigningKey` or `JWT:IssuerSigningKey` is set, remove it and restart ErsatzRS to enable streaming.
 
 Two self-hosted runners share one physical machine. Each runner runs its jobs
 serially in its own workspace, so sharing build output across that runner's

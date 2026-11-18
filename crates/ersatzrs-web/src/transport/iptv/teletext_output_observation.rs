@@ -179,9 +179,7 @@ mod tests {
 
     #[tokio::test]
     async fn startup_only_control_shares_the_host_registry_and_ends_with_the_actual_pump() {
-        let state = crate::host::state::AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
-        );
+        let state = crate::host::state::AppState::for_tests(false);
         let identity = ersatzrs_domain::TeletextAcceptedGeneration {
             id: 3,
             request: ersatzrs_domain::TeletextPublicationRequest {
@@ -310,9 +308,7 @@ mod tests {
         use ersatzrs_domain::{
             TeletextCustomFieldOutputObservation, TeletextOutputGenerationObservation,
         };
-        let state = crate::host::state::AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None),
-        );
+        let state = crate::host::state::AppState::for_tests(false);
         let context = ObservationContext {
             application: Arc::clone(&state.application),
             channel_id: 44,

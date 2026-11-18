@@ -200,7 +200,7 @@ mod tests {
 
     #[tokio::test]
     async fn nonfinal_recovery_rejects_before_opening_configuration_storage() {
-        let state = AppState::for_tests(crate::host::state::IptvAccessTokenVerifier::disabled());
+        let state = AppState::for_tests(false);
         assert_eq!(state.pool.size(), 0);
         let deadline = Instant::now() + Duration::from_secs(20);
         for role in [
