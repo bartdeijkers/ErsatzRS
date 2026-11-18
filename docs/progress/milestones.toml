@@ -42814,6 +42814,20 @@ The two earlier red PR165 runs retain their completed diagnostic and passing
 job results. The current exact integrated full CI and ordered delivery remain
 required for the continuation.
 
+The documentation gate in full run44240611155 fails at job134587347858.
+The isolated Python inventory harness did not supply the Next case selector
+now required by the workflow. Its original inventory and refusal checks are
+preserved with the explicit focused selector. The full runtime job still
+verifies and uses the archived C5 worker. All193 local CI contract cases pass,
+including100 artifact tests. Only sandbox loopback tests required loopback
+access. The unchanged workflow consumers, compiled products, runtime inputs
+and case definitions retain their source scope. The existing recovery path
+now accepts ordinary self-hosted producers only when both source-bound
+local publications, archive digests and complete successful-job identities
+validate. It still restores and verifies the artifacts before reusing proof.
+The earlier real Jiff publisher records pass this validation. The pending
+full candidate keeps running to gather its own completed results.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.

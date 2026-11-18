@@ -829,6 +829,47 @@ class CompletedCheckReuse(unittest.TestCase):
         self.assertEqual(proof['browser_pending'], [])
         self.assertEqual(len(proof['jobs']['hydration']), 4)
 
+    def ordinary_publisher(self):
+        run = dict(self.run, repository={'id': 456}, run_attempt=1)
+        jobs = deepcopy(self.jobs)
+        producer = next(row for row in jobs['jobs'] if row['name'] == 'Verify reused CI artifacts')
+        producer.update(name='Build CI artifacts', labels=['self-hosted', 'Linux', 'X64'],
+                        steps=[])
+        references = json.loads(self.references)
+        logs = []
+        for kind, label in (('rust', 'Rust'), ('web', 'web')):
+            key = f'456-{SHA}-123-1-{kind}'
+            references[kind].update(source_sha=SHA, cache_key=key)
+            producer['steps'].append(dict(name=f'Publish local {label} artifact',
+                                          status='completed', conclusion='success'))
+            logs.extend([f'##[group]Run python3 scripts/ci-build-artifacts.py publish-local --kind {kind} '
+                         f'--archive ci-artifacts/{kind}.tar.gz \\',
+                         f'  CI_ARTIFACT_KEY: {key}', '##[endgroup]', 'digest=' + 'e' * 64])
+        return run, jobs, producer, references, '\n'.join(logs)
+
+    def test_ordinary_self_hosted_full_build_can_prove_unchanged_checks(self):
+        run, jobs, _, references, log = self.ordinary_publisher()
+        proof = self.plan(run=run, jobs=jobs, references=json.dumps(references), producer_log=log)
+        self.assertEqual(set(proof['jobs']), {'clippy', 'test', 'hydration'})
+
+    def test_ordinary_build_reuse_requires_both_exact_successful_publications(self):
+        for fault in ('hosted', 'failed step', 'wrong source', 'wrong key', 'wrong digest', 'missing digest'):
+            run, jobs, producer, references, log = self.ordinary_publisher()
+            if fault == 'hosted':
+                producer['labels'] = ['ubuntu-24.04']
+            if fault == 'failed step':
+                producer['steps'][0]['conclusion'] = 'failure'
+            if fault == 'wrong source':
+                references['rust']['source_sha'] = 'd' * 40
+            if fault == 'wrong key':
+                references['rust']['cache_key'] = f'456-{SHA}-124-1-rust'
+            if fault == 'wrong digest':
+                references['web']['sha256'] = 'f' * 64
+            if fault == 'missing digest':
+                log = log.rsplit('\ndigest=', 1)[0]
+            with self.subTest(fault=fault), self.assertRaisesRegex(ValueError, 'artifact publish'):
+                self.plan(run=run, jobs=jobs, references=json.dumps(references), producer_log=log)
+
     def test_foreign_live_cancelled_focused_and_wrong_workflow_runs_are_refused(self):
         for field, value in [('head_repository', {'full_name': 'foreign/repo'}),
                              ('status', 'in_progress'), ('conclusion', 'cancelled'),
@@ -1702,7 +1743,10 @@ class FocusedAuditSelection(unittest.TestCase):
                                         download=fetch, stage_patched_snapshot=verify)
                 spec = SimpleNamespace(loader=SimpleNamespace(exec_module=lambda _: None))
                 env_file = root / "github.env"
-                with patch.dict(os.environ, TMPDIR=str(root), GITHUB_ENV=str(env_file)), \
+                # Exercise the candidate inventory independently of the archived
+                # worker used by the full Next gate.
+                with patch.dict(os.environ, TMPDIR=str(root), GITHUB_ENV=str(env_file),
+                                NEXT_CASE_SET="subtitle-nul"), \
                      patch("importlib.util.spec_from_file_location", return_value=spec), \
                      patch("importlib.util.module_from_spec", return_value=stage):
                     if refused:
@@ -1717,6 +1761,7 @@ class FocusedAuditSelection(unittest.TestCase):
                     release = "retained" if rid.startswith("osx-") else "current"
                     self.assertIn(f"https://example.invalid/{release}/{manifest['runtime_packages'][rid]['asset']}", urls)
                 values = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
+                self.assertNotIn("ERSATZRS_NEXT_TEST_LEGACY_BIN", values)
                 packages = Path(values["NEXT_CANDIDATE_PACKAGES"])
                 self.assertEqual((packages / "manifest.json").read_bytes(), manifest_path.read_bytes())
                 self.assertEqual({p.name for p in packages.iterdir()},

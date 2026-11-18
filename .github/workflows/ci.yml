@@ -385,7 +385,8 @@ jobs:
           def api(path):
               return json.loads(subprocess.check_output(['gh', 'api', path], text=True))
           run, jobs = api(route), api(route + '/jobs?per_page=100&filter=latest')
-          producer = next(row for row in jobs['jobs'] if row['name'] == 'Verify reused CI artifacts')
+          producer, = [row for row in jobs['jobs']
+                       if row['name'] in ('Build CI artifacts', 'Verify reused CI artifacts')]
           log_args = ['gh', 'api',
               f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/jobs/{producer['id']}/logs"]
           if '--allow-escape-sequences' in subprocess.check_output(['gh', 'api', '--help'], text=True):

@@ -326,12 +326,12 @@ runtime do not become current proof. The original producer identity remains in
 the manifest. A later push whose exact tree already passed full verification
 uses that tested-tree marker to avoid a duplicate compilation and test run.
 
-For a completed full artifact-reuse run, `resume_run` may name its run ID to
-retry its failed checks without repeating successful unchanged checks. Supply
-the same `reuse_artifacts` references. Preflight verifies the original run and
-complete job inventory through GitHub, binds both archive hashes and producer
-identities to its successful provider log, and compares clean exact source,
-artifact-consumer code, global flags and each check's execution definition.
+For a completed full self-hosted run, `resume_run` may name its run ID to retry
+its failed checks while reusing successful unchanged checks. Supply the exact
+`reuse_artifacts` references. Preflight verifies the original run and complete
+job inventory through GitHub. It binds both digests to the successful local
+publication steps or the verified artifact-reuse record, then compares the
+clean source, artifact consumers, global flags and individual job definitions.
 Changed native runtime, dependency, Rust-test, selector or embedded release-note
 inputs cannot reuse results. A changed job definition requires that check to run
 again. The explicitly qualified `ffmpeg-profiles.spec.ts` and

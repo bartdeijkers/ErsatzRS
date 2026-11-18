@@ -307,6 +307,33 @@ def resume_artifacts_guard(log, references, execution_sha):
             raise ValueError("completed CI check artifact provenance differs")
 
 
+def resume_published_artifacts_guard(run, producer, log, references):
+    """Bind ordinary self-hosted output to its successful publication steps."""
+    repository_id = run.get('repository', {}).get('id')
+    attempt = run.get('run_attempt')
+    if (type(repository_id) is not int or repository_id <= 0
+            or type(attempt) is not int or attempt <= 0
+            or not {'self-hosted', 'Linux', 'X64'} <= set(producer.get('labels', []))):
+        raise ValueError('completed CI check needs a self-hosted artifact publisher')
+    plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', log)
+    plain = re.sub(r'^\ufeff?\d{4}-\d\d-\d\dT\S+ ', '', plain, flags=re.M)
+    groups = re.split(r'^##\[group\]Run ', plain, flags=re.M)
+    for kind, label in (('rust', 'Rust'), ('web', 'web')):
+        reference = reuse_reference(references, kind)
+        step = [row for row in producer.get('steps', [])
+                if row.get('name') == f'Publish local {label} artifact']
+        key = f"{repository_id}-{run['head_sha']}-{run['id']}-{attempt}-{kind}"
+        prefix = (f'python3 scripts/ci-build-artifacts.py publish-local --kind {kind} '
+                  f'--archive ci-artifacts/{kind}.tar.gz ')
+        publish = [group for group in groups if group.startswith(prefix)]
+        if (len(step) != 1 or step[0].get('status') != 'completed'
+                or step[0].get('conclusion') != 'success' or len(publish) != 1
+                or reference['source_sha'] != run['head_sha'] or reference['cache_key'] != key
+                or re.findall(r'^  CI_ARTIFACT_KEY: (\S+)$', publish[0], re.M) != [key]
+                or re.findall(r'^digest=([0-9a-f]{64})$', publish[0], re.M) != [reference['sha256']]):
+            raise ValueError('completed CI check artifact publisher provenance differs')
+
+
 def resume_browser_cases(rows, logs, changes):
     """Narrow replay only after both original general suites fully reported."""
     selected = set(changes) & {'tests/e2e/ffmpeg-profiles.spec.ts',
@@ -365,7 +392,7 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
     browser_names = [f"Playwright E2E ({row['suite']}, {row['project']})" for row in browsers]
     required = {"Preflight", "Format", "Documentation links", "Clippy", "Commit lint",
                 "Cargo deny", "Test", "Next engine", "Teletext 1.5", "CI ok", *browser_names}
-    producers = set(by_name) & {"Verify reused CI artifacts"}
+    producers = set(by_name) & {'Build CI artifacts', 'Verify reused CI artifacts'}
     if (len(producers) != 1 or set(by_name) != required | producers
             or len(rows) != len(by_name) or jobs.get("total_count") != len(rows)
             or any(row.get("status") != "completed" for row in rows)
@@ -373,12 +400,17 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
             or any(type(row.get("id")) is not int or row["id"] <= 0 for row in rows)
             or len({row["id"] for row in rows}) != len(rows)):
         raise ValueError("resume requires the complete ordinary full CI job inventory")
-    if by_name['Verify reused CI artifacts'].get('conclusion') != 'success':
-        raise ValueError('previous artifact verification did not pass')
+    producer_name = next(iter(producers))
+    producer = by_name[producer_name]
+    if producer.get('conclusion') != 'success':
+        raise ValueError('previous artifact production or verification did not pass')
     if (by_name['Preflight'].get('conclusion') != 'success'
             or by_name['CI ok'].get('conclusion') not in ('success', 'failure')):
         raise ValueError('previous run did not execute the full gate')
-    resume_artifacts_guard(producer_log, references, run['head_sha'])
+    if producer_name == 'Build CI artifacts':
+        resume_published_artifacts_guard(run, producer, producer_log, references)
+    else:
+        resume_artifacts_guard(producer_log, references, run['head_sha'])
     resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow)
     scopes = {"clippy": ["Clippy"], "test": ["Test"], "next_engine": ["Next engine"],
               "teletext": ["Teletext 1.5"], "hydration": browser_names}
