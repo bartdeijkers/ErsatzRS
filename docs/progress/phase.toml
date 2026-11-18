@@ -5,7 +5,15 @@ current_phase = 'Phase 9 — Teletext support (Complete)'
 current_focus = 'Complete exact-source UCU-16 qualification and ordered delivery'
 
 summary = '''
-Current maintainer continuation2026-11-16: UCU-16 rows290–296 are active through
+Current UCU-16 delivery checkpoint. The standalone Jiff migration reached
+origin/main at7dfbf348 through PR167. Full run44213461124 and protected PR
+run44240132857 passed. PR165 candidate485bbf81 includes that exact main
+commit and matches the refreshed four-platform producer outside progress
+records. The full CI run44240611155 is collecting the combined proof. Its
+CI inventory harness failure has a verified local correction. Milestone
+ucu-16-continuation owns exact source, evidence and remaining gates.
+
+The 2026-11-16 continuation selected UCU-16 rows290–296 through
 fixed9c6b3dea. Direct GitHub verification confirms exactly seven commits after
 the accepted boundary. Milestone ucu-16-continuation owns the finite list;
 296 rows are observed,289 processed and7 pending. Prior Classic286–289 and
@@ -142,59 +150,17 @@ backup, rollback, quarantine and expanded administration, not defers them.
 '''
 
 next_steps = '''
-The Jiff migration is complete in its local scope. The locked feature graph
-contains zero chrono dependencies and Cargo deny passes. ADR 0138 and milestone
-ucu-16-continuation retain the compatibility, browser and Native/Next transport
-proofs. Finish the unchanged exact-source integrated qualification. Preserve the
-independent Next engine failures from the prior PR165 run for bounded diagnosis
-and close the seven ordered dispositions only after proof.
-Approved29-asset publication and actual anonymous Linux/Windows cold/cache
-acquisition are Complete; retain row296-runtime-publication/checkpoint.json.
-Four private
-application archives/platform proof are Complete at exactece7813c, including
-native Linux/Windows and ARM-emulated package startup, real Linux/Windows
-Native/Next playback, native Edge and ten affected matched-browser cases.
-Local-final and current-candidate Linux playback/transport proof is Complete,
-alongside worker P1/P2/P3; reuse valid prior browser/transport components.
-Milestone ucu-16-continuation owns exact producer identities and composed proof;
-reuse completed evidence within those explicit unchanged-input scopes.
-Current UCU-16 continuation: exact input/order proof is complete through fixed
-row2969c6b3dea. Row290 local metadata repair and Health/i18n component has47
-integrated focused passes plus composed326 scanner/Health passes. Strict local
-lint is green; the component stopping condition is Complete. Row291 local config,
-worker-owned idle/demand, consumer budgets and runtime admission are Complete
-with92 focused,109 request and actual old/new worker controls. Row292 scan
-notifications and probe hints have82 composed controls and seven decoded runtime
-cases. Ordinary local/provider/prepared missing-caption components are locally
-verified; R292-C/D/E are Complete with117 current regressions,62 actual Next
-cases, current Native/Next smoke and93/86 TSDuck checks. Checkpoint2f49534d
-retains rows290–292. After explicit resume, row293's local ASS/SRT shaping proof
-is Complete on the existing qualified FFmpeg9 runtime. Row294 local component
-is Complete: per-build smart-source material, batched artist memberships,80
-composed data/order/choice/continuity cases and strict infra all-target Clippy.
-Row295 projection component now passes10 cases and strict infra all-target
-lint. A real pin-collision test disproves direct physical-index persistence;
-ADR0137 keeps provider identities stable and stores a separate physical map.
-Atomic ordinary-scan repair, failed-HTTP/transaction rollback, same/absent ETags
-and legacy migration preserving pins/cached references/disabled choices pass.
-Registered Health and nine-culture diagnostics now pass, with ordinary same-ETag
-repair of incomplete maps and retained legacy audio-migration controls.
-R295-A/B implementation is locally Complete. Next keeps logical saved choices, publishes
-physical tracks/hints and invalidates prepared authority when the map changes.
-Mapped scan/report parent association now uses the physical map within its
-transaction; shifted report indexes survive SQLite reopen without changing
-logical saved identities. Native HLS request mapping now has the physical layout snapshot/control proof;
-MPEG-TS/Direct primary/fallback/hardware retry now use the same boundary.
-Background extraction now retains logical cache identities while staging
-physical-index output behind source/metadata publication guards. Qualified-source
-layout/page ranking and physical interlace readers now pass scoped integration/
-probe evidence. Actual Next Convert across all three layouts now passes after SQLite close/reopen. Native HLS now passes nine public HTTP playback sessions across all three layouts and mapped finite-source refusal controls. Retained HTTP source/owner qualification now passes three mapped-layout actual Next sessions, and both current-server smoke gates pass. Native/Next TSDuck now passes93/86 checks on the same exact server. R295-A/B/C local stopping conditions are Complete; R296-A/B configuration and actual fixed-worker cache/lifecycle proof are now locally Complete, including the demonstrated cache-path diagnostic correction. Item2/R296-C consolidated source preparation is now locally verified. Serial software and current full dependency policy are now Complete within scope. P1/P2/P3 worker controls and P4 four-application package/platform proof are now Complete within their explicit scopes. Resolve public acquisition before eligible full CI and ordered delivery, preserving the complete shared acceptance requirement set. Do not reopen local row295 without a concrete regression.
-Item2 consolidated runtime qualification, functionality6–7 and
-the unchanged mandatory gates belong to milestone ucu-16-continuation.
-The accepted Pin table remains unchanged; no new row has a final disposition.
-Prepare work in isolated branch work/ucu16-tail at mainc5aff430, preserving
-root local commits and the unrelated untracked plan. Integrate only through
-the single-owner checkpoint procedure; no new remote delivery or CI yet.
+Finish exact combined qualification of PR165 with the existing full CI gates.
+Preserve the original inventory fixture failure from run44240611155 and
+reuse only successful checks whose source and relevant inputs still match.
+Verify both artifact digests and the result provenance before the protected
+ready check. The four qualified private packages, actual Native and Next
+playback, headed browsers, transport/continuity/Health and the approved
+public runtime acquisition retain the scopes in milestone ucu-16-continuation.
+After the qualified source delivery, record the seven reviewed dispositions
+in order and advance the authoritative pin to the fixed terminal. Complete
+that documentation checkpoint through the single-owner delivery procedure.
+
 Retained earlier handoffs and independent workstream notes follow. Their
 completed outcomes remain valid; earlier exclusions predate this new task.
 
