@@ -15,6 +15,17 @@ combined with graphics elements) join the z-ordered graphics overlay plan per
 ADR 0005, while a single permanent watermark can stay on the native ffmpeg
 watermark path.
 
+Row 298 covers the Native software watermark path in filter/simple.rs and
+pipeline/mod.rs. FFmpeg n9.0-20260805 decoded full-range JPEG (yuvj420p)
+and PNG (rgb24) overlays. A 128x72 limited-range black/white source was
+scaled to 192x108, using yuv420p and yuv444p inputs, with the watermark at
+100% and 75% opacity. In all eight lossless H.264 comparisons the output
+was tagged TV range, black and white remained at 16 and 235, and every
+luma sample outside the 24x24 watermark matched the unwatermarked control.
+All 576 samples inside the watermark changed. The existing
+pipeline_with_scaled_permanent_watermark_snapshot verifies the Native argv.
+The managed Next pin has its own qualification process.
+
 The 2026-07-19 NVENC regression fix keeps `FrameState` aligned with the real
 CUDA surface produced by HDR tonemapping plus hardware scaling. A 4K HDR source
 downscaled to an 8-bit 1080p profile now records the intermediate `nv12` surface
