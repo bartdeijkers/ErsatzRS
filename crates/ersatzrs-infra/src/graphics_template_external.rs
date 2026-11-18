@@ -7,8 +7,8 @@ use super::{
 use crate::{
     db::DbPool, external_json::playback::ResolvedExternalMedia, repositories::SqlxResultExt as _,
 };
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::Result;
+use ersatzrs_time::{DateTime, Utc};
 use serde_json::{json, Map, Value};
 
 pub(crate) fn media(resolved: &ResolvedExternalMedia) -> GraphicsMedia {

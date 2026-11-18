@@ -10,7 +10,6 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
-use chrono::{DateTime, Utc};
 pub use ersatzrs_addon_contract::PlaylistEntry;
 use ersatzrs_addon_contract::{
     conform_remote_stream_item_output_for_capability, conform_remote_stream_list_output,
@@ -36,6 +35,7 @@ use ersatzrs_infra::addons::{
 };
 use ersatzrs_infra::db::DbPool;
 use ersatzrs_infra::remote_stream::RemoteStreamPerson;
+use ersatzrs_time::{DateTime, Utc};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use regex::Regex;
@@ -4884,7 +4884,7 @@ create_playlist: true
             membership_entry("provider:two", "two", "two-v1"),
         ]);
         let mut current = previous.clone();
-        current.last_sync += chrono::Duration::minutes(5);
+        current.last_sync += ersatzrs_time::Duration::minutes(5);
 
         let delta = PlaylistMembershipDelta::between(Some(&previous), &current);
 
@@ -7362,7 +7362,7 @@ create_playlist: true
         .expect("successful sync");
         assert!(first.membership_changed);
         let mut overridden = first.state;
-        overridden.last_sync = Utc::now() - chrono::Duration::hours(7);
+        overridden.last_sync = Utc::now() - ersatzrs_time::Duration::hours(7);
         overridden.overrides.excluded = vec!["two".to_owned()];
         write_json_atomically(&sidecar_path, &overridden).expect("override sidecar");
         std::fs::write(

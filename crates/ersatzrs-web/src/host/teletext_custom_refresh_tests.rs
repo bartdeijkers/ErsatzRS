@@ -220,8 +220,8 @@ fn deadline() -> Instant {
 }
 
 fn local_time(day: u32, hour: u32, minute: u32, second: u32) -> DateTime<Utc> {
-    use chrono::TimeZone as _;
-    chrono::Local
+    use ersatzrs_time::TimeZone as _;
+    ersatzrs_time::Local
         .with_ymd_and_hms(2026, 11, day, hour, minute, second)
         .single()
         .unwrap()
@@ -512,10 +512,10 @@ async fn clock_or_retained_programme_boundary_crossed_during_encoding_refuses_th
     assert_eq!(initial.revision, 0);
     let captured = after;
     let transition = captured
-        .checked_add_signed(chrono::Duration::milliseconds(500))
+        .checked_add_signed(ersatzrs_time::Duration::milliseconds(500))
         .unwrap();
     let finished = captured
-        .checked_add_signed(chrono::Duration::seconds(1))
+        .checked_add_signed(ersatzrs_time::Duration::seconds(1))
         .unwrap();
     let mut retained = initial_source(document(), &policy, deadline);
     retained.clock = FieldValues::clock(before);

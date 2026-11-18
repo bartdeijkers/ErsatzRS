@@ -476,8 +476,8 @@ async fn mirrored_output_frame_rate_samples_source_playout_with_requested_profil
             id: 3,
             playout_id: 1,
             media_item_id: 11,
-            start: start + chrono::Duration::minutes(2),
-            finish: start + chrono::Duration::minutes(3),
+            start: start + ersatzrs_time::Duration::minutes(2),
+            finish: start + ersatzrs_time::Duration::minutes(3),
             ..Default::default()
         })
         .await
@@ -517,7 +517,10 @@ async fn mirrored_output_frame_rate_samples_source_playout_with_requested_profil
             .unwrap(),
         Vec::<String>::new()
     );
-    for offset in [chrono::Duration::hours(1), -chrono::Duration::hours(1)] {
+    for offset in [
+        ersatzrs_time::Duration::hours(1),
+        -ersatzrs_time::Duration::hours(1),
+    ] {
         mirror.playout_offset = Some(offset);
         assert_eq!(
             channel_frame_rate(&pool, &mirror, &requested)
@@ -641,8 +644,8 @@ async fn output_frame_rate_omits_mixed_target_rejected_by_packaged_next_integer_
             id: 3,
             playout_id: 1,
             media_item_id: 11,
-            start: start + chrono::Duration::minutes(2),
-            finish: start + chrono::Duration::minutes(3),
+            start: start + ersatzrs_time::Duration::minutes(2),
+            finish: start + ersatzrs_time::Duration::minutes(3),
             ..Default::default()
         })
         .await

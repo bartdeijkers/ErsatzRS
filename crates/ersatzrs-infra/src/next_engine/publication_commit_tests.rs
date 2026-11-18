@@ -3,8 +3,8 @@ use crate::next_engine::{
     fallback::{tests::fixture, tests::resolve, Gap},
     publication::indexed::{PlayoutIndex, INDEX_FILENAME},
 };
-use chrono::TimeDelta;
 use ersatzrs_core::programme::ProgrammeClock;
+use ersatzrs_time::TimeDelta;
 use std::{future::Future, path::Path};
 
 async fn visible(path: &Path) {

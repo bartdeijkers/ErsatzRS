@@ -16,7 +16,6 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use crate::condition::{evaluate as evaluate_condition, ConditionContext};
-use chrono::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use ersatzrs_core::language_codes;
 use ersatzrs_core::repositories::{GraphicsRepository as _, RepositoryError, Result};
 use ersatzrs_domain::{
@@ -33,6 +32,7 @@ use ersatzrs_ffmpeg::{
     SourceColorParams, SourceVideoCodec, SourceVideoStream, SubtitleMethod, WatermarkFadeKind,
     WatermarkFadePoint, WatermarkOverlay,
 };
+use ersatzrs_time::{DateTime, Datelike, NaiveDate, Timelike, Utc};
 use sqlx::Row;
 
 use crate::db::DbPool;
@@ -3860,15 +3860,15 @@ fn matches_integer_filter(values: &[i32], needle: i32) -> bool {
     values.is_empty() || values.contains(&needle)
 }
 
-fn csharp_day_of_week(weekday: chrono::Weekday) -> i32 {
+fn csharp_day_of_week(weekday: ersatzrs_time::Weekday) -> i32 {
     match weekday {
-        chrono::Weekday::Mon => 1,
-        chrono::Weekday::Tue => 2,
-        chrono::Weekday::Wed => 3,
-        chrono::Weekday::Thu => 4,
-        chrono::Weekday::Fri => 5,
-        chrono::Weekday::Sat => 6,
-        chrono::Weekday::Sun => 0,
+        ersatzrs_time::Weekday::Mon => 1,
+        ersatzrs_time::Weekday::Tue => 2,
+        ersatzrs_time::Weekday::Wed => 3,
+        ersatzrs_time::Weekday::Thu => 4,
+        ersatzrs_time::Weekday::Fri => 5,
+        ersatzrs_time::Weekday::Sat => 6,
+        ersatzrs_time::Weekday::Sun => 0,
     }
 }
 
@@ -4849,7 +4849,10 @@ mod tests {
         assert_eq!(audio[0].language.as_deref(), Some("jpn"));
         assert_eq!(audio[0].title.as_deref(), Some("Main audio"));
         assert!(audio[0].default);
-        assert_eq!(probe.version.duration, chrono::Duration::seconds(120));
+        assert_eq!(
+            probe.version.duration,
+            ersatzrs_time::Duration::seconds(120)
+        );
     }
 
     #[test]
@@ -4928,7 +4931,7 @@ mod tests {
         probe.streams[0].index = -1;
         assert!(source_audio_streams_from_probe(&probe).is_err());
     }
-    use chrono::TimeZone;
+    use ersatzrs_time::TimeZone;
 
     pub(super) async fn source_stream_test_pool() -> DbPool {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()

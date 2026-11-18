@@ -1,12 +1,12 @@
 //! Demand-time filler policy from ErsatzTV's `DynamicPlayoutItemService`.
 //! Reads current policy and content without changing persisted scheduling state.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
     repositories::{ConfigRepository, DecoRepository, Result},
     scheduling::{SchedulingCollectionKey, SchedulingMediaItem},
 };
 use ersatzrs_domain::{Channel, DecoMode, FillerKind, PlayoutItem};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Row;
 
 use crate::{

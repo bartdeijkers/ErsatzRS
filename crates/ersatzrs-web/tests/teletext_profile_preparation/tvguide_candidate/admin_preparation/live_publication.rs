@@ -696,7 +696,7 @@ async fn production_guide_explicit_http_base_and_real_lua_effective_publication_
 async fn production_guide_role_expiry_rejects_publication_without_replacing_accepted_output() {
     let (fixture, _) = fixture().await;
     let (_, _, selected) = base(&fixture).await;
-    let expiry = Utc::now() + chrono::Duration::seconds(12);
+    let expiry = Utc::now() + ersatzrs_time::Duration::seconds(12);
     // Match the repository's space-separated UTC storage shape. SQLx's direct
     // DateTime binding emits a different shape rejected by the guide reader.
     // Retain the exact expiry, including its fractional clock, without widening

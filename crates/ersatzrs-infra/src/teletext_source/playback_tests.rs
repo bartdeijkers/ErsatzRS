@@ -1,4 +1,3 @@
-use chrono::Utc;
 use ersatzrs_core::repositories::{
     ManagedLibraryOperationClaim, ManagedLibraryOperationRepository, ManagedLibraryScanSpec,
 };
@@ -8,6 +7,7 @@ use ersatzrs_domain::{
     SourceTeletextObservedHeader, SourceTeletextObservedPages, SourceTeletextPrograms,
     SourceTeletextProvenance, SourceTeletextRevision,
 };
+use ersatzrs_time::Utc;
 use sqlx::{sqlite::SqlitePoolOptions, Executor as _};
 
 use super::*;

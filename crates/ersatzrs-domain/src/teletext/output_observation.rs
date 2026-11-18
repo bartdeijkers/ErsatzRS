@@ -35,7 +35,7 @@ pub struct TeletextGuideRefreshOutputObservation {
     /// Absence means the retained initial seed, not a fabricated runtime ID.
     pub snapshot_id: Option<EntityId>,
     pub revision: i64,
-    pub captured_at: chrono::DateTime<chrono::Utc>,
+    pub captured_at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     pub stale: bool,
 }
 
@@ -87,7 +87,7 @@ pub struct TeletextChannelOutputObservations {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextCustomFieldFailure {
     pub pages: Vec<u16>,
-    pub at: chrono::DateTime<chrono::Utc>,
+    pub at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 }
 
 /// Why an authored output stopped; a stable code, never raw error text.
@@ -108,7 +108,7 @@ pub enum TeletextOutputFailureKind {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextOutputFailure {
     pub kind: TeletextOutputFailureKind,
-    pub at: chrono::DateTime<chrono::Utc>,
+    pub at: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
 }
 
 #[cfg(test)]

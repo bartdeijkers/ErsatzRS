@@ -45,7 +45,7 @@ async fn qualification(fixture: &Fixture) -> TeletextGuideGenerationQualificatio
 
 async fn qualification_at(
     fixture: &Fixture,
-    at: chrono::DateTime<Utc>,
+    at: ersatzrs_time::DateTime<Utc>,
 ) -> TeletextGuideGenerationQualification {
     let check = check();
     let clock = ProgrammeClock::system().unwrap();
@@ -236,7 +236,7 @@ async fn source_guide_rejects_forged_expiry_source_limits_deadline_and_cas_witho
     let save = base_save(&fixture).await;
     let mut forged = save.clone();
     forged.qualification.valid_until =
-        save.qualification.source.captured_at + chrono::Duration::nanoseconds(1);
+        save.qualification.source.captured_at + ersatzrs_time::Duration::nanoseconds(1);
     assert_eq!(
         repository
             .accept_guide(&forged, &check(), MAXIMUM)

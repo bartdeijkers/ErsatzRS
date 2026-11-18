@@ -1,6 +1,6 @@
 //! `GetGraphicsCanvasStreamHandler` timing, on the already shifted channel clock.
 
-use chrono::{DateTime, TimeDelta, Utc};
+use ersatzrs_time::{DateTime, TimeDelta, Utc};
 
 use super::{CanvasRequest, InvalidCanvasRequest};
 
@@ -21,7 +21,7 @@ impl CanvasTimeline {
     /// Mirror offsets must already be applied to start and finish.
     ///
     /// # Errors
-    /// Rejects invalid programme bounds or request dates outside chrono's range.
+    /// Rejects invalid programme bounds or request dates outside the supported UTC range.
     pub fn new(
         content_start: DateTime<Utc>,
         content_finish: DateTime<Utc>,

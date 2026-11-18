@@ -1120,7 +1120,7 @@ The two crates that dominate cold build time:
   per profile per target; switching profiles invalidates the cache.
 - **`sqlx`** — declared once in `[workspace.dependencies]` so all four crates
   (`ersatzrs-infra`, `-web`, `-scanner`, `-scheduler`) share a single sqlx
-  compilation with feature union `runtime-tokio,sqlite,migrate,chrono,uuid,macros`.
+  compilation with feature union `runtime-tokio,sqlite,migrate,uuid,macros`.
   `sqlx-macros` is held at `opt-level = 0` because optimisation buys nothing
   for proc-macro crates.
 

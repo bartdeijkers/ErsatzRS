@@ -7,7 +7,6 @@ use super::{
 };
 use crate::db::{Db, DbPool};
 use crate::repositories::SqlxResultExt as _;
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     Result, TeletextEffectiveGuideGenerationSave, TeletextGenerationMutation as M,
     TeletextGenerationRejection as R, TeletextGuideGenerationCheck,
@@ -20,6 +19,7 @@ use ersatzrs_domain::{
     TeletextEffectiveChannelSelectionSnapshot, TeletextPublicationRequest,
     TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::Transaction;
 use std::time::Instant;
 

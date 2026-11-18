@@ -5,9 +5,9 @@ use super::{
     authoring::{self, AuthoringFixture},
     authoring_metadata, channel_documents, designs, scripted_controls, *,
 };
-use chrono::Timelike as _;
 use ersatzrs_domain::TeletextOverrideState;
 use ersatzrs_ffmpeg::teletext::TeletextRaster;
+use ersatzrs_time::Timelike as _;
 use ersatzrs_web::host::teletext_authoring::{
     observe_effective_teletext_authoring_selection, prepare_static_teletext_design,
     preview_original_teletext_design, publish_static_teletext_generation,
@@ -32,7 +32,7 @@ pub(super) async fn lua(
         &format!("{command}\nadd_count('clip',1)"),
         channel,
         true,
-        (Utc::now() - chrono::Duration::seconds(1))
+        (Utc::now() - ersatzrs_time::Duration::seconds(1))
             .with_nanosecond(0)
             .unwrap(),
     )
@@ -448,7 +448,7 @@ async fn rendered_effective_digest_and_wrong_role_are_rejected_before_any_produc
     );
     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=?"#)
         .bind(
-            (Utc::now() + chrono::Duration::minutes(2))
+            (Utc::now() + ersatzrs_time::Duration::minutes(2))
                 .format("%Y-%m-%d %H:%M:%S")
                 .to_string(),
         )
@@ -476,7 +476,7 @@ async fn historical_expired_original_keeps_pixels_without_current_publication_or
     scripted_controls::seed_publication_inputs(&fixture.fixture).await;
     lua(&fixture, 1, Some(&fixture.profiles[1])).await;
     // Test-only retained-prefix clipping gives a bounded actual-clock expiry proof.
-    let finish = (Utc::now() + chrono::Duration::seconds(4))
+    let finish = (Utc::now() + ersatzrs_time::Duration::seconds(4))
         .with_nanosecond(0)
         .unwrap();
     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish"=?"#)

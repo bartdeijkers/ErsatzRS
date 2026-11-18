@@ -6,12 +6,12 @@ use std::{
     sync::Arc,
 };
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     locking::{EntityLocker, TeletextWorkGuard, TeletextWorkHold},
     repositories::{ConfigRepository as _, RepositoryError, Result},
 };
 use ersatzrs_domain::{Channel, ChannelStreamSelectorMode, ChannelSubtitleMode};
+use ersatzrs_time::{DateTime, Utc};
 use tokio::time::Instant;
 
 use crate::{

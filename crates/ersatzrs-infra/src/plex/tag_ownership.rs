@@ -19,7 +19,10 @@ pub(super) async fn replace_container_labels(
     kind: ContainerKind,
     item_id: i64,
     title: &str,
-    dates: (chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>),
+    dates: (
+        ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+        ersatzrs_time::DateTime<ersatzrs_time::Utc>,
+    ),
     labels: &[PlexLabel],
 ) -> Result<()> {
     let (kind, owner_column) = match kind {

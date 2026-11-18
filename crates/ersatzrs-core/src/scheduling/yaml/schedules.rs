@@ -1,7 +1,7 @@
 //! Date selection for Sequential YAML `schedules`, matching
 //! `AlternateScheduleSelector` and `YamlPlayoutScheduleItem` in ErsatzTV.
 
-use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Utc};
+use ersatzrs_time::{DateTime, Datelike, Duration, Local, NaiveDate, Utc};
 
 use super::YamlPlayoutScheduleItem;
 
@@ -99,7 +99,7 @@ fn days_in_month(year: i32, month: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use chrono::TimeZone;
+    use ersatzrs_time::TimeZone;
 
     use super::*;
 

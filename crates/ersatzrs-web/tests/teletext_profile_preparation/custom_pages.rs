@@ -107,7 +107,7 @@ async fn linked_element_reaches_check_storage_and_encoder_as_exact_rows() {
     let expected = fixture
         .state
         .application
-        .preview_teletext_element(element, Some(CHANNEL), chrono::Utc::now())
+        .preview_teletext_element(element, Some(CHANNEL), ersatzrs_time::Utc::now())
         .await
         .unwrap()
         .page
@@ -175,7 +175,7 @@ async fn linked_element_reaches_check_storage_and_encoder_as_exact_rows() {
     let current = fixture
         .state
         .application
-        .plan_teletext_custom_pages(CHANNEL, chrono::Utc::now())
+        .plan_teletext_custom_pages(CHANNEL, ersatzrs_time::Utc::now())
         .await
         .unwrap();
     assert_eq!(current.pages[0].cycle_seconds, Some(20));
@@ -227,7 +227,7 @@ async fn stored_dynamic_field_recipe_ignores_later_element_binding_edits() {
     let updated = fixture
         .state
         .application
-        .plan_teletext_custom_pages(CHANNEL, chrono::Utc::now())
+        .plan_teletext_custom_pages(CHANNEL, ersatzrs_time::Utc::now())
         .await
         .unwrap();
     assert_eq!(
@@ -570,7 +570,7 @@ async fn blocked_pages_stop_check_with_a_reason_per_page() {
     let application = &fixture.state.application;
     link(&fixture, "%UNKNOWN%%%", None).await;
     let plan = application
-        .plan_teletext_custom_pages(CHANNEL, chrono::Utc::now())
+        .plan_teletext_custom_pages(CHANNEL, ersatzrs_time::Utc::now())
         .await
         .unwrap();
     assert_eq!(plan.issues.len(), 1);
@@ -621,7 +621,7 @@ async fn blocked_pages_stop_check_with_a_reason_per_page() {
         .unwrap();
     rename(0x150).await;
     let plan = application
-        .plan_teletext_custom_pages(CHANNEL, chrono::Utc::now())
+        .plan_teletext_custom_pages(CHANNEL, ersatzrs_time::Utc::now())
         .await
         .unwrap();
     assert!(plan
@@ -663,7 +663,7 @@ async fn text_hidden_under_a_double_height_line_blocks_the_page() {
         .await
         .unwrap();
     let plan = application
-        .plan_teletext_custom_pages(CHANNEL, chrono::Utc::now())
+        .plan_teletext_custom_pages(CHANNEL, ersatzrs_time::Utc::now())
         .await
         .unwrap();
     assert_eq!(plan.issues.len(), 1);

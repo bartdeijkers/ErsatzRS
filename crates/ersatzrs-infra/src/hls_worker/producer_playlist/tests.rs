@@ -69,7 +69,7 @@ async fn private_mpegts_playlist_appends_closed_segments_once_with_pdt_and_final
         .unwrap()
         .producer_playlist
         .starts_with(".mpegts-producer-"));
-    assert_eq!(helper.start, anchor + chrono::Duration::seconds(5));
+    assert_eq!(helper.start, anchor + ersatzrs_time::Duration::seconds(5));
     segment(root.path(), 11).await;
     producer(&helper, &playlist(11, &[4], 4, false)).await;
     let previous = public(&worker).await;
@@ -86,7 +86,7 @@ async fn private_mpegts_playlist_appends_closed_segments_once_with_pdt_and_final
     assert!(first.contains("#EXT-X-TARGETDURATION:5\n"));
     assert!(first.contains("#EXT-X-MEDIA-SEQUENCE:10\n"));
     assert!(first.contains(&super::super::format_program_date_time(
-        anchor + chrono::Duration::seconds(5)
+        anchor + ersatzrs_time::Duration::seconds(5)
     )));
     helper.publish(&worker, false).await.unwrap();
     assert_eq!(
@@ -212,7 +212,7 @@ async fn private_mpegts_playlist_restart_preserves_sequence_anchor_and_directory
         .await
         .unwrap();
     assert_eq!(second.options().unwrap().start_number, 22);
-    assert_eq!(second.start, anchor + chrono::Duration::seconds(10));
+    assert_eq!(second.start, anchor + ersatzrs_time::Duration::seconds(10));
     segment(root.path(), 22).await;
     producer(&second, &playlist(22, &[3], 3, true)).await;
     second.publish(&worker, true).await.unwrap();
@@ -220,7 +220,7 @@ async fn private_mpegts_playlist_restart_preserves_sequence_anchor_and_directory
     assert_eq!(list.matches("#EXTINF:").count(), 3);
     assert!(list.contains("#EXT-X-TARGETDURATION:6\n"));
     assert!(list.contains(&super::super::format_program_date_time(
-        anchor + chrono::Duration::seconds(10)
+        anchor + ersatzrs_time::Duration::seconds(10)
     )));
 }
 
@@ -268,7 +268,11 @@ async fn private_mpegts_playlist_allows_cleanup_of_older_published_run_files() {
     }
     producer(&helper, &playlist(0, &[10; 7], 10, false)).await;
     helper
-        .publish_at(&worker, false, anchor + chrono::Duration::seconds(50))
+        .publish_at(
+            &worker,
+            false,
+            anchor + ersatzrs_time::Duration::seconds(50),
+        )
         .await
         .unwrap();
     let current = public(&worker).await;

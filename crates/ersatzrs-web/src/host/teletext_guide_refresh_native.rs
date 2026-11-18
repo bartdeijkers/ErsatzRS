@@ -3,7 +3,6 @@
 use std::{fmt::Write as _, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_app::{
     teletext_design_documents::TeletextDesignDocumentBudget,
     teletext_guide_refresh::TeletextGuideRefreshValidator,
@@ -21,6 +20,7 @@ use ersatzrs_core::{
 };
 use ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService;
 use ersatzrs_infra::db::DbPool;
+use ersatzrs_time::{DateTime, Utc};
 use sha2::{Digest as _, Sha256};
 
 use super::{

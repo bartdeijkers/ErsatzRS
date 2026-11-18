@@ -460,7 +460,7 @@ pub fn render_programme(
 
 fn xmltv_date(value: Option<&str>) -> Option<String> {
     value
-        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .and_then(|value| ersatzrs_time::DateTime::parse_from_rfc3339(value).ok())
         .map(|value| value.format("%Y%m%d").to_string())
 }
 

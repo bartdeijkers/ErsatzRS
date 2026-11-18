@@ -4,7 +4,7 @@ use super::{
     TeletextGuideSourceFence, TeletextGuideSourceFenceError, TELETEXT_GUIDE_CONTEXT_DIGEST_VERSION,
 };
 use crate::programme::{ProgrammeClock, ProgrammeOccurrence};
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use std::num::NonZeroU8;
 
 /// Deterministic validity of an exact saved source context. The native caller

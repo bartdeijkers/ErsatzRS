@@ -4,8 +4,8 @@ use std::{
 };
 
 use async_trait::async_trait;
-use chrono::{Duration, TimeZone as _, Utc};
 use ersatzrs_domain::{EntityId, TeletextChannelSelectionSnapshot, TeletextPublicationRequest};
+use ersatzrs_time::{Duration, TimeZone as _, Utc};
 use serde_json::{json, Value};
 
 use super::{
@@ -176,7 +176,7 @@ fn invalid_versions_metadata_and_window_fail_without_normalization() {
         Err(TeletextGuideSourceFenceError::CalendarWindow)
     );
     let mut invalid = fence();
-    invalid.captured_at = chrono::DateTime::from_timestamp(59, 1_000_000_000).unwrap();
+    invalid.captured_at = ersatzrs_time::DateTime::from_timestamp(59, 1_000_000_000).unwrap();
     assert_eq!(
         invalid.validate(),
         Err(TeletextGuideSourceFenceError::CalendarWindow)

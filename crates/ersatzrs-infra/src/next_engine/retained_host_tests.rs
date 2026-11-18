@@ -70,7 +70,7 @@ fn fixture() -> (
     let item = protocol::PlayoutItem {
         id: "1".into(),
         start,
-        finish: start + chrono::Duration::seconds(50),
+        finish: start + ersatzrs_time::Duration::seconds(50),
         source: Some(protocol::Source::Local {
             path: "old-source.mkv".into(),
             in_point_ms: Some(12_000),
@@ -136,7 +136,7 @@ fn audio_only_producer_preserves_generated_picture_and_exact_audio_after_probe()
                 audio: None,
                 subtitle: None,
             });
-            let now = item.start + chrono::Duration::seconds(10);
+            let now = item.start + ersatzrs_time::Duration::seconds(10);
             let prepared = protocol::Source::Local {
                 path: "owned-producer.nut".into(),
                 in_point_ms: None,
@@ -204,7 +204,7 @@ fn audio_only_producer_preserves_generated_picture_and_exact_audio_after_probe()
 #[test]
 fn fresh_retained_indexes_replace_old_indexes_without_second_seek() {
     let (probe, previous, item) = fixture();
-    let now = item.start + chrono::Duration::seconds(10);
+    let now = item.start + ersatzrs_time::Duration::seconds(10);
     let finish = item.finish;
     let resolved = install_fresh_tracks(
         item,
@@ -245,7 +245,7 @@ fn fresh_retained_indexes_replace_old_indexes_without_second_seek() {
 #[test]
 fn explicit_silence_survives_and_ambiguous_audio_is_refused() {
     let (mut probe, previous, item) = fixture();
-    let now = item.start + chrono::Duration::seconds(10);
+    let now = item.start + ersatzrs_time::Duration::seconds(10);
     let resolved = install_fresh_tracks(
         item.clone(),
         &probe,

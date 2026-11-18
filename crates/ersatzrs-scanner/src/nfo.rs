@@ -8,7 +8,7 @@
 use std::fs;
 use std::path::Path;
 
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use ersatzrs_time::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use quick_xml::de;
 use quick_xml::events::Event;
 use quick_xml::Reader;

@@ -28,7 +28,6 @@ mod scripted_sources;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{Duration, TimeZone, Utc};
 use ersatzrs_core::content_variants;
 use ersatzrs_core::repositories::{
     AdminMediaRepository, AdminSearchKind, AdminSearchRepository, CollectionRepository,
@@ -50,6 +49,7 @@ use ersatzrs_domain::{
     CONFIG_KEY_PLAYOUT_SKIP_MISSING_ITEMS,
 };
 use ersatzrs_infra::repositories::{make_repositories, Repositories};
+use ersatzrs_time::{Duration, TimeZone, Utc};
 use sqlx::{Executor, SqlitePool};
 
 fn persisted_smart_shuffle_policy() -> SchedulingSmartShufflePolicy {

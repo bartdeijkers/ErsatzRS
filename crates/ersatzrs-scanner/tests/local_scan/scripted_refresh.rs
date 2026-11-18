@@ -1,5 +1,4 @@
 use super::*;
-use chrono::{Duration, Utc};
 use ersatzrs_core::{
     locking::EntityLocker,
     repositories::{ChannelRepository, FfmpegProfileRepository},
@@ -10,6 +9,7 @@ use ersatzrs_infra::{
     maintenance::run_requested_playout_build, repositories::make_repositories,
     scripted_dependencies::resolve_pending,
 };
+use ersatzrs_time::{Duration, Utc};
 
 async fn seed_playout(pool: &SqlitePool, script: &Path) {
     let repos = make_repositories(pool.clone());
@@ -39,7 +39,7 @@ async fn seed_playout(pool: &SqlitePool, script: &Path) {
         .bind(script.to_str().unwrap()).execute(pool).await.unwrap();
 }
 
-async fn rebuild(pool: &SqlitePool, mode: PlayoutBuildMode, now: chrono::DateTime<Utc>) {
+async fn rebuild(pool: &SqlitePool, mode: PlayoutBuildMode, now: ersatzrs_time::DateTime<Utc>) {
     run_requested_playout_build(
         pool,
         &EntityLocker::new(),

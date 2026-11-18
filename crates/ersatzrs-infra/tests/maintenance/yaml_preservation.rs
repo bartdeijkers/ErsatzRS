@@ -172,7 +172,7 @@ async fn reference(pool: &SqlitePool) -> SchedulingReferenceData {
 
 async fn assert_refresh_keeps_reset_rotation(
     pool: &SqlitePool,
-    now: chrono::DateTime<Utc>,
+    now: ersatzrs_time::DateTime<Utc>,
     before: &SchedulingReferenceData,
 ) {
     run_requested_playout_build(
@@ -198,7 +198,7 @@ async fn assert_refresh_keeps_reset_rotation(
     }
 }
 
-async fn initial_window(url: &str, start: chrono::DateTime<Utc>) -> SqlitePool {
+async fn initial_window(url: &str, start: ersatzrs_time::DateTime<Utc>) -> SqlitePool {
     let pool = ersatzrs_infra::db::init(url).await.unwrap();
     pool.execute(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, '1920x1080', 1920, 1080)"#).await.unwrap();
     let repos = make_repositories(pool.clone());

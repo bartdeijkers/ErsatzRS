@@ -3,7 +3,7 @@ use crate::{
     programme::ProgrammeSegment,
     xmltv::{XmltvProgramme, XmltvProgrammeContent},
 };
-use chrono::{Duration, TimeZone as _};
+use ersatzrs_time::{Duration, TimeZone as _};
 
 fn fence(at: DateTime<Utc>) -> TeletextGuideSourceFence {
     let (start, finish) = ProgrammeClock::named("Europe/Amsterdam")

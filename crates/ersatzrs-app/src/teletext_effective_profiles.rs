@@ -2,12 +2,12 @@
 
 use std::{fmt, sync::Arc};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::{
     locking::TeletextWorkHold,
     repositories::{Result as RepositoryResult, TeletextProfileMutation},
 };
 use ersatzrs_domain::{EntityId, TeletextEffectiveChannelSelectionSnapshot};
+use ersatzrs_time::{DateTime, Utc};
 
 use crate::{teletext_profiles::TeletextProfileRuntimeError, ApplicationServices};
 

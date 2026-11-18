@@ -3,8 +3,8 @@ use crate::scheduling::{
     block_sources::checkpoint_smart_shuffle, PlayoutBuildMode, PlayoutPreservation,
     SchedulingError, SchedulingRequest, SchedulingResult, SchedulingSmartShuffleState,
 };
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::FillerKind;
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 pub(super) struct Preservation {
     pub(super) rebuild: bool,

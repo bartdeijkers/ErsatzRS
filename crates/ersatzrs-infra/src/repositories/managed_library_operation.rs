@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     AddonMediaListLifecycleJob, AddonMediaListPublicationEnqueue, AddonMediaListPublicationEvent,
     AddonMediaListPublicationFailureCause, AddonMediaListPublicationHistory,
@@ -17,6 +16,7 @@ use ersatzrs_domain::{
     AddonMediaListRecoveryAction, EntityId, ManagedLibraryOperationKind,
     ManagedLibraryOperationState, MediaSourceKind,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Row as _;
 use uuid::Uuid;
 

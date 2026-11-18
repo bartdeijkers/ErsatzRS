@@ -40,7 +40,7 @@ impl DeferredProjection {
         &mut self,
         relay: &super::media::MediaRelay,
         session: Option<uuid::Uuid>,
-        start: chrono::DateTime<chrono::Utc>,
+        start: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> Result<()> {
         if let Some(song) = &self.song {
             let source = song.publish(relay, session, start)?;

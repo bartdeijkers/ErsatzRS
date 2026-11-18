@@ -1,6 +1,5 @@
 //! Version 2 historical originals, with distinct effective origins and no live authority.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     EntityId, TeletextEffectiveBindingSnapshot as Binding,
     TeletextEffectiveChannelSelectionSnapshot as Selection, TeletextInstallationSnapshot,
@@ -8,6 +7,7 @@ use ersatzrs_domain::{
     TeletextProfileCandidateSnapshot, TeletextProfileSetting, TeletextPublishedOverride,
     MAX_TELETEXT_PROFILE_SETTINGS, TELETEXT_EFFECTIVE_DESIGN_DOCUMENT_VERSION,
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt;

@@ -97,7 +97,7 @@ async fn main() -> anyhow::Result<()> {
         .context("persist scanner operation")?;
     let claim = loop {
         if let Some(claim) = operations
-            .claim_operation(operation.id, chrono::Utc::now())
+            .claim_operation(operation.id, ersatzrs_time::Utc::now())
             .await?
         {
             break claim;
@@ -125,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
         loop {
             interval.tick().await;
             let current = heartbeat_operations
-                .heartbeat(&heartbeat_claim, chrono::Utc::now())
+                .heartbeat(&heartbeat_claim, ersatzrs_time::Utc::now())
                 .await
                 .context("refresh standalone scanner lease")?;
             if !current {

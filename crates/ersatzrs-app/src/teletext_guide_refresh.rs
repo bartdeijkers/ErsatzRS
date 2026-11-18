@@ -3,7 +3,6 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     TeletextGenerationMutation, TeletextGuideGenerationCheck, TeletextGuideRefreshCandidate,
     TeletextGuideRefreshClaim, TeletextGuideRefreshCurrent, TeletextGuideRefreshCurrentMetadata,
@@ -12,6 +11,7 @@ use ersatzrs_core::repositories::{
     TeletextGuideRefreshRole, TeletextGuideRefreshSeed, TeletextGuideRuntimeSnapshot,
 };
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Utc};
 
 use crate::{
     teletext_generations::TeletextGenerationStoreError,
@@ -164,7 +164,7 @@ impl ApplicationServices {
         if Instant::now() >= check.deadline {
             return Err(TeletextPublicationValidationError::TimedOut.into());
         }
-        let elapsed = chrono::Duration::from_std(started.elapsed())
+        let elapsed = ersatzrs_time::Duration::from_std(started.elapsed())
             .map_err(|_| TeletextPublicationValidationError::TimedOut)?;
         let now = now
             .checked_add_signed(elapsed)

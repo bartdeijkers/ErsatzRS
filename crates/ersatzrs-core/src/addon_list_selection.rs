@@ -1,7 +1,7 @@
 //! Bounded, provider-neutral selection of an already discovered overview.
 
-use chrono::{DateTime, Duration, Utc};
 pub use ersatzrs_domain::addon_list_selection::*;
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 /// Initial import choices captured before a durable worker can publish.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

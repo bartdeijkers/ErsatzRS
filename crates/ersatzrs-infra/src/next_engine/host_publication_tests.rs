@@ -41,7 +41,7 @@ pub(crate) async fn fixture(root: &std::path::Path) -> (Arc<NextHost>, DateTime<
             number: "2".into(),
             playout_source: ChannelPlayoutSource::Mirror,
             mirror_source_channel_id: Some(1),
-            playout_offset: Some(chrono::Duration::seconds(-5)),
+            playout_offset: Some(ersatzrs_time::Duration::seconds(-5)),
             ..channel
         })
         .await
@@ -83,9 +83,9 @@ async fn active_preparation_coalesces_main_preview_and_includes_leading_mirror()
         id: 0,
         playout_id: 1,
         start,
-        finish: start + chrono::Duration::seconds(60),
-        in_point: chrono::Duration::zero(),
-        out_point: chrono::Duration::seconds(60),
+        finish: start + ersatzrs_time::Duration::seconds(60),
+        in_point: ersatzrs_time::Duration::zero(),
+        out_point: ersatzrs_time::Duration::seconds(60),
         ..selection::tests::item()
     };
     let result = SchedulingResult {
@@ -95,13 +95,14 @@ async fn active_preparation_coalesces_main_preview_and_includes_leading_mirror()
     };
     for publish in [false, true] {
         let mut pending = repository
-            .prepare_build_result(&result, &playout, chrono::Duration::zero())
+            .prepare_build_result(&result, &playout, ersatzrs_time::Duration::zero())
             .await
             .unwrap();
         let prepared = host
             .prepare_active_build(
                 &mut pending,
-                start - chrono::Duration::seconds(5)..start + chrono::Duration::seconds(60),
+                start - ersatzrs_time::Duration::seconds(5)
+                    ..start + ersatzrs_time::Duration::seconds(60),
                 Instant::now() + std::time::Duration::from_secs(3),
             )
             .await
@@ -128,8 +129,11 @@ async fn active_preparation_coalesces_main_preview_and_includes_leading_mirror()
                 )
                 .unwrap();
                 let item = wire.items.last().unwrap();
-                assert_eq!(item.start, start + chrono::Duration::seconds(offset));
-                assert_eq!(item.finish, start + chrono::Duration::seconds(60 + offset));
+                assert_eq!(item.start, start + ersatzrs_time::Duration::seconds(offset));
+                assert_eq!(
+                    item.finish,
+                    start + ersatzrs_time::Duration::seconds(60 + offset)
+                );
             }
         } else {
             drop(prepared);
@@ -171,14 +175,14 @@ async fn conflicting_shared_owner_configuration_refuses_before_staging() {
         .prepare_build_result(
             &SchedulingResult::default(),
             &playout,
-            chrono::Duration::zero(),
+            ersatzrs_time::Duration::zero(),
         )
         .await
         .unwrap();
     assert!(matches!(
         host.prepare_active_build(
             &mut pending,
-            start..start + chrono::Duration::minutes(2),
+            start..start + ersatzrs_time::Duration::minutes(2),
             Instant::now() + std::time::Duration::from_secs(3)
         )
         .await,
@@ -199,11 +203,12 @@ async fn later_owner_timeout_discards_earlier_preparation_without_publishing() {
         .prepare_build_result(
             &SchedulingResult::default(),
             &playout,
-            chrono::Duration::zero(),
+            ersatzrs_time::Duration::zero(),
         )
         .await
         .unwrap();
-    let window = start - chrono::Duration::seconds(5)..start + chrono::Duration::minutes(2);
+    let window =
+        start - ersatzrs_time::Duration::seconds(5)..start + ersatzrs_time::Duration::minutes(2);
     let held = host
         .prepare_build(
             &mut pending,
@@ -280,7 +285,7 @@ async fn requested_worker_rolls_back_failed_preparation_and_publishes_a_fresh_re
         .execute(&host.pool).await.unwrap();
     let repository = SqlitePlayoutRepository(host.pool.clone());
     let before = repository
-        .items_in_range(1, start, start + chrono::Duration::hours(1))
+        .items_in_range(1, start, start + ersatzrs_time::Duration::hours(1))
         .await
         .unwrap();
     let old_playout = repository.get_with_anchor(1).await.unwrap();
@@ -316,7 +321,7 @@ async fn requested_worker_rolls_back_failed_preparation_and_publishes_a_fresh_re
     assert!(failure.to_string().contains("publication"));
     assert_eq!(
         repository
-            .items_in_range(1, start, start + chrono::Duration::hours(1))
+            .items_in_range(1, start, start + ersatzrs_time::Duration::hours(1))
             .await
             .unwrap(),
         before
@@ -343,7 +348,7 @@ async fn requested_worker_rolls_back_failed_preparation_and_publishes_a_fresh_re
     .expect("prepared publishers do not await a redundant session refresh")
     .unwrap());
     let committed = repository
-        .items_in_range(1, start, start + chrono::Duration::hours(1))
+        .items_in_range(1, start, start + ersatzrs_time::Duration::hours(1))
         .await
         .unwrap();
     assert_eq!(committed.len(), 4);
@@ -382,11 +387,11 @@ fn assert_published_candidates(root: &std::path::Path, committed: &[ersatzrs_dom
             assert_eq!(published.id, item.id.to_string());
             assert_eq!(
                 published.start,
-                item.start + chrono::Duration::seconds(offset)
+                item.start + ersatzrs_time::Duration::seconds(offset)
             );
             assert_eq!(
                 published.finish,
-                item.finish + chrono::Duration::seconds(offset)
+                item.finish + ersatzrs_time::Duration::seconds(offset)
             );
         }
     }

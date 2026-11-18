@@ -33,7 +33,7 @@ impl NativeCandidate {
 
     pub(in crate::transport::iptv::teletext_live_output) fn fields_current_at(
         &self,
-        now: chrono::DateTime<chrono::Utc>,
+        now: ersatzrs_time::DateTime<ersatzrs_time::Utc>,
     ) -> bool {
         self.custom
             .as_ref()

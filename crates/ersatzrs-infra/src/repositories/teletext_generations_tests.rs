@@ -143,9 +143,9 @@ async fn active_scripted_override_fences_base_output_without_replacing_accepted_
     .execute(&repository.0)
     .await
     .unwrap();
-    let now = chrono::Utc::now();
-    let past = encode_datetime(now - chrono::Duration::hours(1));
-    let future = encode_datetime(now + chrono::Duration::hours(1));
+    let now = ersatzrs_time::Utc::now();
+    let past = encode_datetime(now - ersatzrs_time::Duration::hours(1));
+    let future = encode_datetime(now + ersatzrs_time::Duration::hours(1));
     let addon = &fixture.selection.bindings[0].addon_id;
     sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State") VALUES (2, ?, ?, ?, 0)"#)
         .bind(addon).bind(&past).bind(&future).execute(&repository.0).await.unwrap();
@@ -170,7 +170,7 @@ async fn active_scripted_override_fences_base_output_without_replacing_accepted_
         M::Rejected(R::Publication(P::SelectionChanged))
     );
     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish" = ? WHERE "PlayoutId" = 1"#)
-        .bind(encode_datetime(now - chrono::Duration::minutes(1)))
+        .bind(encode_datetime(now - ersatzrs_time::Duration::minutes(1)))
         .execute(&repository.0)
         .await
         .unwrap();
@@ -185,7 +185,7 @@ async fn active_scripted_override_fences_base_output_without_replacing_accepted_
         r#"UPDATE "PlayoutTeletextInterval" SET "Start" = ?, "Finish" = ? WHERE "PlayoutId" = 1"#,
     )
     .bind(&future)
-    .bind(encode_datetime(now + chrono::Duration::hours(2)))
+    .bind(encode_datetime(now + ersatzrs_time::Duration::hours(2)))
     .execute(&repository.0)
     .await
     .unwrap();
@@ -219,11 +219,11 @@ async fn corrupt_active_scripted_snapshot_is_unavailable_until_original_expiry()
     .execute(&repository.0)
     .await
     .unwrap();
-    let now = chrono::Utc::now();
+    let now = ersatzrs_time::Utc::now();
     sqlx::query(r#"INSERT INTO "PlayoutTeletextInterval" ("PlayoutId", "AddonId", "Start", "Finish", "State", "CandidateSnapshot") VALUES (1, ?, ?, ?, 1, '{}')"#)
         .bind(&fixture.selection.bindings[0].addon_id)
-        .bind(encode_datetime(now - chrono::Duration::hours(1)))
-        .bind(encode_datetime(now + chrono::Duration::hours(1)))
+        .bind(encode_datetime(now - ersatzrs_time::Duration::hours(1)))
+        .bind(encode_datetime(now + ersatzrs_time::Duration::hours(1)))
         .execute(&repository.0).await.unwrap();
     assert!(repository
         .confirm_current(&generation, &fixture.selection, MAX_DOCUMENT)
@@ -234,7 +234,7 @@ async fn corrupt_active_scripted_snapshot_is_unavailable_until_original_expiry()
         Some(generation.clone())
     );
     sqlx::query(r#"UPDATE "PlayoutTeletextInterval" SET "Finish" = ?"#)
-        .bind(encode_datetime(now - chrono::Duration::minutes(1)))
+        .bind(encode_datetime(now - ersatzrs_time::Duration::minutes(1)))
         .execute(&repository.0)
         .await
         .unwrap();

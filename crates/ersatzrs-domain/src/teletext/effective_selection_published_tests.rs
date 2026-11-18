@@ -1,7 +1,7 @@
 //! Host-only output comparison grants no fresh publication authority.
 
 use super::*;
-use chrono::{Duration, TimeZone as _};
+use ersatzrs_time::{Duration, TimeZone as _};
 
 fn selection(host: bool) -> TeletextEffectiveChannelSelectionSnapshot {
     let start = Utc.with_ymd_and_hms(2026, 11, 15, 0, 0, 0).unwrap();

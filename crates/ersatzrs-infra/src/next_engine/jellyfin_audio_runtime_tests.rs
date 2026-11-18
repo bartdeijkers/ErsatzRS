@@ -75,8 +75,8 @@ async fn repaired_provider_playback(hdr: bool) {
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::zero();
-    item.out_point = chrono::Duration::seconds(60);
+    item.in_point = ersatzrs_time::Duration::zero();
+    item.out_point = ersatzrs_time::Duration::seconds(60);
     item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
         media_version_id: version,
         video_stream_index: 0,

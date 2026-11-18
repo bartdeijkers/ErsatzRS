@@ -22,7 +22,6 @@ mod yaml_sequence;
 
 use std::collections::BTreeSet;
 
-use chrono::{Duration, Timelike, Utc};
 use ersatzrs_core::playout_builder::PlayoutBuilder;
 use ersatzrs_core::repositories::{GraphicsRepository, PlayoutRepository};
 use ersatzrs_core::scheduling::{
@@ -37,6 +36,7 @@ use ersatzrs_domain::{
     TextGraphicsConfig,
 };
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::{Duration, Timelike, Utc};
 use sqlx::{Executor, Row};
 
 // ── pure persistence tests ────────────────────────────────────────────────────
@@ -745,8 +745,8 @@ playout:
     reason = "Keep the database restart and continued timeline proof in one causal test."
 )]
 async fn yaml_scheduled_playout_restores_list_indices_after_sqlite_restart() {
-    use chrono::{Local, TimeZone};
     use ersatzrs_core::scheduling::SchedulingMediaItem;
+    use ersatzrs_time::{Local, TimeZone};
     use std::collections::BTreeMap;
 
     let temp = tempfile::tempdir().expect("temporary database directory");

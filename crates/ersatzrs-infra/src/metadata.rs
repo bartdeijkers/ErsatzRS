@@ -16,10 +16,10 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::language_codes;
 use ersatzrs_core::repositories::Result;
 use ersatzrs_domain::{MediaStream, MediaStreamKind};
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::{Row, Transaction};
 
 use crate::db::Db;
@@ -957,7 +957,7 @@ fn encode_datetime(value: DateTime<Utc>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone as _;
+    use ersatzrs_time::TimeZone as _;
 
     #[tokio::test]
     async fn ordinary_tag_refresh_preserves_other_producers() {

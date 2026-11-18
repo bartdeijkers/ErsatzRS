@@ -791,12 +791,12 @@ fn repository_row(
 /// Render a stored RFC 3339 scan time as a plain local-looking stamp.
 fn refresh_timestamp(value: Option<&str>) -> String {
     value
-        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .and_then(|value| ersatzrs_time::DateTime::parse_from_rfc3339(value).ok())
         .map_or_else(
             || tr(TextKey::NeverRefreshed).to_owned(),
             |stamp| {
                 stamp
-                    .with_timezone(&chrono::Local)
+                    .with_timezone(&ersatzrs_time::Local)
                     .format("%Y-%m-%d %H:%M")
                     .to_string()
             },
@@ -1461,11 +1461,11 @@ fn installed_check_message(item: &InstalledAddonRow) -> String {
 }
 
 fn format_check_timestamp(value: &str) -> String {
-    chrono::DateTime::parse_from_rfc3339(value).map_or_else(
+    ersatzrs_time::DateTime::parse_from_rfc3339(value).map_or_else(
         |_| String::new(),
         |timestamp| {
             timestamp
-                .with_timezone(&chrono::Utc)
+                .with_timezone(&ersatzrs_time::Utc)
                 .format("%Y-%m-%d %H:%M:%S UTC")
                 .to_string()
         },

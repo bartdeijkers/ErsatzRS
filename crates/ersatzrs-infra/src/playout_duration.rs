@@ -1,7 +1,7 @@
 //! ErsatzTV `MediaItemExtensions.GetDurationForPlayout` for persisted media.
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_time::Duration;
 use sqlx::Row;
 
 use crate::{db::DbRow, repositories::SqlxResultExt as _};

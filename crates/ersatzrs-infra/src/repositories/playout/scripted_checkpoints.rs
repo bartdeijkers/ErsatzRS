@@ -1,7 +1,7 @@
 use super::{encode_datetime, EntityId, RepositoryError, Result, Transaction};
 use crate::repositories::SqlxResultExt as _;
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::PlayoutScriptedCheckpoint;
+use ersatzrs_time::{DateTime, Utc};
 use std::collections::BTreeSet;
 
 pub(super) fn validate(

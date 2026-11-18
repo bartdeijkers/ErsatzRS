@@ -65,7 +65,7 @@ pub(super) async fn published_fixture(
 
 fn reset_future_window(
     data: &SchedulingReferenceData,
-    boundary: chrono::DateTime<Utc>,
+    boundary: ersatzrs_time::DateTime<Utc>,
 ) -> Vec<ersatzrs_domain::PlayoutItem> {
     data.existing_items
         .iter()

@@ -3,7 +3,7 @@ use super::super::{
     Utc, YamlContext, YamlInstruction, YamlPlayoutDefinition,
 };
 use super::content::{add_media_item, schedule_next_with_rolls};
-use chrono::{Local, Offset, TimeZone};
+use ersatzrs_time::{Local, Offset, TimeZone};
 
 pub(super) fn handle_wait_until(
     context: &mut YamlContext,
@@ -95,7 +95,7 @@ pub(super) fn handle_pad_until(
 
 fn local_clock_target(
     current_time: DateTime<Utc>,
-    date: chrono::NaiveDate,
+    date: ersatzrs_time::NaiveDate,
     (hour, minute, second): (u32, u32, u32),
 ) -> Option<DateTime<Utc>> {
     let local = current_time.with_timezone(&Local);
@@ -104,7 +104,7 @@ fn local_clock_target(
     local
         .offset()
         .fix()
-        .from_local_datetime(&target)
+        .resolve_local(&target)
         .single()
         .map(|time| time.with_timezone(&Utc))
 }

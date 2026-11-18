@@ -52,9 +52,9 @@ async fn prepare(
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::zero();
-    item.out_point = chrono::Duration::seconds(28);
-    item.finish = item.start + chrono::Duration::seconds(28);
+    item.in_point = ersatzrs_time::Duration::zero();
+    item.out_point = ersatzrs_time::Duration::seconds(28);
+    item.finish = item.start + ersatzrs_time::Duration::seconds(28);
     if off {
         item.pinned_stream_selection = Some(ersatzrs_domain::PinnedStreamSelection {
             media_version_id: 100,

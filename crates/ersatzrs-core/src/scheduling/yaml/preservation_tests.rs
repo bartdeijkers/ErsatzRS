@@ -232,7 +232,7 @@ fn yaml_refresh_preserves_future_sequence_shuffles() {
 
 #[test]
 fn yaml_refresh_finishes_pending_instruction_before_midnight_schedule_switch() {
-    use chrono::{Local, TimeZone};
+    use ersatzrs_time::{Local, TimeZone};
     let yaml = "playout:\n  - count: 3\n    content: main\n  - repeat: true\nschedules:\n  - name: Christmas\n    start_date: 12-25\n    end_date: 12-25\n    playout:\n      - count: 1\n        content: bumpers\n      - repeat: true\n";
     let (definition, mut request) = request(yaml);
     request.playout.schedule_kind = PlayoutScheduleKind::Sequential;
@@ -258,7 +258,7 @@ fn yaml_refresh_finishes_pending_instruction_before_midnight_schedule_switch() {
 
 #[test]
 fn yaml_refresh_in_gap_resumes_wait_without_replaying_consumed_media() {
-    use chrono::{Local, TimeZone};
+    use ersatzrs_time::{Local, TimeZone};
     let (definition, mut request) = request("playout:\n  - count: 1\n    content: main\n  - wait_until: '10:30'\n  - count: 3\n    content: main\n");
     request.playout.schedule_kind = PlayoutScheduleKind::Sequential;
     request.start = Local

@@ -1,7 +1,6 @@
 use crate::db::DbRow;
 use crate::repositories::SqlxResultExt as _;
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     PlayoutAlternateScheduleItemAdmin, PlayoutAlternateSchedulesAdmin, PlayoutCreateAdmin,
     PlayoutCreateChannelAdmin, PlayoutCreateScheduleAdmin, PlayoutDateFilterAdmin,
@@ -16,6 +15,7 @@ use ersatzrs_domain::{
     PlayoutHistory, PlayoutItem, PlayoutItemGraphicsElement, PlayoutProgramScheduleAnchor,
     PlayoutScheduleItemFillGroupIndex,
 };
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::{Pool, Row, Transaction};
 
 use super::common::upsert_sql;
@@ -247,7 +247,7 @@ impl PlayoutRepository for SqlitePlayoutRepository {
         &self,
         result: &SchedulingResult,
         playout: &Playout,
-        max_playout_offset: chrono::Duration,
+        max_playout_offset: ersatzrs_time::Duration,
     ) -> Result<()> {
         self.prepare_build_result(result, playout, max_playout_offset)
             .await?

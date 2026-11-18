@@ -267,7 +267,7 @@ mod tests {
         YamlContext::new(
             Playout::default(),
             SchedulingReferenceData::default(),
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
             BTreeMap::new(),
         )
     }

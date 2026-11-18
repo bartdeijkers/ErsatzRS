@@ -67,7 +67,7 @@ async fn name_taken(pool: &Pool<Db>, name: &str, id: EntityId) -> Result<bool> {
 }
 
 fn now() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    ersatzrs_time::Utc::now().to_rfc3339_opts(ersatzrs_time::SecondsFormat::Secs, true)
 }
 
 #[async_trait]

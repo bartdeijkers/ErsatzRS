@@ -2,9 +2,9 @@
 //! Official Next `channel_session::input_timing` uses zero for every live input,
 //! including a finite subtitle file. Never read the multiplexed live producer here.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_ffmpeg::SubtitleTextFormat;
+use ersatzrs_time::{DateTime, Utc};
 use sha2::{Digest as _, Sha256};
 use std::fmt::Write as _;
 use tokio::{io::AsyncReadExt as _, time::Instant};

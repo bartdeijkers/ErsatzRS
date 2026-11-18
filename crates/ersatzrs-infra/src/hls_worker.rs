@@ -24,7 +24,6 @@ use crate::repositories::common::{
     encode_datetime, map_data_access_error, try_decode_duration_text,
 };
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 use ersatzrs_core::hls::{
     HlsAdmissionStatus, HlsSessionHandle, HlsSessionRegistry, HlsStartupReadiness,
 };
@@ -42,6 +41,7 @@ use ersatzrs_ffmpeg::{
     PipelineRequest, RealtimeMode, SourceAudioCodec, SourceAudioStream, SourceVideoCodec,
     SourceVideoStream, SubtitleMethod, WatermarkOpacityClock,
 };
+use ersatzrs_time::{DateTime, NaiveDateTime, Timelike, Utc};
 
 use crate::dynamic_text::shutdown_dynamic_text_controllers;
 use crate::ffmpeg_capabilities::learned_hardware_decode_denial;
@@ -3943,7 +3943,8 @@ impl HlsSessionWorker {
     ) -> Option<TrimmedPlaylist> {
         let playlist_path = self.working_dir.join("live.m3u8");
         let playlist = tokio::fs::read_to_string(playlist_path).await.ok()?;
-        let filter_before = Utc::now() - chrono::Duration::seconds(PLAYLIST_FILTER_BEFORE_SECONDS);
+        let filter_before =
+            Utc::now() - ersatzrs_time::Duration::seconds(PLAYLIST_FILTER_BEFORE_SECONDS);
         let playlist_start = *self.playlist_start.lock().await;
         let trimmed = if self.output_format == OutputFormat::HlsMp4 {
             let mut init_cache = self.init_segment_cache.lock().await;
@@ -5348,8 +5349,11 @@ fn live_source_admission_delay(
         .filter(|delay| !delay.is_zero())
 }
 
-fn transcoded_buffer(transcoded_until: DateTime<Utc>, now: DateTime<Utc>) -> chrono::Duration {
-    (transcoded_until - now).max(chrono::Duration::zero())
+fn transcoded_buffer(
+    transcoded_until: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> ersatzrs_time::Duration {
+    (transcoded_until - now).max(ersatzrs_time::Duration::zero())
 }
 
 fn hls_transcode_decision(
@@ -5418,7 +5422,9 @@ fn hls_playout_item_duration(
 }
 
 fn add_std_duration(timestamp: DateTime<Utc>, duration: Duration) -> DateTime<Utc> {
-    timestamp + chrono::Duration::from_std(duration).unwrap_or_else(|_| chrono::Duration::zero())
+    timestamp
+        + ersatzrs_time::Duration::from_std(duration)
+            .unwrap_or_else(|_| ersatzrs_time::Duration::zero())
 }
 
 fn item_complete(active: &ActiveHlsItem, transcoded_until: DateTime<Utc>) -> bool {
@@ -5681,7 +5687,7 @@ async fn update_on_demand_checkpoint(
 async fn shift_playout_items(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     playout_id: i64,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<(), sqlx::Error> {
     let rows = sqlx::query(
         r#"SELECT "Id", "Start", "Finish", "GuideStart", "GuideFinish"
@@ -5729,7 +5735,7 @@ async fn shift_playout_gaps(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     playout_id: i64,
     checkpoint: DateTime<Utc>,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(r#"DELETE FROM "PlayoutGap" WHERE "PlayoutId" = ? AND "Finish" < ?"#)
         .bind(playout_id)
@@ -5763,7 +5769,7 @@ async fn shift_playout_gaps(
 async fn shift_playout_history(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     playout_id: i64,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<(), sqlx::Error> {
     let rows = sqlx::query(
         r#"SELECT "Id", "When", "Finish"
@@ -5800,7 +5806,7 @@ async fn shift_playout_history(
 async fn shift_playout_program_schedule_anchors(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     playout_id: i64,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<(), sqlx::Error> {
     let rows = sqlx::query(
         r#"SELECT "Id", "AnchorDate"
@@ -5832,7 +5838,7 @@ async fn shift_playout_program_schedule_anchors(
 async fn shift_playout_anchor(
     tx: &mut sqlx::Transaction<'_, crate::db::Db>,
     playout_id: i64,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<(), sqlx::Error> {
     let Some(row) = sqlx::query(
         r#"SELECT "NextStart", "DurationFinish"
@@ -5870,7 +5876,7 @@ async fn shift_playout_anchor(
 fn shift_required_datetime(
     kind: &'static str,
     value: &str,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<String, sqlx::Error> {
     Ok(encode_datetime(
         parse_required_timestamp(kind, value)? + offset,
@@ -5880,7 +5886,7 @@ fn shift_required_datetime(
 fn shift_optional_datetime(
     kind: &'static str,
     value: Option<String>,
-    offset: chrono::Duration,
+    offset: ersatzrs_time::Duration,
 ) -> Result<Option<String>, sqlx::Error> {
     value
         .filter(|value| !value.trim().is_empty())
@@ -6003,7 +6009,7 @@ async fn playlist_duration(working_dir: &Path) -> io::Result<Option<Duration>> {
         Err(error) => return Err(error),
     };
 
-    let mut duration = chrono::Duration::zero();
+    let mut duration = ersatzrs_time::Duration::zero();
     for line in playlist.lines().map(str::trim) {
         if line.starts_with("#EXTINF:") {
             if let Some(extinf_duration) = parse_extinf_duration(line) {
@@ -7205,7 +7211,7 @@ fn parse_playlist(
     })
 }
 
-fn parse_extinf_duration(line: &str) -> Option<chrono::Duration> {
+fn parse_extinf_duration(line: &str) -> Option<ersatzrs_time::Duration> {
     let seconds = line
         .trim_end_matches(',')
         .split_once(':')?
@@ -7214,7 +7220,7 @@ fn parse_extinf_duration(line: &str) -> Option<chrono::Duration> {
         .ok()?;
     Duration::try_from_secs_f64(seconds)
         .ok()
-        .and_then(|duration| chrono::Duration::from_std(duration).ok())
+        .and_then(|duration| ersatzrs_time::Duration::from_std(duration).ok())
 }
 
 fn parse_segment_sequence(uri: &str) -> Option<u64> {
@@ -8189,7 +8195,7 @@ mod tests {
             .observe(
                 Duration::from_mins(2),
                 &delivery_segments(8, 22),
-                now + chrono::Duration::seconds(60),
+                now + ersatzrs_time::Duration::seconds(60),
             )
             .expect("a healthy window should transition to recovered");
         assert_eq!(recovered.state, HlsDeliveryState::Recovered);
@@ -8235,7 +8241,7 @@ mod tests {
             .observe(
                 HLS_DELIVERY_WINDOW,
                 &delivery_segments(1, 15),
-                detected_at + chrono::Duration::minutes(1),
+                detected_at + ersatzrs_time::Duration::minutes(1),
             )
             .expect("a verified fallback should transition to recovered");
 
@@ -8322,7 +8328,7 @@ mod tests {
 
     #[test]
     fn verified_720p_fallback_can_escalate_to_software_encoding() {
-        let detected_at = Utc::now() - chrono::Duration::minutes(2);
+        let detected_at = Utc::now() - ersatzrs_time::Duration::minutes(2);
         let recovery = HlsDeliveryRecovery {
             media_item_id: 42,
             max_video_height: REMOTE_STREAM_FALLBACK_MAX_VIDEO_HEIGHT,
@@ -8384,7 +8390,7 @@ mod tests {
         let detected_at = Utc::now();
         let recovered = HlsDeliveryObservation {
             transitioned: true,
-            observed_at: detected_at + chrono::Duration::minutes(1),
+            observed_at: detected_at + ersatzrs_time::Duration::minutes(1),
             state: HlsDeliveryState::Recovered,
             last_under_run_at: detected_at,
             wall_seconds: 60.0,
@@ -8417,7 +8423,7 @@ mod tests {
         let detected_at = Utc::now();
         let recovered = HlsDeliveryObservation {
             transitioned: true,
-            observed_at: detected_at + chrono::Duration::minutes(1),
+            observed_at: detected_at + ersatzrs_time::Duration::minutes(1),
             state: HlsDeliveryState::Recovered,
             last_under_run_at: detected_at,
             wall_seconds: 60.0,
@@ -8474,7 +8480,7 @@ mod tests {
             .expect("initial under-run");
         assert!(initial.transitioned);
 
-        let heartbeat_at = now + chrono::Duration::minutes(1);
+        let heartbeat_at = now + ersatzrs_time::Duration::minutes(1);
         let heartbeat = tracker
             .observe(Duration::from_mins(2), &[], heartbeat_at)
             .expect("active under-run heartbeat");
@@ -8621,11 +8627,11 @@ mod tests {
         let header = "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:4.004,\n";
         let time = DateTime::from_timestamp_millis(1_634_389_200_142).unwrap();
         *worker.playlist_start.lock().await = time;
-        let producer_time = time + chrono::Duration::hours(1);
+        let producer_time = time + ersatzrs_time::Duration::hours(1);
         let original = format!(
             "{header}#EXT-X-PROGRAM-DATE-TIME:{}\nlive000000.ts\n#EXTINF:4.004,\n#EXT-X-PROGRAM-DATE-TIME:{}\nlive000001.ts\n",
             producer_time.to_rfc3339(),
-            (producer_time + chrono::Duration::milliseconds(4_004)).to_rfc3339()
+            (producer_time + ersatzrs_time::Duration::milliseconds(4_004)).to_rfc3339()
         );
         tokio::fs::write(root.path().join("live.m3u8"), &original)
             .await
@@ -8700,7 +8706,7 @@ mod tests {
         assert_eq!(worker.last_access_ms.load(Ordering::Relaxed), 1_000);
         worker.touch();
         assert!(worker.session_model().unwrap().last_access > report.last_access);
-        worker.report_transcoded_until(until + chrono::TimeDelta::seconds(30));
+        worker.report_transcoded_until(until + ersatzrs_time::TimeDelta::seconds(30));
         assert_eq!(
             worker.session_model().unwrap().started_at,
             report.started_at
@@ -9046,7 +9052,7 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
             .with_timezone(&Utc);
-        let transcoded_until = now + chrono::Duration::seconds(20);
+        let transcoded_until = now + ersatzrs_time::Duration::seconds(20);
         let decision = hls_transcode_decision(
             HlsSessionState::SeekAndWorkAhead,
             transcoded_until,
@@ -9081,12 +9087,12 @@ mod tests {
     fn live_source_waits_for_its_wall_clock_boundary() {
         let now = Utc::now();
         assert_eq!(
-            live_source_admission_delay(true, now + chrono::Duration::seconds(9), now),
+            live_source_admission_delay(true, now + ersatzrs_time::Duration::seconds(9), now),
             Some(Duration::from_secs(9))
         );
         assert_eq!(live_source_admission_delay(true, now, now), None);
         assert_eq!(
-            live_source_admission_delay(false, now + chrono::Duration::seconds(9), now),
+            live_source_admission_delay(false, now + ersatzrs_time::Duration::seconds(9), now),
             None
         );
     }
@@ -9096,7 +9102,7 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
             .with_timezone(&Utc);
-        let stale_buffered_until = now + chrono::Duration::minutes(10);
+        let stale_buffered_until = now + ersatzrs_time::Duration::minutes(10);
 
         let working_ahead = hls_transcode_decision(
             HlsSessionState::PlayoutUpdated,
@@ -9130,19 +9136,19 @@ mod tests {
             .with_timezone(&Utc);
 
         assert!(should_transcode_for_buffer(
-            now + chrono::Duration::seconds(60),
+            now + ersatzrs_time::Duration::seconds(60),
             now
         ));
         assert!(!should_transcode_for_buffer(
-            now + chrono::Duration::seconds(61),
+            now + ersatzrs_time::Duration::seconds(61),
             now
         ));
         assert!(!should_use_realtime(
-            now + chrono::Duration::seconds(29),
+            now + ersatzrs_time::Duration::seconds(29),
             now
         ));
         assert!(should_use_realtime(
-            now + chrono::Duration::seconds(30),
+            now + ersatzrs_time::Duration::seconds(30),
             now
         ));
     }
@@ -9428,14 +9434,15 @@ mod tests {
         let start = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
             .with_timezone(&Utc);
-        let active = active_hls_item_for_window(start, start + chrono::Duration::seconds(48));
+        let active =
+            active_hls_item_for_window(start, start + ersatzrs_time::Duration::seconds(48));
 
         assert_eq!(
-            remaining_item_duration(&active, start + chrono::Duration::seconds(20), false),
+            remaining_item_duration(&active, start + ersatzrs_time::Duration::seconds(20), false),
             Some(Duration::from_secs(28))
         );
         assert_eq!(
-            remaining_item_duration(&active, start + chrono::Duration::seconds(20), true),
+            remaining_item_duration(&active, start + ersatzrs_time::Duration::seconds(20), true),
             Some(Duration::from_secs(48))
         );
     }
@@ -9445,9 +9452,11 @@ mod tests {
         let start = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
             .with_timezone(&Utc);
-        let request_time = start + chrono::Duration::milliseconds(517);
-        let mut active =
-            active_hls_item_for_window(start, start + chrono::Duration::milliseconds(44_000));
+        let request_time = start + ersatzrs_time::Duration::milliseconds(517);
+        let mut active = active_hls_item_for_window(
+            start,
+            start + ersatzrs_time::Duration::milliseconds(44_000),
+        );
         active.in_point = Duration::from_millis(250);
 
         let elapsed = playout_start_duration(request_time, active.playout_start);
@@ -9468,7 +9477,8 @@ mod tests {
         let start = DateTime::parse_from_rfc3339("2026-06-08T12:00:00Z")
             .expect("timestamp")
             .with_timezone(&Utc);
-        let active = active_hls_item_for_window(start, start + chrono::Duration::minutes(45));
+        let active =
+            active_hls_item_for_window(start, start + ersatzrs_time::Duration::minutes(45));
 
         assert_eq!(
             hls_playout_item_duration(&active, start, false, false),
@@ -10091,7 +10101,7 @@ mod tests {
         .await
         .unwrap();
         assert!(
-            time_shift_on_demand_playout(&pool, 7, now + chrono::Duration::hours(1))
+            time_shift_on_demand_playout(&pool, 7, now + ersatzrs_time::Duration::hours(1))
                 .await
                 .is_err()
         );
@@ -11585,7 +11595,7 @@ mod tests {
             OutputFormat::Hls,
             playlist,
             start,
-            start + chrono::Duration::seconds(60),
+            start + ersatzrs_time::Duration::seconds(60),
             None,
             true,
             None,
@@ -11633,7 +11643,7 @@ mod tests {
             OutputFormat::HlsMp4,
             &playlist,
             start,
-            start + chrono::Duration::seconds(60),
+            start + ersatzrs_time::Duration::seconds(60),
             None,
             true,
             None,
@@ -11694,7 +11704,7 @@ mod tests {
             OutputFormat::Hls,
             playlist,
             playlist_start,
-            playlist_start - chrono::Duration::seconds(1),
+            playlist_start - ersatzrs_time::Duration::seconds(1),
             Some(10),
             false,
             None,

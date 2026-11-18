@@ -7,7 +7,7 @@
 //! the Netherlands, `es-419` follows Mexico). Operators can override the date
 //! order and the 12/24-hour clock in Interface settings.
 
-use chrono::{DateTime, Offset, TimeZone};
+use ersatzrs_time::{DateTime, Offset, TimeZone};
 use serde::{Deserialize, Serialize};
 
 use crate::admin::i18n::UiLanguage;
@@ -198,12 +198,12 @@ pub async fn load_date_time_preferences(
 
 #[cfg(test)]
 mod tests {
-    use chrono::{FixedOffset, TimeZone, Utc};
+    use ersatzrs_time::{FixedOffset, TimeZone, Utc};
 
     use super::{format_date_time, ClockFormat, DateOrder, DateTimePreferences};
     use crate::admin::i18n::UiLanguage;
 
-    fn sample() -> chrono::DateTime<FixedOffset> {
+    fn sample() -> ersatzrs_time::DateTime<FixedOffset> {
         FixedOffset::east_opt(3600)
             .unwrap()
             .with_ymd_and_hms(2026, 11, 8, 23, 5, 9)

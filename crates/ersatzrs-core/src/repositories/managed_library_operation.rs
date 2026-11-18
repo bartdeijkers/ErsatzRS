@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use ersatzrs_domain::{
     AddonMediaListLifecyclePhase, AddonMediaListPublicationEnqueueTrigger,
     AddonMediaListPublicationErrorCategory, AddonMediaListPublicationEventKind,
@@ -8,6 +7,7 @@ use ersatzrs_domain::{
     AddonMediaListPublicationState, AddonMediaListRecoveryAction, EntityId,
     ManagedLibraryOperationKind, ManagedLibraryOperationState, MediaSourceKind,
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use super::AddonMediaListLifecycleJob;
 

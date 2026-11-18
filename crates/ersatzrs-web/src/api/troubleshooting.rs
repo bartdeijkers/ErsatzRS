@@ -277,7 +277,7 @@ pub async fn playback_archive(State(state): State<AppState>) -> Response {
             bytes,
             &format!(
                 "ersatzrs-troubleshooting-{}.zip",
-                chrono::Utc::now().timestamp()
+                ersatzrs_time::Utc::now().timestamp()
             ),
         ),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
@@ -301,7 +301,7 @@ pub async fn playback_sample(
             bytes,
             &format!(
                 "ersatzrs-media-sample-{}.zip",
-                chrono::Utc::now().timestamp()
+                ersatzrs_time::Utc::now().timestamp()
             ),
         ),
         Ok(None) | Err(AdminTroubleshootingRuntimeError::NotFound(_)) => {

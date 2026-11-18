@@ -1828,9 +1828,9 @@ async fn list_block_playout_history_with_pool(
 
 #[cfg(feature = "ssr")]
 fn format_datetime(value: String) -> String {
-    chrono::DateTime::parse_from_rfc3339(&value)
+    ersatzrs_time::DateTime::parse_from_rfc3339(&value)
         .map(|date| {
-            date.with_timezone(&chrono::Utc)
+            date.with_timezone(&ersatzrs_time::Utc)
                 .format("%Y-%m-%d %H:%M:%S UTC")
                 .to_string()
         })

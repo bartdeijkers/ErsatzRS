@@ -144,7 +144,7 @@ async fn live_caption_callback_rechecks_publication_and_session_after_http_read(
                     Some(2),
                     "1",
                     instance,
-                    start + chrono::Duration::seconds(2),
+                    start + ersatzrs_time::Duration::seconds(2),
                     finish,
                 )
                 .await
@@ -223,7 +223,7 @@ async fn direct_remote_callback_preserves_audio_timing_and_rejects_changed_publi
         &request(false),
         Utc::now(),
     );
-    let finish = start + chrono::Duration::seconds(60);
+    let finish = start + ersatzrs_time::Duration::seconds(60);
     let before = super::super::dynamic_projection::project_snapshot(
         &pool,
         &host.locker,
@@ -237,7 +237,7 @@ async fn direct_remote_callback_preserves_audio_timing_and_rejects_changed_publi
     )
     .await
     .unwrap();
-    let now = start + chrono::Duration::seconds(7);
+    let now = start + ersatzrs_time::Duration::seconds(7);
     let resolved = host
         .resolve_dynamic(
             channel.id,
@@ -342,8 +342,8 @@ async fn dynamic_callbacks_bind_normal_preview_and_replacement_instances() {
                 None,
                 number,
                 instance,
-                chrono::Utc::now(),
-                chrono::Utc::now() + chrono::Duration::seconds(10),
+                ersatzrs_time::Utc::now(),
+                ersatzrs_time::Utc::now() + ersatzrs_time::Duration::seconds(10),
             )
             .await
             .err()
@@ -409,8 +409,11 @@ async fn unconfirmed_cleanup_quarantines_capacity_but_reaped_failure_does_not() 
     .is_some());
 }
 
-async fn output_frame_rate_host_fixture(
-) -> (NextHost, ersatzrs_domain::Channel, chrono::DateTime<Utc>) {
+async fn output_frame_rate_host_fixture() -> (
+    NextHost,
+    ersatzrs_domain::Channel,
+    ersatzrs_time::DateTime<Utc>,
+) {
     use ersatzrs_core::repositories::FfmpegProfileRepository as _;
     use ersatzrs_domain::{
         Channel, ChannelPlayoutSource, FFmpegProfile, FFmpegProfileAudioFormat,
@@ -446,7 +449,7 @@ async fn output_frame_rate_host_fixture(
         ffmpeg_profile_id: 2,
         playout_source: ChannelPlayoutSource::Mirror,
         mirror_source_channel_id: Some(source.id),
-        playout_offset: Some(chrono::Duration::seconds(3)),
+        playout_offset: Some(ersatzrs_time::Duration::seconds(3)),
         streaming_engine: StreamingEngine::Next,
         preferred_audio_language_code: Some("eng".into()),
         preferred_subtitle_language_code: Some("nld".into()),
@@ -478,7 +481,7 @@ async fn output_frame_rate_host_fixture(
 async fn assert_output_frame_rate_host_preserves_exact_tracks(
     host: &NextHost,
     mirror: &ersatzrs_domain::Channel,
-    start: chrono::DateTime<Utc>,
+    start: ersatzrs_time::DateTime<Utc>,
 ) {
     let target_start = start + mirror.playout_offset.unwrap();
     let schedule = super::super::schedule::read_locked(
@@ -486,7 +489,7 @@ async fn assert_output_frame_rate_host_preserves_exact_tracks(
         &host.locker,
         mirror,
         target_start,
-        target_start + chrono::Duration::minutes(2),
+        target_start + ersatzrs_time::Duration::minutes(2),
     )
     .await
     .unwrap()
@@ -592,7 +595,7 @@ async fn output_frame_rate_host_unknown_source_sentinel_preserves_startup_and_ex
     use ersatzrs_core::repositories::PlayoutRepository as _;
     let (host, mirror, start) = output_frame_rate_host_fixture().await;
     let repos = crate::repositories::make_repositories(host.pool.clone());
-    let finish = start + chrono::Duration::minutes(2);
+    let finish = start + ersatzrs_time::Duration::minutes(2);
     let items_before = repos
         .playout
         .items_in_range(1, start, finish)

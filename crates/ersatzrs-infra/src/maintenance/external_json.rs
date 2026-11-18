@@ -2,9 +2,9 @@
 
 use std::{path::Path, time::Instant};
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::scheduling::PlayoutPreservation;
 use ersatzrs_domain::Playout;
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{
     handover, HlsSessionRegistry, PlayoutBuildCancellation, PlayoutBuildMode, PlayoutBuildRequest,

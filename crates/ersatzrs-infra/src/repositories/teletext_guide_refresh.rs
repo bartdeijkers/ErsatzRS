@@ -1,7 +1,6 @@
 //! Durable refresh lineage, worker leases and separate immutable runtime output.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{
     RepositoryError, Result, TeletextGenerationMutation as M, TeletextGenerationRejection as R,
     TeletextGuideGenerationCheck, TeletextGuideGenerationQualification,
@@ -16,6 +15,7 @@ use ersatzrs_core::repositories::{
     TELETEXT_GUIDE_RUNTIME_SNAPSHOT_VERSION,
 };
 use ersatzrs_domain::{EntityId, TeletextAcceptedGeneration, TeletextPublicationRequest};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sha2::{Digest as _, Sha256};
 use sqlx::{Row as _, Transaction};
 use std::{fmt::Write as _, time::Instant};
@@ -27,11 +27,25 @@ use super::{
 };
 use crate::{
     db::{Db, DbRow},
-    repositories::SqlxResultExt as _,
+    repositories::{common::decode_datetime, SqlxResultExt as _},
 };
 
 #[path = "teletext_guide_refresh_output.rs"]
 mod output;
+
+// These columns are application-owned TEXT. Keep SQLx's previous UTC RFC3339
+// encoding for writes and SQL comparisons, including full subseconds.
+fn instant(row: &DbRow, column: &'static str) -> Result<DateTime<Utc>> {
+    let value: &str = row.try_get(column).repository()?;
+    decode_datetime(column, value)
+}
+
+fn optional_instant(row: &DbRow, column: &'static str) -> Result<Option<DateTime<Utc>>> {
+    row.try_get::<Option<&str>, _>(column)
+        .repository()?
+        .map(|value| decode_datetime(column, value))
+        .transpose()
+}
 
 fn invalid() -> R {
     R::Publication(P::InvalidValues)
@@ -111,7 +125,7 @@ fn qualification(row: &DbRow) -> Result<TeletextGuideGenerationQualification> {
             .map_err(|_| corrupt("refresh source"))?;
     let value = TeletextGuideGenerationQualification {
         source,
-        valid_until: row.try_get("ValidUntil").repository()?,
+        valid_until: instant(row, "ValidUntil")?,
     };
     value
         .validate_current(value.source.captured_at)
@@ -321,9 +335,9 @@ async fn observe_in_tx(
         revision,
         revoked: revoked == 1,
         refreshing: row.try_get::<i64, _>("Refreshing").repository()? == 1,
-        next_due_at: row.try_get("NextDueAt").repository()?,
-        last_success_at: row.try_get("LastSuccessAt").repository()?,
-        first_failure_at: row.try_get("FirstFailureAt").repository()?,
+        next_due_at: instant(&row, "NextDueAt")?,
+        last_success_at: instant(&row, "LastSuccessAt")?,
+        first_failure_at: optional_instant(&row, "FirstFailureAt")?,
         failure: row
             .try_get::<Option<i64>, _>("Failure")
             .repository()?
@@ -345,7 +359,7 @@ pub(super) async fn register(
     let result=sqlx::query(r#"INSERT INTO "TeletextGuideRefreshSeed"
         ("ChannelId","Role","GenerationId","ExpectedDesignHead","Source","ValidUntil") VALUES (?,?,?,?,?,?)"#)
         .bind(generation.request.channel_id).bind(role.code()).bind(generation.id).bind(expected_head)
-        .bind(source_bytes(&qualification.source)?).bind(qualification.valid_until).execute(&mut **tx).await.repository()?;
+        .bind(source_bytes(&qualification.source)?).bind(qualification.valid_until.to_rfc3339()).execute(&mut **tx).await.repository()?;
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "TeletextGuideRefreshCurrent"
         ("ChannelId","Role","SeedId","RuntimeId","Revision","NextDueAt","LastSuccessAt","Revoked") VALUES (?,?,?,NULL,1,?,?,0)
@@ -353,7 +367,7 @@ pub(super) async fn register(
         "Revision"="TeletextGuideRefreshCurrent"."Revision"+1,"NextDueAt"=excluded."NextDueAt",
         "LastSuccessAt"=excluded."LastSuccessAt","ChangedAt"=NULL,"FirstFailureAt"=NULL,"Failure"=NULL,
         "Revoked"=0,"LeaseOwner"=NULL,"LeaseUntil"=NULL"#)
-        .bind(generation.request.channel_id).bind(role.code()).bind(id).bind(next_due).bind(captured)
+        .bind(generation.request.channel_id).bind(role.code()).bind(id).bind(next_due.to_rfc3339()).bind(captured.to_rfc3339())
         .execute(&mut **tx).await.repository()?;
     Ok(())
 }
@@ -450,10 +464,11 @@ impl TeletextGuideRefreshRepository for SqliteTeletextGenerationRepository {
         }
         // Read-only transaction: bounded observations never mutate guide jobs or output.
         let mut tx = self.0.begin().await.repository()?;
+        let now_text = now.to_rfc3339();
         let ids:Vec<i64>=sqlx::query_scalar(r#"SELECT "SeedId" FROM "TeletextGuideRefreshCurrent"
             WHERE "Revoked"=0 AND ("Failure" IS NULL OR "Failure" IN (1,2)) AND "NextDueAt"<=?
             AND ("LeaseOwner" IS NULL OR "LeaseUntil"<=?) ORDER BY "NextDueAt","ChannelId","Role" LIMIT ?"#)
-            .bind(now).bind(now).bind(limit(count)?).fetch_all(&mut *tx).await.repository()?;
+            .bind(&now_text).bind(&now_text).bind(limit(count)?).fetch_all(&mut *tx).await.repository()?;
         let mut values = Vec::with_capacity(ids.len());
         for id in ids {
             values.push(
@@ -480,25 +495,21 @@ impl TeletextGuideRefreshRepository for SqliteTeletextGenerationRepository {
         let Some(row) = row else {
             return Ok(conflict());
         };
-        let success: DateTime<Utc> = row.try_get("LastSuccessAt").repository()?;
+        let success: DateTime<Utc> = instant(&row, "LastSuccessAt")?;
         if now < success {
             return Ok(M::Rejected(invalid()));
         }
         // Reobserving the same pending loss cannot renew its stale ceiling,
         // invalidate its worker repeatedly or postpone already eligible work.
-        if row
-            .try_get::<Option<DateTime<Utc>>, _>("ChangedAt")
-            .repository()?
-            .is_some()
-        {
+        if optional_instant(&row, "ChangedAt")?.is_some() {
             return Ok(M::Accepted(()));
         }
-        let previous_due: DateTime<Utc> = row.try_get("NextDueAt").repository()?;
-        let due =
-            changed_due(now, success, row.try_get("RoleUntil").repository()?)?.min(previous_due);
+        let previous_due: DateTime<Utc> = instant(&row, "NextDueAt")?;
+        let due = changed_due(now, success, instant(&row, "RoleUntil")?)?.min(previous_due);
+        let now_text = now.to_rfc3339();
         sqlx::query(r#"UPDATE "TeletextGuideRefreshCurrent" SET "ChangedAt"=?,"NextDueAt"=?,"Revision"="Revision"+1,
             "FirstFailureAt"=COALESCE("FirstFailureAt",?),"Failure"=COALESCE("Failure",1)
-            WHERE "SeedId"=?"#).bind(now).bind(due).bind(now).bind(seed_id).execute(&mut *tx).await.repository()?;
+            WHERE "SeedId"=?"#).bind(&now_text).bind(due.to_rfc3339()).bind(&now_text).bind(seed_id).execute(&mut *tx).await.repository()?;
         tx.commit().await.repository()?;
         Ok(M::Accepted(()))
     }
@@ -531,13 +542,14 @@ impl TeletextGuideRefreshRepository for SqliteTeletextGenerationRepository {
                 {
                     return Ok(Err(R::GenerationConflict));
                 }
+                let now_text = now.to_rfc3339();
                 let lease = sqlx::query(
                     r#"SELECT "LeaseOwner","LeaseUntil" FROM "TeletextGuideRefreshCurrent"
                     WHERE "SeedId"=? AND "NextDueAt"<=? AND ("LeaseOwner" IS NULL OR "LeaseUntil"<=?)"#)
-                    .bind(seed_id).bind(now).bind(now).fetch_optional(&mut *tx).await.repository()?;
+                    .bind(seed_id).bind(&now_text).bind(&now_text).fetch_optional(&mut *tx).await.repository()?;
                 let Some(lease) = lease else { return Ok(Ok(None)); };
                 let abandoned = lease.try_get::<Option<String>,_>("LeaseOwner").repository()?
-                    .map(|_| lease.try_get::<DateTime<Utc>,_>("LeaseUntil").repository()).transpose()?;
+                    .map(|_| instant(&lease, "LeaseUntil")).transpose()?;
                 if Instant::now() >= check.deadline {
                     return Ok(Err(timed_out()));
                 }
@@ -556,10 +568,11 @@ impl TeletextGuideRefreshRepository for SqliteTeletextGenerationRepository {
             .revision
             .checked_add(i64::from(abandoned.is_some()))
             .ok_or_else(|| corrupt("refresh revision"))?;
+        let abandoned = abandoned.map(|value| value.to_rfc3339());
         sqlx::query(r#"UPDATE "TeletextGuideRefreshCurrent" SET "LeaseOwner"=?,"LeaseUntil"=?,"Revision"=?,
             "FirstFailureAt"=COALESCE("FirstFailureAt",?),
             "Failure"=CASE WHEN "Failure" IS NULL AND ? IS NOT NULL THEN 2 ELSE "Failure" END WHERE "SeedId"=?"#)
-            .bind(&lease_owner).bind(lease_until).bind(revision).bind(abandoned).bind(abandoned)
+            .bind(&lease_owner).bind(lease_until.to_rfc3339()).bind(revision).bind(abandoned.as_deref()).bind(abandoned.as_deref())
             .bind(seed_id).execute(&mut *tx).await.repository()?;
         tx.commit().await.repository()?;
         Ok(M::Accepted(Some(TeletextGuideRefreshClaim {
@@ -599,7 +612,7 @@ impl TeletextGuideRefreshRepository for SqliteTeletextGenerationRepository {
         };
         let result=sqlx::query(r#"UPDATE "TeletextGuideRefreshCurrent" SET "LeaseUntil"=MAX("LeaseUntil",?)
             WHERE "SeedId"=? AND "Revision"=? AND "LeaseOwner"=? AND "LeaseUntil">? AND "Revoked"=0"#)
-            .bind(until).bind(claim.seed.id).bind(claim.revision).bind(&claim.lease_owner).bind(now)
+            .bind(until.to_rfc3339()).bind(claim.seed.id).bind(claim.revision).bind(&claim.lease_owner).bind(now.to_rfc3339())
             .execute(&mut *tx).await.repository()?;
         if result.rows_affected() != 1 {
             return Ok(conflict());
@@ -631,7 +644,7 @@ impl TeletextGuideRefreshRepository for SqliteTeletextGenerationRepository {
         let result=sqlx::query(r#"UPDATE "TeletextGuideRefreshCurrent" SET "FirstFailureAt"=COALESCE("FirstFailureAt",?),
             "Failure"=?,"NextDueAt"=?,"Revoked"=?,"LeaseOwner"=NULL,"LeaseUntil"=NULL,"Revision"="Revision"+1
             WHERE "SeedId"=? AND "Revision"=? AND "RuntimeId" IS ? AND "LeaseOwner"=? AND "Revoked"=0"#)
-            .bind(now).bind(failure_code(failure)).bind(next).bind(i64::from(failure==Failure::Disabled))
+            .bind(now.to_rfc3339()).bind(failure_code(failure)).bind(next.to_rfc3339()).bind(i64::from(failure==Failure::Disabled))
             .bind(claim.seed.id).bind(claim.revision).bind(claim.expected_runtime_id).bind(&claim.lease_owner)
             .execute(&mut *tx).await.repository()?;
         if result.rows_affected() != 1 {
@@ -672,7 +685,7 @@ async fn owns(
     .bind(claim.revision)
     .bind(claim.expected_runtime_id)
     .bind(&claim.lease_owner)
-    .bind(now)
+    .bind(now.to_rfc3339())
     .fetch_one(&mut **tx)
     .await
     .repository()
@@ -918,13 +931,13 @@ async fn insert_runtime(
     let inserted=sqlx::query(r#"INSERT INTO "TeletextGuideRuntimeSnapshot"
         ("SeedId","Version","DocumentVersion","DocumentDigest","Document","Source","ValidUntil","ArtifactDigest") VALUES (?,?,?,?,?,?,?,?)"#)
         .bind(claim.seed.id).bind(i64::from(saved.version)).bind(i64::from(saved.document_version))
-        .bind(&saved.document_digest).bind(&saved.document).bind(source_bytes(source)?).bind(saved.qualification.valid_until)
+        .bind(&saved.document_digest).bind(&saved.document).bind(source_bytes(source)?).bind(saved.qualification.valid_until.to_rfc3339())
         .bind(&saved.artifact_digest).execute(&mut *tx).await.repository()?;
     let id = crate::db::last_insert_id(inserted);
     let next = plus(now, Duration::minutes(5))?.min(saved.qualification.valid_until);
     sqlx::query(r#"UPDATE "TeletextGuideRefreshCurrent" SET "RuntimeId"=?,"Revision"="Revision"+1,
         "NextDueAt"=?,"LastSuccessAt"=?,"ChangedAt"=NULL,"FirstFailureAt"=NULL,"Failure"=NULL,"LeaseOwner"=NULL,"LeaseUntil"=NULL
-        WHERE "SeedId"=?"#).bind(id).bind(next).bind(now).bind(claim.seed.id).execute(&mut *tx).await.repository()?;
+        WHERE "SeedId"=?"#).bind(id).bind(next.to_rfc3339()).bind(now.to_rfc3339()).bind(claim.seed.id).execute(&mut *tx).await.repository()?;
     // Bound automatic history by successful generations, not background uptime.
     // Manual origins and the current plus previous complete snapshots survive.
     sqlx::query(

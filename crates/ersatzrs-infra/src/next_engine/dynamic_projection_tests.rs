@@ -1,7 +1,7 @@
 use super::*;
-use chrono::Duration;
 use ersatzrs_core::locking::PlayoutLockGuard;
 use ersatzrs_domain::{Channel, ChannelSubtitleMode};
+use ersatzrs_time::Duration;
 
 #[test]
 fn finite_source_text_cache_fences_selected_video_but_keeps_occurrence_independence() {

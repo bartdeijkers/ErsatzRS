@@ -1,8 +1,8 @@
 //! Session-owned filler for upstream `DynamicPlayoutItemService` gap callbacks.
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::{ChannelRepository as _, RepositoryError, Result};
 use ersatzrs_domain::{Channel, PlayoutItem, StreamingEngine};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::{timeout_at, Instant};

@@ -473,7 +473,7 @@ pub async fn list_playouts(
                     build_message: row.build_message,
                     last_successful_build: row.last_successful_build.map(|time| {
                         crate::admin::datetime::format_date_time(
-                            &time.with_timezone(&chrono::Local),
+                            &time.with_timezone(&ersatzrs_time::Local),
                             language,
                             notation,
                         )
@@ -566,10 +566,10 @@ pub async fn list_playout_detail_items(
     .await?;
     // Detail start/finish arrive as server-local `YYYY-MM-DD HH:MM:SS` text.
     let localize = move |value: String| -> String {
-        use chrono::TimeZone;
-        chrono::NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S")
+        use ersatzrs_time::TimeZone;
+        ersatzrs_time::NaiveDateTime::parse_from_str(&value, "%Y-%m-%d %H:%M:%S")
             .ok()
-            .and_then(|naive| chrono::Local.from_local_datetime(&naive).earliest())
+            .and_then(|naive| ersatzrs_time::Local.resolve_local(&naive).earliest())
             .map_or(value, |local| {
                 crate::admin::datetime::format_date_time(&local, language, notation)
             })
@@ -1025,10 +1025,10 @@ async fn rebuild_yaml_playout(
     id: i64,
     yaml_content: &str,
 ) {
-    use chrono::{Duration, Utc};
     use ersatzrs_core::playout_builder::PlayoutBuilder;
     use ersatzrs_core::repositories::PlayoutRepository;
     use ersatzrs_core::scheduling::{PlayoutBuildMode, SchedulingRequest};
+    use ersatzrs_time::{Duration, Utc};
 
     let playout = match repos.playout.get_with_anchor(id).await {
         Ok(p) => p,
@@ -2122,17 +2122,19 @@ mod legacy_sql_regressions {
     /// lexicographic `Finish >= now` comparison.
     #[cfg(feature = "ssr")]
     fn now_sql() -> String {
-        chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string()
+        ersatzrs_time::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string()
     }
 
     /// Parses a stored UTC datetime string and formats it in local time
     /// (`StartOffset`/`FinishOffset` in ErsatzTV).
     #[cfg(feature = "ssr")]
     fn format_local(value: &str) -> String {
-        use chrono::{Local, TimeZone};
+        use ersatzrs_time::{Local, TimeZone};
         match parse_utc(value) {
             Some(dt) => Local
-                .from_utc_datetime(&dt.naive_utc())
+                .resolve_utc(&dt.naive_utc())
                 .format("%Y-%m-%d %H:%M:%S")
                 .to_string(),
             None => value.to_owned(),
@@ -2160,14 +2162,14 @@ mod legacy_sql_regressions {
     }
 
     #[cfg(feature = "ssr")]
-    fn parse_utc(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
-        use chrono::{NaiveDateTime, TimeZone, Utc};
-        if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(value) {
+    fn parse_utc(value: &str) -> Option<ersatzrs_time::DateTime<ersatzrs_time::Utc>> {
+        use ersatzrs_time::{NaiveDateTime, TimeZone, Utc};
+        if let Ok(dt) = ersatzrs_time::DateTime::parse_from_rfc3339(value) {
             return Some(dt.with_timezone(&Utc));
         }
         for fmt in ["%Y-%m-%d %H:%M:%S%.f", "%Y-%m-%d %H:%M:%S"] {
             if let Ok(naive) = NaiveDateTime::parse_from_str(value.trim(), fmt) {
-                return Some(Utc.from_utc_datetime(&naive));
+                return Some(Utc.resolve_utc(&naive));
             }
         }
         None

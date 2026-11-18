@@ -7,8 +7,8 @@ use std::{
     time::Instant,
 };
 
-use chrono::Utc;
 use ersatzrs_core::programme::ProgrammeClock;
+use ersatzrs_time::Utc;
 
 use super::{indexed, AppliedPlayout, PreparedPlayout, PublicationError};
 use crate::next_engine::protocol::Playout;

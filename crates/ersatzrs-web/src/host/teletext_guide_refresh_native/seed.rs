@@ -1,11 +1,11 @@
 //! First last-good output has a real manual seed, not a fabricated runtime ID.
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{
     TeletextGuideRefreshRole, TeletextGuideRefreshSeed, TeletextGuideRefreshSelection,
     TeletextGuideRefreshStatus, TELETEXT_EFFECTIVE_GUIDE_GENERATION_ARTIFACT_VERSION,
     TELETEXT_GUIDE_GENERATION_ARTIFACT_VERSION,
 };
+use ersatzrs_time::{DateTime, Utc};
 
 use super::{
     output_deadline, GuideRefreshNativeError as Error, GuideRefreshReloadContext,

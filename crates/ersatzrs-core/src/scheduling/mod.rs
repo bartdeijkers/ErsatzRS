@@ -12,13 +12,13 @@ mod yaml;
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::{
     ChannelPlayoutMode, CollectionType, EntityId, FillerKind, FillerMode, FixedStartTimeBehavior,
     MarathonGroupBy, PlaybackOrder, Playout, PlayoutAnchor, PlayoutClassicCheckpoint, PlayoutGap,
     PlayoutHistory, PlayoutItem, PlayoutProgramScheduleAnchor, PlayoutScheduleItemFillGroupIndex,
     PlayoutScheduleKind, PlayoutScriptedCheckpoint, ProgramScheduleItem,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::repositories::Result as RepositoryResult;

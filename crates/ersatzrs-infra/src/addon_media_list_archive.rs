@@ -295,7 +295,7 @@ mod tests {
             generation: 1,
             sha256: first.sha256.clone(),
             entry_count: u64::from(first.entry_count),
-            promoted_at: chrono::Utc::now(),
+            promoted_at: ersatzrs_time::Utc::now(),
         };
         let unchanged =
             prepare_import_archive(temporary.path().to_path_buf(), 7, 2, Some(&checkpoint))
@@ -326,7 +326,7 @@ mod tests {
             generation: 1,
             sha256: sha256_hex(b"different"),
             entry_count: 1,
-            promoted_at: chrono::Utc::now(),
+            promoted_at: ersatzrs_time::Utc::now(),
         };
         let error = prepare_import_archive(temporary.path().to_path_buf(), 1, 2, Some(&checkpoint))
             .await

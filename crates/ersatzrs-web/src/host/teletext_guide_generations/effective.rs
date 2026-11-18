@@ -62,7 +62,7 @@ impl TeletextEffectiveGuideGenerationValidator for Confirmation<'_> {
             || original.artifact_digest != self.digest
             || save
                 .qualification
-                .validate_current(chrono::Utc::now())
+                .validate_current(ersatzrs_time::Utc::now())
                 .is_err()
         {
             return Err(TeletextPublicationValidationError::Association);

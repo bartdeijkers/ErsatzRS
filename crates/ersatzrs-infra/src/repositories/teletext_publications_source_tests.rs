@@ -1,9 +1,9 @@
 //! Same-transaction semantic guide fences; no transmission/publication proof.
 
 use super::*;
-use chrono::{TimeZone as _, Utc};
 use ersatzrs_core::repositories::PlayoutRepository as _;
 use ersatzrs_domain::PlayoutItem;
+use ersatzrs_time::{TimeZone as _, Utc};
 use sqlx::Executor as _;
 
 fn limits() -> TeletextGuideSourceCheckLimits {
@@ -44,8 +44,8 @@ async fn guide(fixture: &Fixture) {
             playout_id: 1,
             media_item_id: 20,
             start,
-            finish: start + chrono::Duration::hours(1),
-            out_point: chrono::Duration::hours(1),
+            finish: start + ersatzrs_time::Duration::hours(1),
+            out_point: ersatzrs_time::Duration::hours(1),
             ..PlayoutItem::default()
         })
         .await

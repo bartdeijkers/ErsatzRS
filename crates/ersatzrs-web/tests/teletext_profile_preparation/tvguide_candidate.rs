@@ -165,7 +165,7 @@ async fn production_tvguide_profiles_install_validate_and_encode_without_publica
     let day_binding = fixture.bind(1, &day, None).await;
     let night_binding = fixture.bind(2, &night, None).await;
     let start = Utc.with_ymd_and_hms(2026, 3, 28, 11, 55, 0).unwrap();
-    let finish = start + chrono::Duration::minutes(35);
+    let finish = start + ersatzrs_time::Duration::minutes(35);
     let programmes = [ProgrammeOccurrence {
         playout_id: 1,
         first_item_id: 1,
@@ -182,7 +182,7 @@ async fn production_tvguide_profiles_install_validate_and_encode_without_publica
             media_item_id: Some(1),
             start,
             finish,
-            in_point: chrono::Duration::zero(),
+            in_point: ersatzrs_time::Duration::zero(),
             out_point: finish - start,
         }],
     }];

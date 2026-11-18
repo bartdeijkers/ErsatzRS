@@ -190,7 +190,7 @@ async fn real_ffmpeg_extraction_deadline_closes_http_and_never_commits_cache() {
         0,
         "subrip",
         &ffmpeg,
-        chrono::Utc::now() + chrono::Duration::minutes(1),
+        ersatzrs_time::Utc::now() + ersatzrs_time::Duration::minutes(1),
         deadline,
         || async { true },
     );

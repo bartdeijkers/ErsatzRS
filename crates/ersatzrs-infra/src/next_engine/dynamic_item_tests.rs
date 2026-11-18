@@ -1,6 +1,6 @@
 use super::super::protocol::{AudioProbeHint, ProbeHint, Track, Tracks};
 use super::*;
-use chrono::{Duration, TimeZone};
+use ersatzrs_time::{Duration, TimeZone};
 
 fn local(start: Option<u64>) -> Source {
     Source::Local {

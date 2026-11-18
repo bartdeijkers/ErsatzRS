@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use chrono::{TimeZone, Utc};
+use ersatzrs_time::{TimeZone, Utc};
 
 use super::*;
 use crate::next_engine::protocol::{PlayoutItem, Source};
@@ -360,7 +360,7 @@ fn invalid_schedule_cannot_replace_last_complete_generation() {
     ));
     invalid = schedule("invalid");
     let mut earlier = invalid.items[0].clone();
-    earlier.start -= chrono::Duration::seconds(30);
+    earlier.start -= ersatzrs_time::Duration::seconds(30);
     invalid.items.push(earlier);
     assert!(matches!(
         publish_playout(folder.path(), &invalid),
@@ -396,13 +396,13 @@ fn filename_bounds_cover_every_accepted_item() {
     playout.items[0].start = Utc.with_ymd_and_hms(1, 1, 1, 0, 0, 0).unwrap();
     playout.items[0].finish = Utc.with_ymd_and_hms(9999, 12, 31, 23, 59, 59).unwrap();
     assert!(validate(&playout).is_ok());
-    playout.items[0].start -= chrono::Duration::nanoseconds(1);
+    playout.items[0].start -= ersatzrs_time::Duration::nanoseconds(1);
     assert!(matches!(
         validate(&playout),
         Err(PublicationError::InvalidWindow)
     ));
-    playout.items[0].start += chrono::Duration::nanoseconds(1);
-    playout.items[0].finish += chrono::Duration::nanoseconds(1);
+    playout.items[0].start += ersatzrs_time::Duration::nanoseconds(1);
+    playout.items[0].finish += ersatzrs_time::Duration::nanoseconds(1);
     assert!(matches!(
         validate(&playout),
         Err(PublicationError::InvalidWindow)

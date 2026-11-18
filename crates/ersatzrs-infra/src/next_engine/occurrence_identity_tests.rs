@@ -1,7 +1,7 @@
 //! Exercise opaque IDs through the actual stream projection, not an ID mock.
 use super::{fixture_pool, item, project};
-use chrono::Duration;
 use ersatzrs_domain::Channel;
+use ersatzrs_time::Duration;
 use std::collections::HashSet;
 
 #[tokio::test]

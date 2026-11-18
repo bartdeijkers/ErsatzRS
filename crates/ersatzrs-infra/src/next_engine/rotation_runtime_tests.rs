@@ -16,9 +16,9 @@ async fn real_next_rotation_hints_preserve_orientation_geometry_and_audio() {
         let playout = case.join("playout");
         let output = case.join("output");
         tokio::fs::create_dir_all(&playout).await.unwrap();
-        let now = chrono::Utc::now();
-        let start = now - chrono::Duration::seconds(2);
-        let finish = now + chrono::Duration::seconds(40);
+        let now = ersatzrs_time::Utc::now();
+        let start = now - ersatzrs_time::Duration::seconds(2);
+        let finish = now + ersatzrs_time::Duration::seconds(40);
         let item = serde_json::from_value(serde_json::json!({
             "id": "synthetic-rotation", "start": start, "finish": finish,
             "source": {"source_type": "local", "path": clip, "probe_hint": {

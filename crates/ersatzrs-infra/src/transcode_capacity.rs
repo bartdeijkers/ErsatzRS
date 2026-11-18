@@ -5,8 +5,8 @@ use std::sync::{
 };
 use std::time::Duration;
 
-use chrono::Utc;
 use ersatzrs_core::repositories::{RepositoryError, Result};
+use ersatzrs_time::Utc;
 use tokio::sync::Notify;
 
 use crate::db::DbPool;

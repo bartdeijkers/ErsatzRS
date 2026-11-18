@@ -116,7 +116,7 @@ async fn assert_committed_overlays(
     pool: &SqlitePool,
     channel: &ersatzrs_domain::Channel,
     item_id: i64,
-    item_start: chrono::DateTime<Utc>,
+    item_start: ersatzrs_time::DateTime<Utc>,
     overlays: &(
         Vec<playback::ResolvedPlaybackWatermark>,
         Vec<playback::ResolvedPlaybackGraphicsElement>,

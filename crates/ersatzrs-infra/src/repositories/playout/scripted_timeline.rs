@@ -1,9 +1,9 @@
-use chrono::Duration;
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_core::scheduling::{
     truncate_to_persisted_precision, validate_scripted_timeline, SchedulingError, SchedulingResult,
 };
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::Duration;
 use sqlx::{Row, Transaction};
 
 use crate::db::Db;

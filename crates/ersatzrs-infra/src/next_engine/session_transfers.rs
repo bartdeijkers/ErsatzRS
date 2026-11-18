@@ -4,7 +4,7 @@ use crate::{
     ffprobe::FfprobeMediaVersion,
     remote_stream::{PreparedRemoteStreamInput, RemoteStreamError},
 };
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 use futures_util::{
     future::{BoxFuture, Shared},
     FutureExt,

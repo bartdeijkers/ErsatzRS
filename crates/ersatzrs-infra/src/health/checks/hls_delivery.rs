@@ -1,4 +1,4 @@
-use chrono::{Duration, Utc};
+use ersatzrs_time::{Duration, Utc};
 
 use super::super::{
     async_trait, sqlx_error, Db, HealthCheck, HealthCheckError, HealthCheckResult,
@@ -107,7 +107,7 @@ impl HealthCheck for HlsDeliveryHealthCheck {
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
+    use ersatzrs_time::Utc;
     use sqlx::sqlite::SqlitePoolOptions;
 
     use super::*;
@@ -136,7 +136,7 @@ mod tests {
 
     fn observation(
         state: HlsDeliveryState,
-        last_under_run_at: chrono::DateTime<Utc>,
+        last_under_run_at: ersatzrs_time::DateTime<Utc>,
     ) -> HlsDeliveryObservation {
         HlsDeliveryObservation {
             transitioned: false,

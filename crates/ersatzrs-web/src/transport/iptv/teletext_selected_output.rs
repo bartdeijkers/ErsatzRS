@@ -5,7 +5,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use chrono::{DateTime, Utc};
 use ersatzrs_app::{teletext_design_documents::TeletextDesignDocumentBudget, ApplicationServices};
 use ersatzrs_core::repositories::{
     TeletextGenerationMutation, TeletextGuideGenerationCheck, TeletextGuideRefreshCurrentMetadata,
@@ -19,6 +18,7 @@ use ersatzrs_core::repositories::{
 };
 use ersatzrs_domain::{TeletextAcceptedGeneration, TeletextEffectiveBindingSnapshot};
 use ersatzrs_ffmpeg::teletext::{EncodedTeletextAuthoredService, TeletextServiceDescriptor};
+use ersatzrs_time::{DateTime, Utc};
 
 use crate::host::{
     teletext_channel_documents::TeletextChannelDocumentEncodingPolicy,
@@ -1049,11 +1049,19 @@ mod tests {
             Some(monotonic)
         );
         assert_eq!(
-            transition_deadline(monotonic, clock, Some(clock - chrono::Duration::seconds(1))),
+            transition_deadline(
+                monotonic,
+                clock,
+                Some(clock - ersatzrs_time::Duration::seconds(1))
+            ),
             Some(monotonic)
         );
         assert_eq!(
-            transition_deadline(monotonic, clock, Some(clock + chrono::Duration::seconds(7))),
+            transition_deadline(
+                monotonic,
+                clock,
+                Some(clock + ersatzrs_time::Duration::seconds(7))
+            ),
             Some(monotonic + std::time::Duration::from_secs(7))
         );
     }

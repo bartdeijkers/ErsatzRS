@@ -36,12 +36,12 @@ use std::path::Path;
 use std::process::{ExitStatus, Stdio};
 use std::time::Duration as StdDuration;
 
-use chrono::{Duration, Utc};
 use ersatzrs_domain::{
     DolbyVisionMetadataState, MediaChapter, MediaStream, MediaStreamKind, MediaVersion,
     VideoScanKind,
 };
 use ersatzrs_ffmpeg::DolbyVisionConfiguration;
+use ersatzrs_time::{Duration, Utc};
 use serde::Deserialize;
 use thiserror::Error;
 use tokio::io::AsyncReadExt as _;

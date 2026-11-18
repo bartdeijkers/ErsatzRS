@@ -2,7 +2,6 @@
 
 use super::continue_after_reopen::{assert_no_activation, reference, Configuration};
 use super::{build, publish_result, seed_publication_inputs, Fixture, ADDON};
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::repositories::PlayoutRepository as _;
 use ersatzrs_core::scheduling::{
     PlayoutBuildMode, PlayoutPreservation, SchedulingError, SchedulingMediaItem,
@@ -10,6 +9,7 @@ use ersatzrs_core::scheduling::{
 };
 use ersatzrs_domain::{Playout, TeletextOverrideInterval, TeletextOverrideState};
 use ersatzrs_infra::repositories::SqlitePlayoutRepository;
+use ersatzrs_time::{DateTime, Duration, Utc};
 use std::sync::Arc;
 
 const MODES: [(PlayoutBuildMode, PlayoutPreservation, &str); 3] = [

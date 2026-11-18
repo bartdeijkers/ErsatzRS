@@ -1,6 +1,6 @@
 //! Nested Classic alternate-schedule and Block template editors.
 
-use chrono::Datelike;
+use ersatzrs_time::Datelike;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
 
@@ -661,18 +661,18 @@ fn template_preview(
     }
 }
 
-fn preview_days((year, month): (i32, u32)) -> Vec<chrono::NaiveDate> {
-    let Some(first) = chrono::NaiveDate::from_ymd_opt(year, month, 1) else {
+fn preview_days((year, month): (i32, u32)) -> Vec<ersatzrs_time::NaiveDate> {
+    let Some(first) = ersatzrs_time::NaiveDate::from_ymd_opt(year, month, 1) else {
         return Vec::new();
     };
     let offset = i64::from(first.weekday().num_days_from_monday());
-    let start = first - chrono::Duration::days(offset);
+    let start = first - ersatzrs_time::Duration::days(offset);
     (0..42)
-        .filter_map(|offset| start.checked_add_signed(chrono::Duration::days(offset)))
+        .filter_map(|offset| start.checked_add_signed(ersatzrs_time::Duration::days(offset)))
         .collect()
 }
 
-fn date_filter_applies(filter: &PlayoutDateFilter, date: chrono::NaiveDate) -> bool {
+fn date_filter_applies(filter: &PlayoutDateFilter, date: ersatzrs_time::NaiveDate) -> bool {
     let day_of_week = i32::try_from(date.weekday().num_days_from_sunday()).unwrap_or(0);
     let day = i32::try_from(date.day()).unwrap_or(0);
     let month = i32::try_from(date.month()).unwrap_or(0);
@@ -688,14 +688,14 @@ fn date_filter_applies(filter: &PlayoutDateFilter, date: chrono::NaiveDate) -> b
 
     let start_year = filter.start_year.unwrap_or(date.year());
     let end_year = filter.end_year.unwrap_or(date.year());
-    let Some(start) = chrono::NaiveDate::from_ymd_opt(
+    let Some(start) = ersatzrs_time::NaiveDate::from_ymd_opt(
         start_year,
         u32::try_from(filter.start_month).unwrap_or(1),
         u32::try_from(filter.start_day).unwrap_or(1),
     ) else {
         return false;
     };
-    let Some(end) = chrono::NaiveDate::from_ymd_opt(
+    let Some(end) = ersatzrs_time::NaiveDate::from_ymd_opt(
         end_year,
         u32::try_from(filter.end_month).unwrap_or(12),
         u32::try_from(filter.end_day).unwrap_or(31),
@@ -716,8 +716,8 @@ fn current_year_month() -> (i32, u32) {
     }
     #[cfg(not(target_arch = "wasm32"))]
     {
-        use chrono::Datelike;
-        let today = chrono::Local::now().date_naive();
+        use ersatzrs_time::Datelike;
+        let today = ersatzrs_time::Local::now().date_naive();
         (today.year(), today.month())
     }
 }

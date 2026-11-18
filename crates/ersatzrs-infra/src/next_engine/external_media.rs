@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::external_json::playback::part_key;
-use chrono::{DateTime, Utc};
+use ersatzrs_time::{DateTime, Utc};
 
 impl MediaRelay {
     /// Bind one transient Plex part to this host instance and an expiry time.
@@ -117,7 +117,7 @@ mod tests {
     fn external_media_tickets_bind_part_source_expiry_and_host_instance() {
         let relay = MediaRelay::new();
         relay.configure("127.0.0.1:8409".parse().unwrap()).unwrap();
-        let expires = Utc::now() + chrono::Duration::hours(2);
+        let expires = Utc::now() + ersatzrs_time::Duration::hours(2);
         let part = "/library/parts/12/file.mkv?download=1";
         let uri = relay.external_source_url(10, part, expires).unwrap();
         let url = url::Url::parse(&uri).unwrap();

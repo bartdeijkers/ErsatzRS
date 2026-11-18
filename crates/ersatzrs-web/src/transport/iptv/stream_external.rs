@@ -67,7 +67,7 @@ pub(super) async fn load(
             let expires = media
                 .occurrence
                 .finish
-                .checked_add_signed(chrono::Duration::hours(2))
+                .checked_add_signed(ersatzrs_time::Duration::hours(2))
                 .ok_or_else(|| failure("external media lifetime overflow"))?;
             state
                 .next_engine

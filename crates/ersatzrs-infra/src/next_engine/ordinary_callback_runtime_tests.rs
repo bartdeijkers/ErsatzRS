@@ -75,9 +75,9 @@ exec "$FFMPEG_BIN" -v error -nostdin -ss "$ERSATZRS_REMOTE_STREAM_SEEK" -i ../so
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.in_point = chrono::Duration::seconds(6);
-    item.out_point = chrono::Duration::seconds(30);
-    item.finish = item.start + chrono::Duration::seconds(24);
+    item.in_point = ersatzrs_time::Duration::seconds(6);
+    item.out_point = ersatzrs_time::Duration::seconds(30);
+    item.finish = item.start + ersatzrs_time::Duration::seconds(24);
     crate::repositories::make_repositories(pool.clone())
         .playout
         .upsert_item(&item)

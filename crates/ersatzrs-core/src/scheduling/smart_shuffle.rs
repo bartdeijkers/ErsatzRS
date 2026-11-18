@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 const POLICY_VERSION: u32 = 1;
@@ -528,7 +528,7 @@ fn candidate_score(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::TimeZone;
+    use ersatzrs_time::TimeZone;
 
     fn at(minute: u32) -> DateTime<Utc> {
         Utc.with_ymd_and_hms(2026, 7, 17, 12, minute, 0)

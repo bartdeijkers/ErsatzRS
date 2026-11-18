@@ -6,11 +6,11 @@
 
 use std::{collections::BTreeSet, num::NonZeroU8};
 
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_addon_contract as wire;
 use ersatzrs_core::programme::{
     select_programmes, ProgrammeClock, ProgrammeOccurrence, ProgrammeSegment,
 };
+use ersatzrs_time::{DateTime, Duration, Utc};
 
 /// Read-only channel metadata and complete, already grouped guide occurrences.
 pub struct TeletextGuideChannel<'a> {
@@ -277,7 +277,7 @@ fn convert_segment(
 
 fn exact_milliseconds(value: Duration) -> Result<i64, TeletextGuideRequestError> {
     let milliseconds = value.num_milliseconds();
-    // Chrono's supported duration range excludes i64::MIN milliseconds.
+    // The signed duration range excludes i64::MIN milliseconds.
     if Duration::milliseconds(milliseconds) != value {
         return Err(TeletextGuideRequestError::SourceOffsetPrecision);
     }

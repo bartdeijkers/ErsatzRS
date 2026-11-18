@@ -23,7 +23,7 @@ async fn replace(pool: &DbPool) {
         &EntityLocker::new(),
         PlayoutBuildRequest::new(1, PlayoutBuildMode::Reset)
             .with_preservation(PlayoutPreservation::ReplaceCurrent),
-        chrono::Utc::now(),
+        ersatzrs_time::Utc::now(),
         None,
     )
     .await
@@ -39,7 +39,7 @@ async fn external_json_health_and_list_follow_adoption_and_explicit_corruption_r
     let repos = make_repositories(pool.clone());
     let mut content: serde_json::Value =
         serde_json::from_slice(&document(&["A", "B", "C"])).unwrap();
-    content["startTime"] = (chrono::Utc::now() + Duration::hours(1))
+    content["startTime"] = (ersatzrs_time::Utc::now() + Duration::hours(1))
         .to_rfc3339()
         .into();
     let bytes = serde_json::to_vec(&content).unwrap();
@@ -66,7 +66,7 @@ async fn external_json_health_and_list_follow_adoption_and_explicit_corruption_r
         &pool,
         &EntityLocker::new(),
         request,
-        chrono::Utc::now(),
+        ersatzrs_time::Utc::now(),
         None
     )
     .await

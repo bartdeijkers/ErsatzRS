@@ -1,6 +1,5 @@
 use super::*;
 use crate::repositories::{common::encode_datetime, make_repositories};
-use chrono::Duration as TimeDelta;
 use ersatzrs_core::{
     playout_builder::PlayoutBuilder,
     repositories::PlayoutRepository as _,
@@ -8,6 +7,7 @@ use ersatzrs_core::{
         PlayoutBuildMode, SchedulingMediaItem, SchedulingReferenceData, SchedulingRequest,
     },
 };
+use ersatzrs_time::Duration as TimeDelta;
 
 async fn fixture() -> (tempfile::TempDir, DbPool, EntityLocker) {
     let root = tempfile::tempdir().unwrap();

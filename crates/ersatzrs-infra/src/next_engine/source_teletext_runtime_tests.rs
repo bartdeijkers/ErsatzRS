@@ -246,10 +246,10 @@ async fn run_case(
     let mut item = selection::tests::item();
     item.id = 1;
     item.playout_id = 1;
-    item.start = chrono::Utc::now() - chrono::Duration::milliseconds(100);
-    item.in_point = chrono::Duration::milliseconds(case.start_ms);
-    item.out_point = chrono::Duration::milliseconds(case.end_ms);
-    item.finish = item.start + chrono::Duration::milliseconds(case.end_ms - case.start_ms);
+    item.start = ersatzrs_time::Utc::now() - ersatzrs_time::Duration::milliseconds(100);
+    item.in_point = ersatzrs_time::Duration::milliseconds(case.start_ms);
+    item.out_point = ersatzrs_time::Duration::milliseconds(case.end_ms);
+    item.finish = item.start + ersatzrs_time::Duration::milliseconds(case.end_ms - case.start_ms);
     crate::repositories::make_repositories(pool.clone())
         .playout
         .upsert_item(&item)

@@ -1,6 +1,6 @@
 use super::*;
-use chrono::TimeZone;
 use ersatzrs_domain::{Playout, PlayoutMode, PlayoutScheduleKind};
+use ersatzrs_time::TimeZone;
 
 #[test]
 fn classic_continue_carries_new_graphics_variables_without_reordering_published_programmes() {

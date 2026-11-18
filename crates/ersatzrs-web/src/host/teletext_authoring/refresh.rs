@@ -415,7 +415,7 @@ async fn prepare_effective_baseline(
         context.deadline,
         application.observe_published_effective_teletext_dependencies(
             request_channel(&claim.seed),
-            chrono::Utc::now(),
+            ersatzrs_time::Utc::now(),
         ),
     )
     .await
@@ -459,7 +459,7 @@ fn same_original_scope(
         && original.valid_until == current.valid_until
         && original
             .valid_until
-            .is_some_and(|until| chrono::Utc::now() < until)
+            .is_some_and(|until| ersatzrs_time::Utc::now() < until)
         && original
             .bindings
             .iter()
@@ -476,8 +476,8 @@ fn same_original_scope(
 #[cfg(test)]
 mod published_host_tests {
     use super::*;
-    use chrono::Utc;
     use ersatzrs_domain::{teletext_custom_pages_selection, TeletextChannelSelectionSnapshot};
+    use ersatzrs_time::Utc;
 
     #[test]
     fn base_guide_keeps_published_host_membership_and_current_installed_profiles() {
@@ -518,7 +518,7 @@ mod published_host_tests {
             TeletextEffectiveChannelSelectionSnapshot, TeletextOverrideInterval,
             TeletextOverrideState, TeletextPublishedOverride,
         };
-        let until = Utc::now() + chrono::Duration::minutes(10);
+        let until = Utc::now() + ersatzrs_time::Duration::minutes(10);
         let host = teletext_custom_pages_selection(1);
         let mut addon = host.clone();
         addon.addon_id = "org.example.guide".to_owned();
@@ -531,7 +531,7 @@ mod published_host_tests {
                 TeletextEffectiveBindingSnapshot::Scripted(TeletextPublishedOverride {
                     playout_id: 10,
                     interval: TeletextOverrideInterval {
-                        start: Utc::now() - chrono::Duration::minutes(1),
+                        start: Utc::now() - ersatzrs_time::Duration::minutes(1),
                         finish: until,
                         state: TeletextOverrideState::Off {
                             channel_id: 1,
@@ -575,7 +575,9 @@ mod published_host_tests {
                     invalid.bindings.remove(0);
                 }
                 "channel" => invalid.channel_id += 1,
-                "expired" => invalid.valid_until = Some(Utc::now() - chrono::Duration::seconds(1)),
+                "expired" => {
+                    invalid.valid_until = Some(Utc::now() - ersatzrs_time::Duration::seconds(1));
+                }
                 _ => unreachable!(),
             }
             assert!(

@@ -75,7 +75,7 @@ async fn published(
         locker,
         channel,
         start,
-        start + chrono::Duration::seconds(60),
+        start + ersatzrs_time::Duration::seconds(60),
     )
     .await
     .unwrap()

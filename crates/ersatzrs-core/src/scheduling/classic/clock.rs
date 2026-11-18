@@ -1,4 +1,4 @@
-use chrono::{DateTime, Datelike, Duration, NaiveDateTime, Timelike, Utc};
+use ersatzrs_time::{DateTime, Datelike, Duration, NaiveDateTime, Timelike, Utc};
 use jiff::{civil, tz::AmbiguousOffset, tz::TimeZone, Timestamp};
 
 use super::SchedulingError;
@@ -96,7 +96,7 @@ impl ClassicClock {
         };
         local
             .checked_sub_signed(Duration::seconds(i64::from(offset.seconds())))
-            .map(|value| value.and_utc())
+            .map(NaiveDateTime::and_utc)
             .ok_or_else(invalid_clock)
     }
 }

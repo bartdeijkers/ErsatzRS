@@ -652,12 +652,12 @@ fn sqlx_error(error: sqlx::Error) -> HealthCheckError {
 mod tests {
     use std::collections::BTreeSet;
 
-    use chrono::{Duration, Utc};
     use ersatzrs_core::locking::EntityLocker;
     use ersatzrs_core::repositories::{PlayoutRepository, ProgramScheduleRepository};
     use ersatzrs_core::scheduling::{PlayoutBuildMode, PlayoutBuildRequest};
     use ersatzrs_domain::{CollectionType, PlayoutItem, ProgramScheduleItem};
     use ersatzrs_ffmpeg::FfmpegRuntimeReport;
+    use ersatzrs_time::{Duration, Utc};
     use sqlx::Executor;
 
     use super::*;
@@ -1204,7 +1204,7 @@ mod tests {
         let check = ScanRefreshStateHealthCheck::new(pool.clone());
         assert_eq!(check.check().await.unwrap().status, HealthCheckStatus::Pass);
         sqlx::query(r#"UPDATE "ProviderCollectionRefreshResolution" SET "CreatedAt" = ?"#)
-            .bind((Utc::now() - chrono::Duration::minutes(16)).to_rfc3339())
+            .bind((Utc::now() - ersatzrs_time::Duration::minutes(16)).to_rfc3339())
             .execute(&pool)
             .await
             .unwrap();

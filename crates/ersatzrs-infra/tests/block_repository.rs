@@ -1,10 +1,10 @@
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{BlockAdminRow, BlockItemAdmin, BlockRepository};
 use ersatzrs_core::scheduling::{SchedulingSmartShufflePolicy, SchedulingSmartShufflePreset};
 use ersatzrs_domain::{Block, BlockItem, BlockStopScheduling, CollectionType, PlaybackOrder};
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::Duration;
 use sqlx::{Executor, Row};
 
 #[tokio::test]

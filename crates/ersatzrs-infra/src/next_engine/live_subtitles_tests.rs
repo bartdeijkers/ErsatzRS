@@ -36,7 +36,7 @@ fn snapshot(path: &std::path::Path) -> Snapshot {
             item: protocol::PlayoutItem {
                 id: "fixture".into(),
                 start,
-                finish: start + chrono::Duration::seconds(60),
+                finish: start + ersatzrs_time::Duration::seconds(60),
                 source: None,
                 watermark: None,
                 graphics: Vec::new(),
@@ -78,7 +78,7 @@ async fn live_caption_cache_binds_content_and_fractional_join_without_second_see
     let original = snapshot(&path);
     let mut first = snapshot(&path);
     first.projection.item.start = original.projection.item.start;
-    let now = first.projection.item.start + chrono::Duration::milliseconds(234);
+    let now = first.projection.item.start + ersatzrs_time::Duration::milliseconds(234);
     assert!(prepare(
         &cache,
         &mut first,
@@ -147,7 +147,7 @@ async fn ended_cues_are_removed_but_invalid_captions_fail_closed() {
     let cache = BurnCache::new(root.path().join("cache"));
     tokio::fs::write(&path, CUES).await.unwrap();
     let mut expired = snapshot(&path);
-    let now = expired.projection.item.start + chrono::Duration::seconds(2);
+    let now = expired.projection.item.start + ersatzrs_time::Duration::seconds(2);
     prepare(
         &cache,
         &mut expired,
@@ -247,7 +247,7 @@ async fn generated_live_credits_rebase_historical_join_and_remove_ended_cues() {
     tokio::fs::write(&path, GENERATED_ASS).await.unwrap();
     let cache = BurnCache::new(root.path().join("cache"));
     let deadline = Instant::now() + std::time::Duration::from_secs(5);
-    let finish = Utc::now() - chrono::Duration::days(2);
+    let finish = Utc::now() - ersatzrs_time::Duration::days(2);
     let prepared = prepare_generated(
         &cache,
         &generated_track(&path, 2000),
@@ -303,7 +303,7 @@ async fn generated_credits_use_actual_live_producer_timing_and_keep_finite_seek(
             &track,
             &primary,
             "producer-publication",
-            Utc::now() + chrono::Duration::seconds(30),
+            Utc::now() + ersatzrs_time::Duration::seconds(30),
             Instant::now() + std::time::Duration::from_secs(5),
         )
         .await
@@ -331,7 +331,7 @@ async fn rebased_generated_track_installs_caption_metadata_without_second_seek()
     let cache = BurnCache::new(root.path().join("cache"));
     let mut projected = snapshot(&path);
     projected.projection.selected_subtitle = None;
-    let now = projected.projection.item.start + chrono::Duration::seconds(2);
+    let now = projected.projection.item.start + ersatzrs_time::Duration::seconds(2);
     let track = prepare_generated(
         &cache,
         &generated_track(&path, 2000),

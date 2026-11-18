@@ -6,12 +6,12 @@ use crate::{
     db::{Db, DbRow},
     xmltv_read::{GuideExpansionUsage, GuideReadBudget, GuideReadUsage, Read},
 };
-use chrono::{DateTime, Duration, Utc};
 use ersatzrs_core::{
     programme::{project_occurrences, ProgrammeOccurrence},
     xmltv::XmltvBlockBehavior,
 };
 use ersatzrs_domain::{ChannelPlayoutSource, PlayoutScheduleKind};
+use ersatzrs_time::{DateTime, Duration, Utc};
 use sqlx::Row;
 
 #[path = "xmltv_snapshot/allocation.rs"]

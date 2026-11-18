@@ -3,7 +3,6 @@
 //! when the requesting browser disconnects. No preview playout is persisted.
 
 use super::*;
-use chrono::Duration as TimeDelta;
 use ersatzrs_core::repositories::ChannelRepository as _;
 use ersatzrs_domain::{PlayoutItem, StreamingEngine};
 use ersatzrs_infra::next_engine::{
@@ -20,6 +19,7 @@ use ersatzrs_infra::transcode_capacity::{
     load_active_transcode_limit, try_reserve_active_transcode, ActiveTranscodeSlot,
     DEFAULT_ACTIVE_TRANSCODE_LIMIT,
 };
+use ersatzrs_time::Duration as TimeDelta;
 use tokio::{
     sync::oneshot,
     time::{timeout_at, Instant},

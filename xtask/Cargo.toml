@@ -17,7 +17,7 @@ all = "warn"
 [dependencies]
 anyhow = "1"
 # `clippy-ledger` subcommand: today's date for the regenerated ledger snapshot.
-chrono = "0.4"
+jiff.workspace = true
 ersatzrs-addon-contract = { version = "0.4.0", path = "../crates/ersatzrs-addon-contract" }
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"

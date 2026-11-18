@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Duration, NaiveTime, Utc};
 use ersatzrs_core::scheduling::{
     BlockDefinition, BlockKey, BlockSchedulingEngine, BlockTemplate, BlockTemplateItem,
     BlockTemplateSchedule, EffectiveBlock, EffectiveBlockItem, EffectiveDeco, PlayoutBuildMode,
@@ -10,6 +9,7 @@ use ersatzrs_core::scheduling::{
 use ersatzrs_domain::{
     BlockStopScheduling, CollectionType, FillerKind, PlaybackOrder, Playout, PlayoutItem,
 };
+use ersatzrs_time::{DateTime, Duration, NaiveTime, Utc};
 use serde_json::Value;
 
 #[test]

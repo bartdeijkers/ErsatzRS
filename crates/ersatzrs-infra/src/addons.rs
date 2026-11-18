@@ -21,7 +21,6 @@ use std::process::{ExitStatus, Stdio};
 use std::time::Duration;
 
 use base64::Engine as _;
-use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Verifier as _, VerifyingKey};
 use ersatzrs_addon_contract::{
     sanitize_addon_diagnostic_code, validate_addon_id, AddonCheckResult, AddonCheckStatus,
@@ -43,6 +42,7 @@ use ersatzrs_addon_contract::{
     OPERATION_CODE_FAILED, OPERATION_CODE_MISSING_SECRET, OPERATION_CODE_MISSING_SETTING,
 };
 use ersatzrs_domain::EntityId;
+use ersatzrs_time::{DateTime, Utc};
 use futures_util::StreamExt as _;
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
@@ -5124,7 +5124,7 @@ fn validate_catalog(
     if expires_at <= now {
         return Err(AddonError::Trust("signed catalog has expired".to_owned()));
     }
-    if generated_at > now + chrono::Duration::hours(24) || expires_at <= generated_at {
+    if generated_at > now + ersatzrs_time::Duration::hours(24) || expires_at <= generated_at {
         return Err(AddonError::Validation(
             "catalog validity interval is invalid".to_owned(),
         ));
@@ -7207,8 +7207,8 @@ printf '%s' '{"status":"warning","code":"tool-update-failed-stale","message":"St
             repository_id: repository_id.to_owned(),
             repository_name: "Fixture add-ons".to_owned(),
             sequence: 7,
-            generated_at: (now - chrono::Duration::minutes(1)).to_rfc3339(),
-            expires_at: (now + chrono::Duration::days(1)).to_rfc3339(),
+            generated_at: (now - ersatzrs_time::Duration::minutes(1)).to_rfc3339(),
+            expires_at: (now + ersatzrs_time::Duration::days(1)).to_rfc3339(),
             addons: Vec::new(),
         };
         let raw_json = serde_json::to_string(&index).expect("serialize catalog");

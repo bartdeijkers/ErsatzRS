@@ -3,9 +3,9 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
 use ersatzrs_core::repositories::{RepositoryError, Result};
 use ersatzrs_domain::{AddonMediaListDeliveryMode, EntityId, RemoteStreamLiveness};
+use ersatzrs_time::{DateTime, Utc};
 use sqlx::Transaction;
 
 use crate::db::{Db, DbPool};
@@ -380,7 +380,7 @@ mod tests {
                 .execute(&mut *tx)
                 .await
                 .unwrap();
-            let reset_at = now() + chrono::Duration::hours(1);
+            let reset_at = now() + ersatzrs_time::Duration::hours(1);
             let reset = reset_identity_in_tx(&mut tx, 1, reset_at).await.unwrap();
             assert_eq!(reset.mode, mode);
             if mode == AddonMediaListDeliveryMode::DownloadAheadNewVideos {
@@ -477,7 +477,7 @@ mod tests {
             save(
                 &pool,
                 DownloadAheadNewVideos,
-                now() + chrono::Duration::hours(1)
+                now() + ersatzrs_time::Duration::hours(1)
             )
             .await,
             first
@@ -489,7 +489,7 @@ mod tests {
         let again = save(
             &pool,
             DownloadAheadNewVideos,
-            now() + chrono::Duration::hours(2),
+            now() + ersatzrs_time::Duration::hours(2),
         )
         .await;
         assert!(again.cutoff_identity_id > first.cutoff_identity_id);

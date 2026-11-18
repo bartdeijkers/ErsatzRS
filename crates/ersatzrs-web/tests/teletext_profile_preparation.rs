@@ -8,7 +8,6 @@ mod test_manifest;
 
 use std::{collections::BTreeMap, path::Path, time::Duration};
 
-use chrono::{TimeZone as _, Utc};
 use ersatzrs_addon_contract::{
     AddonCapability, AddonEntrypoint, AddonEntrypointKind, AddonManifest, AddonPermissions,
     AddonSettingDefinition, AddonSettingKind, ADDON_MANIFEST_VERSION,
@@ -37,6 +36,7 @@ use ersatzrs_infra::{
     db::{DatabaseBackend, DatabaseSchemaStatus},
     repositories::make_repositories,
 };
+use ersatzrs_time::{TimeZone as _, Utc};
 use ersatzrs_web::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
 use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
 use tokio::sync::mpsc::{self, UnboundedReceiver};

@@ -356,7 +356,7 @@ mod tests {
                     &format!("blobs/{hash}"),
                     &hash,
                     content.len() as u64,
-                    chrono::Utc::now(),
+                    ersatzrs_time::Utc::now(),
                 )
                 .await
                 .unwrap();
@@ -376,7 +376,7 @@ mod tests {
                 1,
                 1,
                 0,
-                chrono::Utc::now(),
+                ersatzrs_time::Utc::now(),
                 &files,
                 &AddonMediaListRevisionArtifacts {
                     ids: vec![1],

@@ -1,11 +1,11 @@
 mod common;
 
-use chrono::Duration;
 use ersatzrs_core::repositories::{
     ChannelEditorForm, ChannelLogoForm, ChannelNumberUpdate, ChannelRepository,
     FfmpegProfileRepository, PlayoutRepository,
 };
 use ersatzrs_infra::repositories::make_repositories;
+use ersatzrs_time::Duration;
 use sqlx::{Executor, Row};
 
 #[tokio::test]
