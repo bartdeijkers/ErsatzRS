@@ -42783,6 +42783,27 @@ directly. All six row290 unit and scanner regressions pass, including sentinel
 precision, all six metadata kinds, claim fencing and scan/search continuity
 (nextest e97c667a-8a2d-43f8-8e02-04344c671481; jiff-scanner-lint/nextest.log).
 
+2026-11-18 refreshed private application platform proof after Jiff:
+Build and independently extract Linux x64, Windows x64, ARM64 and ARMv7
+archives from exact local combined source3f615954 and tree110d8094. The pending
+standalone Jiff change and all tested UCU-16 fixture corrections are included.
+All four confirm their archive and file hashes, health and bundled qualified
+Next. Both ARM targets serve the matching assets under QEMU. Native ARM remains
+deferred. Linux and Windows pass the structural SSR/WASM gate and real bundled
+Native/Next smoke. Four Next outputs on each decode the selected Dutch track
+and captions. The actual native Windows launcher selects the verified child;
+headed Edge passes controls and Classic form at1440 and390, with11 server
+function responses and zero console errors. The UNC browser cache deletion
+failed after copying receipts and removing Windows runtime roots; verified
+ownership allowed the Linux-side profile cleanup. Retain94 Windows files,
+four Linux and four Windows decoded outputs, and zero owned processes.
+The exact compiler inputs, source bundle and private archives are retained in
+row296-app-platform-jiff/platform-checkpoint.json and adjacent manifests.
+The final branch must match the relevant build and runtime inputs before
+reusing the four-platform proof. Exact integrated CI and ordered delivery
+remain required. Previously qualified Next/FFmpeg payloads and publication
+proof retain their original source and scope.
+
 Remaining individual-row functionality/proof: rows290–296 are Complete within
 their explicit local component scopes. R296-A/B closes row296 configuration
 and actual fixed-worker cache proof; no local row295 or R296-B proof remains.
