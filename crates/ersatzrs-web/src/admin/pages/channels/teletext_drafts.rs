@@ -2432,7 +2432,9 @@ mod tests {
                 let mut data = preview();
                 data.outputs = Some(TeletextChannelOutputObservations {
                     outputs: vec![TeletextOutputObservation {
-                        epoch: uuid::Uuid::new_v4(),
+                        // Fixed: a random epoch is rendered and could contain
+                        // the zero-padded page text this test rules out.
+                        epoch: uuid::Uuid::from_u128(0x1111_2222_3333_4444_5555_6666_7777_8888),
                         requested,
                         applied: Some(confirmed),
                         phase: Phase::Waiting,
