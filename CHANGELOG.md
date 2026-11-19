@@ -316,6 +316,10 @@ release section when tagging a release.
 
 - Keep active Next HLS streams playing on Windows by reliably refreshing their
   session heartbeat.
+- Following a link while an admin page is still loading its interactive
+  code no longer reports an uncaught "The operation was aborted" error in
+  Firefox; the cancelled download is recorded as an aborted start, and every
+  other startup failure is still reported.
 
 - Health checks accept Next overlay schemas supported by the selected plain or
   indexed runtime, reject newer schemas, and translate the supported range in
