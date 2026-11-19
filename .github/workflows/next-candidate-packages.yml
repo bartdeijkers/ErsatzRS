@@ -30,7 +30,13 @@ jobs:
       REVIEW: scripts/release/next-patches/row305/manifest.json
       CARGO_BUILD_JOBS: "1"
     steps:
+      # The packaging steps read only scripts/ and docker/. A full checkout
+      # exceeds the Windows path limit on hosted runners.
       - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            scripts
+            docker
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
