@@ -78,3 +78,22 @@ this closes the demonstrated idle-gate dependency, not every possible source
 of CI intermittency. No new remote CI result or release is claimed.
 '''
 resolved    = true
+
+[[debt]]
+id          = 'hydration-bootstrap-reports-navigation-abort'
+description = 'Following a link while the admin WASM was still downloading made Firefox cancel that download with AbortError; the bootstrap rethrew it as an uncaught page error, so playouts-feedback.spec.ts:434 failed intermittently on hosted runners although every functional check passed.'
+discovered  = '2026-11-16'
+evidence    = '''
+Hosted CI run 43917184232 (main) and PR run 44403396776 (attempts 1 and 2)
+failed playouts-feedback.spec.ts:434 in Firefox only on the collected page
+error "The operation was aborted.". The attempt-2 trace shows the error while
+the Health page link to /playouts navigated, and that page's WASM request ended
+NS_BINDING_ABORTED. A stub-page reproduction confirmed Firefox reports this
+AbortError and Chromium reports nothing. The bootstrap now records phase
+`aborted` for an AbortError while loading the module or WASM; every other
+startup failure still throws. The new hydration-startup.spec.ts case stalls the
+real WASM body from a local server, follows a link and requires no page error;
+against the stub page it failed on Firefox before the fix and passed after it,
+on both browsers. The full-app run is the PR's CI result.
+'''
+resolved    = true
