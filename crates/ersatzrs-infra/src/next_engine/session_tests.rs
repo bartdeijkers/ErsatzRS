@@ -374,6 +374,11 @@ async fn row291_worker_owned_idle_heartbeats_follow_viewers_during_stalled_refre
     let process = super::super::process::fixture_process(root.path(), "ready")
         .await
         .unwrap();
+    let heartbeat = root.path().join(".heartbeat");
+    std::fs::File::create(&heartbeat)
+        .unwrap()
+        .set_modified(std::time::UNIX_EPOCH)
+        .unwrap();
     let session = Arc::new(NextSession::new(
         "1".into(),
         root.path().into(),
@@ -392,8 +397,8 @@ async fn row291_worker_owned_idle_heartbeats_follow_viewers_during_stalled_refre
     });
     session.playout_updated();
     waiting.await.unwrap();
-    let heartbeat = root.path().join(".heartbeat");
-    wait_for_row291_heartbeat(&heartbeat, false).await;
+    // File creation is insufficient to observe a completed timestamp refresh.
+    wait_for_row291_heartbeat(&heartbeat).await;
     let report = session.session_model().unwrap();
     let checkpoint = session.checkpoint_time();
     std::fs::File::options()
@@ -415,7 +420,7 @@ async fn row291_worker_owned_idle_heartbeats_follow_viewers_during_stalled_refre
     assert_eq!(session.checkpoint_time(), checkpoint);
     assert!(!task.is_finished());
     session.touch();
-    wait_for_row291_heartbeat(&heartbeat, true).await;
+    wait_for_row291_heartbeat(&heartbeat).await;
     session.cancel().await;
     assert_eq!(
         tokio::time::timeout(Duration::from_secs(5), task)
@@ -428,13 +433,13 @@ async fn row291_worker_owned_idle_heartbeats_follow_viewers_during_stalled_refre
     assert_eq!(session.startup_readiness(), HlsStartupReadiness::Failed);
 }
 
-async fn wait_for_row291_heartbeat(path: &std::path::Path, touched: bool) {
+async fn wait_for_row291_heartbeat(path: &std::path::Path) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if std::fs::metadata(path)
                 .ok()
                 .and_then(|metadata| metadata.modified().ok())
-                .is_some_and(|time| !touched || time != std::time::UNIX_EPOCH)
+                .is_some_and(|time| time != std::time::UNIX_EPOCH)
             {
                 break;
             }
