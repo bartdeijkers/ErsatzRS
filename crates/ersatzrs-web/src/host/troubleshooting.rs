@@ -2869,7 +2869,10 @@ mod tests {
     async fn troubleshooting_archive_includes_worker_fixture() {
         use std::io::Read as _;
 
-        #[allow(clippy::disallowed_methods)]
+        #[allow(
+            clippy::disallowed_methods,
+            reason = "Explicit opt-in test fixture path, not host configuration."
+        )]
         let root = PathBuf::from(std::env::var_os("ERSATZRS_TEST_INVALID_ITEM_DOSSIER").unwrap());
         let bytes = build_troubleshooting_archive_from(&root)
             .await

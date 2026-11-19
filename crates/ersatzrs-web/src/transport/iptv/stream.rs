@@ -1087,7 +1087,11 @@ impl From<Response> for StreamAttempt {
     }
 }
 
-#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_lines,
+    clippy::too_many_arguments,
+    reason = "Single admission path; the sub-frame window and its cancellation are passed explicitly."
+)]
 async fn serve_channel_stream_admitted_inner(
     state: &AppState,
     channel: Channel,
