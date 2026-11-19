@@ -72,6 +72,18 @@ try {
     await hydrateTree(document.body, module);
     window.__ersatzrs_hydration_phase = "ready";
 } catch (error) {
-    window.__ersatzrs_hydration_phase = "failed";
-    throw error;
+    // Following a link or stopping the page while the module or WASM is still
+    // downloading makes the browser cancel this document's pending fetches;
+    // Firefox rejects them with AbortError before the old page unloads. This
+    // bootstrap never aborts its own loads, so an AbortError during loading is
+    // not a startup defect and must not surface as an uncaught page error.
+    // Every other failure, and any abort after WASM started, stays fatal.
+    const phase = window.__ersatzrs_hydration_phase;
+    if (error?.name === "AbortError" && (phase === "loading-module" || phase === "initializing-wasm")) {
+        window.__ersatzrs_hydration_phase = "aborted";
+        console.warn(`ErsatzRS hydration stopped: the browser cancelled the download during ${phase}.`);
+    } else {
+        window.__ersatzrs_hydration_phase = "failed";
+        throw error;
+    }
 }

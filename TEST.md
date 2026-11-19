@@ -348,7 +348,12 @@ stabilisation. Apply them every time you wire interactive UI:
 CPU or slowing I/O, then requires hydration within the existing 15-second
 bound and exercises real settings validation. It must run on Chromium and
 Firefox. A second scenario holds the WASM request behind a controllable barrier
-and verifies that document load is distinct from hydration readiness. The
+and verifies that document load is distinct from hydration readiness. A third
+follows a link while a local server stalls the real WASM body after its first
+bytes, and requires no page error: Firefox reports that cancelled download as
+`AbortError`, which the bootstrap records as phase `aborted` instead of
+throwing. Do not stall that request inside `page.route`; Firefox then reports a
+`NetworkError` instead, which stays a real startup failure. The
 affected add-on specs share `tests/e2e/hydration.ts`, which reports
 document readiness, visibility, bootstrap phase and package-resource timings
 on failure without cookies, request bodies or full resource URLs.
