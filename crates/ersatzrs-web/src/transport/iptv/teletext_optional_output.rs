@@ -328,12 +328,25 @@ async fn finish_direct<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
                 }
                 state.take()
             };
+            log_raw_fallback("before-first-write", &error);
             Ok(OptionalTeletextOutput {
                 bytes: replay_direct_prefix(source, sink, prefix).await?,
                 rejection: Some(error),
             })
         }
     }
+}
+
+/// Optional output keeps playback by replaying the unchanged source. Record
+/// why teletext was dropped; the event carries no content.
+fn log_raw_fallback(stage: &'static str, error: &TeletextPumpError) {
+    tracing::debug!(
+        target: "ersatzrs_web::transport::iptv::teletext_provenance",
+        event = "optional_raw_fallback",
+        stage,
+        %error,
+        "optional teletext output falls back to the unchanged source"
+    );
 }
 
 pub(super) async fn replay_direct_prefix(
@@ -536,10 +549,11 @@ pub(super) async fn forward_optional_seeded_teletext_output<
     let state = match Startup::seeded(maximum_bytes, binding, &prefix) {
         Ok(state) => state,
         Err(error) => {
+            log_raw_fallback("seeded-startup", &error);
             return Ok(OptionalTeletextOutput {
                 bytes: replay_direct_prefix(source, sink, prefix.into_bytes()).await?,
                 rejection: Some(error),
-            })
+            });
         }
     };
     let mut reader = match TeeReader::new(source, &state) {
