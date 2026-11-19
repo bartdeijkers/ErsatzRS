@@ -2432,7 +2432,8 @@ mod tests {
                 let mut data = preview();
                 data.outputs = Some(TeletextChannelOutputObservations {
                     outputs: vec![TeletextOutputObservation {
-                        epoch: uuid::Uuid::new_v4(),
+                        // A fixed epoch keeps random hex digits out of the "096" assertion below.
+                        epoch: uuid::Uuid::from_u128(0x1111_2222_3333_4444_5555_6666_7777_8888),
                         requested,
                         applied: Some(confirmed),
                         phase: Phase::Waiting,
