@@ -8,6 +8,7 @@ import shutil
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("prepare_next", Path(__file__).with_name("prepare-next-source.py"))
 module = importlib.util.module_from_spec(spec)
@@ -130,6 +131,31 @@ class PreparedLockTests(unittest.TestCase):
         self.manifest["patched_lock_sha256"] = corrected_hash
         with self.assertRaisesRegex(ValueError, "source Cargo.lock"):
             self.prepare()
+
+
+class ExtractionTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        top = self.root / "upstream" / "crates"
+        top.mkdir(parents=True)
+        (top / "real.json").write_text("{}")
+        (top / "link.json").symlink_to("real.json")
+        self.archive = self.root / "source.tar.gz"
+        with tarfile.open(self.archive, "w:gz") as bundle:
+            bundle.add(self.root / "upstream", arcname="upstream-0123")
+
+    def test_strips_the_top_folder_and_keeps_symlinks(self):
+        module.extract(self.archive, self.root / "out")
+        self.assertTrue((self.root / "out" / "crates" / "link.json").is_symlink())
+
+    def test_copies_symlink_targets_without_the_symlink_privilege(self):
+        with mock.patch("os.symlink", side_effect=OSError("no privilege")):
+            module.extract(self.archive, self.root / "out")
+        link = self.root / "out" / "crates" / "link.json"
+        self.assertFalse(link.is_symlink())
+        self.assertEqual(link.read_text(), "{}")
 
 
 if __name__ == "__main__":
