@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 import subprocess
+import tarfile
 
 MANIFEST = Path(__file__).with_name("next-patches") / "manifest.json"
 
@@ -41,6 +42,28 @@ def reviewed_manifest(path=MANIFEST, revision=None):
     return manifest
 
 
+def extract(archive, output):
+    """Extract the archive below its single top-level folder.
+
+    tarfile copies a symlink's target where the platform cannot create one,
+    such as Windows without the symlink privilege, instead of failing.
+    """
+    with tarfile.open(archive, "r:gz") as source:
+        members = []
+        for member in source.getmembers():
+            _, _, name = member.name.partition("/")
+            if not name:
+                continue
+            member.name = name
+            if member.islnk():
+                member.linkname = member.linkname.partition("/")[2]
+            members.append(member)
+        # Debian bookworm's Python 3.11.2 predates extraction filters. The
+        # archive's SHA-256 is verified before this call either way.
+        safety = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+        source.extractall(output, members=members, **safety)
+
+
 def prepare(archive, output, manifest_path=MANIFEST, revision=None, unpatched=False):
     manifest_path = Path(manifest_path).resolve()
     manifest = reviewed_manifest(manifest_path, revision)
@@ -52,10 +75,13 @@ def prepare(archive, output, manifest_path=MANIFEST, revision=None, unpatched=Fa
     output.mkdir(parents=True)
     # The archive is the checksum-pinned upstream source. Keep its symlinks and
     # permissions; never extract an unverified response or arbitrary archive.
-    subprocess.run(["tar", "-xzf", str(archive), "--strip-components=1", "-C", str(output)], check=True)
+    extract(archive, output)
     if digest(output / "Cargo.lock") != manifest["source_lock_sha256"]:
         raise ValueError("Next source Cargo.lock SHA-256 mismatch")
     subprocess.run(["git", "init", "-q", str(output)], check=True)
+    # A runner-wide core.autocrlf=true (common on Windows) would rewrite the
+    # patched files, including Cargo.lock, with CRLF line endings.
+    subprocess.run(["git", "-C", str(output), "config", "core.autocrlf", "false"], check=True)
     if not unpatched:
         for patch in manifest["patches"]:
             file = str(manifest_path.parent / patch["file"])

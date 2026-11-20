@@ -1,9 +1,14 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/{FFmpegStreamSelector,HlsPlaylistFilter}.cs`'
-rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,access_token,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
+rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
 status     = 'Ported'
 adr        = ['0015', '0016', '0061', '0084', '0106', '0132']
 summary    = '''
+Native playback checks the remaining item against the normalized output or source frame rate and advances past a sub-frame interval before encoding (row 299).
+Classic fallback_items, Block add_default_filler, YAML timing instructions and
+Lua add_duration can each trim media to the time left in a schedule window.
+That window can be shorter than one frame at the playback output rate.
+
 ADR 0106 retains native AV1 with automatic fMP4 HLS selection and explicit
 MPEG-TS rejection. UCU-09 row183 owns passing runtime evidence.
 Rows 130/132 startup ownership/readiness verified.
@@ -29,7 +34,7 @@ profile-derived mux-rate and 20 ms PCR-period helper with direct `.ts`,
 legacy concat, and hybrid wrapper outputs, and preserves adaptation-only PCR
 packet continuity-counter semantics when CBR muxing inserts PCR-only packets.
 
-Access control ports `ConditionalIptvAuthorizeFilter`; subtitles burn/overlay
+Row 302 disables streaming when a legacy JWT key is configured. Subtitles burn/overlay
 for the segmenter and HLS-direct copies compatible embedded image subtitles.
 Native subtitle preparation (ADRs 0061/0132) normalizes Unicode and assessed/
 declared legacy encodings, including position zero. Rewriting keeps straddling

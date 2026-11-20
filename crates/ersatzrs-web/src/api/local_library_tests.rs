@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::{AppState, SystemStartup};
     use ersatzrs_app::ApplicationError;
     use ersatzrs_core::repositories::{LocalLibraryAdmin, LocalLibraryPathAdmin};
 
@@ -17,7 +17,7 @@ mod tests {
             ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
             uuid::Uuid::nil(),
             2,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             tx,
             ersatzrs_core::locking::EntityLocker::default(),
         )

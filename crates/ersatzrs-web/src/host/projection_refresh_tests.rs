@@ -67,9 +67,7 @@ async fn projection_refresh_reaches_normal_and_preview_once_without_touching_oth
 async fn application_fixture() -> (crate::host::state::AppState, i64) {
     use ersatzrs_core::repositories::{ChannelRepository, FfmpegProfileRepository};
     use ersatzrs_domain::{Channel, ChannelPlayoutSource, FFmpegProfile, StreamingEngine};
-    let state = crate::host::state::AppState::for_tests(
-        crate::host::state::IptvAccessTokenVerifier::disabled(),
-    );
+    let state = crate::host::state::AppState::for_tests(false);
     sqlx::migrate!("../../migrations")
         .run(&state.pool)
         .await

@@ -1,0 +1,116 @@
+{
+  "upstream_repository": "ErsatzTV/next",
+  "upstream_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+  "source_archive_url": "https://codeload.github.com/ErsatzTV/next/tar.gz/9133cd28f2562b6aba5900560f86d8ea364e0502",
+  "source_archive_sha256": "64baf8e4bcb1eb9a88bb12cc0c64b63e7c6bdfa106952abb8fdc21a56112b8a0",
+  "source_lock_sha256": "f256b57a8deed3e7a7c68e7ab2a7bc626cad98fc4e73ea82468fbf53cfe50121",
+  "patched_lock_sha256": "5139f5db133538fc4e50fd6f4f92b08b9a78fa91934bf37273a6bde6a9b9ed3d",
+  "distribution_version": "0.2.7-9133cd28-ersatzrs.candidate.1",
+  "rust_toolchain": "1.99.0",
+  "adr": "0130;0131;0135",
+  "status": "Source candidate for CI qualification",
+  "patches": [
+    {
+      "file": "0001-bound-live-rtsp-shortest-buffer.patch",
+      "sha256": "591244c915ca42ff09b332be731751454c88edd3f84bed304c6a231c0aab2aee",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Unpatched upstream passes the existing live RTSP startup and EOF/handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c with unchanged accepted cfg(test) functions: corresponding functional regressions fail; two independent controls pass. Production remains byte-identical. See row296-unpatched-regressions.log and row296-unpatched-retirement-inputs.json. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0002-repeat-programme-images.patch",
+      "sha256": "0c4e9cafa2436d2846ae3d306560b29e6c59b85d2d759fc977a3e7c78d873176",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Unpatched upstream passes static WebP and complete finite/infinite GIF/WebP seek, repeat, cancellation and schedule-boundary handoff regressions plus compatibility acceptance. Remove this patch, not the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c with unchanged accepted cfg(test) functions: corresponding functional regressions fail; two independent controls pass. Production remains byte-identical. See row296-unpatched-regressions.log and row296-unpatched-retirement-inputs.json. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0004-private-mpp-driver-readiness.patch",
+      "sha256": "a8ad711c4ac17283bb027fecf974e8419ad6f6e459a08d695b811bc0224b5712",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Remove when the adopted upstream privately loads its verified ARM64 MPP companion and passes actual bundled-library/no-device fallback, positive native capability and complete ownership/provenance acceptance without this patch. Retain the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c MPP binding/capability source is byte-identical to the retained025 negative. Keep private companion initialization and whole-channel software fallback corrections. Actual consolidated ARM64 companion/no-device and full required-platform proof remain pending; native hardware is not inferred. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0005-reject-empty-mpp-capabilities.patch",
+      "sha256": "9d5603607ca211889efd0ecdf2884eee303b0985323c100fb290179afcfe80b9",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Remove when unpatched upstream returns whole-channel software fallback for bundled MPP without initialized hardware codecs and passes the same actual scaled Dutch-audio/subtitle playback regression. Preserve the regression.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c MPP binding/capability source is byte-identical to the retained025 negative. Keep private companion initialization and whole-channel software fallback corrections. Actual consolidated ARM64 companion/no-device and full required-platform proof remain pending; native hardware is not inferred. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0006-preserve-caption-source-outpoint.patch",
+      "sha256": "72aff2ec4f91eb6c97572c56508114d119b02309806f33830ba37f184ed1002a",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Remove when adopted unpatched upstream preserves the immutable exclusive caption source outpoint through both copy-seek landing directions, full and partial passes and independent sidecar origins, and passes the same focused and unchanged Teletext 1.5 playback regressions. Preserve the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c retains the same copy timing code which shifts the original subtitle source outpoint. The retained025 actual copied-caption negative remains scoped evidence; exact consolidated runtime and unchanged actual caption acceptance remain pending. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0007-preserve-selected-audio-metadata.patch",
+      "sha256": "0374d2bd4da4ea112f5b56b2dd3afc1ebe851f6b238160bb6fb040e4636faee4",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Remove when adopted unpatched upstream preserves metadata from the actual selected audio input and absolute stream index for copied and filtered output, including alternate and separate audio, and passes the unchanged real active-viewer language/cleanup regression. Preserve the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c with unchanged accepted cfg(test) functions: corresponding functional regressions fail; two independent controls pass. Production remains byte-identical. See row296-unpatched-regressions.log and row296-unpatched-retirement-inputs.json. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0008-preserve-subtitle-burn-input-clock.patch",
+      "sha256": "d5b8532dd6c456ebe40200adda0cd3eef196230860c9d9f2f2e986181e66cf0f",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Unpatched upstream passes the unchanged text-subtitle Burn regressions while preserving the incoming post-seek AV clock, including late decoded video start, the original selected source outpoint, exact caption transitions/clear, selected alternate audio and source ownership/cleanup, plus relevant compatibility/platform acceptance. Remove this patch, not the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c with unchanged accepted cfg(test) functions: corresponding functional regressions fail; two independent controls pass. Production remains byte-identical. See row296-unpatched-regressions.log and row296-unpatched-retirement-inputs.json. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0009-qualify-source-frame-cutoff.patch",
+      "sha256": "12ce522883b4a3a46d46cbd47a1b32bbe7ab0adee8e2862fdf2562ef72affbff",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Unpatched upstream passes exact source-complete seek2164/out9200 and seek2143/out9200 Burn regressions with unchanged encoder/profile, exact caption transitions and clear, selected alternate audio, strict transport, callback negotiation, bounded ownership and cleanup, plus compatibility/platform acceptance. Remove this patch, not the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c dynamic.rs and playout/input contract sources preserve the stock025 absence of the negotiated finite-video-cut/single-use hint contract. Retained original actual stock controls stop at that missing capability. Keep the corrections and unchanged physical/frame/caption/ownership acceptance; current consolidated runtime proof remains pending. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0010-preserve-single-use-copy-input.patch",
+      "sha256": "0413c951f4b71751a79e68cc56597dd7a55ae50e8324b866c4914a0777298baa",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Unpatched upstream passes ordinary single-use Copy Off/Convert and selected independent Burn caption delivery without consuming probes, provider reopening or weakened source/AV/audio/caption clocks, and preserves unknown-start fallback, truthful finite timing, long-interval ownership and joined cleanup. Remove this patch, not the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c dynamic.rs and playout/input contract sources preserve the stock025 absence of the negotiated finite-video-cut/single-use hint contract. Retained original actual stock controls stop at that missing capability. Keep the corrections and unchanged physical/frame/caption/ownership acceptance; current consolidated runtime proof remains pending. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0011-atomic-index-reader.patch",
+      "sha256": "1fdffd5407bd5275336080f1421e51144edbae0fb41e1a774ae534fe575c68e7",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Retire only when adopted unpatched upstream provides the accepted ADR0131 indexed snapshot/lease/capability contract and passes unchanged acceptance. Preserve the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Exact6c has no accepted ADR0131 atomic-index/lease reader or advertised playout layouts. Keep the existing extension, advance only its additive channel schema to0.1.6, preserve session/cache fields and all existing ownership/reader regressions. Consolidated qualification remains pending. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0012-qualify-worker-package-metadata.patch",
+      "sha256": "176e331182c1463b66bc375dd82246ec7a51ace833eb50ed1ff2ab82c30cea9e",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "Retire when upstream declares the same existing repository MIT license and pins internal workspace path versions so unmodified worker metadata passes the retained complete dependency policy. Preserve the tests.",
+      "unpatched_regression": "Prior qualification on 6c9e0cf7: Every upstream Cargo manifest affected by this patch is byte-identical to025 and retains missing MIT/path-version metadata. Keep the correction; current full policy and package acceptance remain pending. Rebased source only; successor runtime qualification is pending."
+    },
+    {
+      "file": "0013-preserve-xmltv-regression.patch",
+      "sha256": "7f28fd8414e28ebdc74d70225bb4bf4f34ca103c1a4ac689b4af2c38f30e0223",
+      "upstream_review_revision": "9133cd28f2562b6aba5900560f86d8ea364e0502",
+      "retire_when": "The upstream XMLTV suite covers entity decoding, international text and the retention boundaries in the carried fixture.",
+      "unpatched_regression": "Upstream already pins quick-xml 0.42.0 and webpki-root-certs 1.0.12. Its XMLTV test covers entity decoding but omits the existing multilingual retention-boundary fixture. Carry that regression alone."
+    }
+  ],
+  "windows_companions_sha256": {
+    "libvpl.dll": "d08c89d30705315a783ae59dbb21bf66a045f3a968d101190ac577baaa5b1b6b",
+    "libvpl-LICENSE.txt": "bf1cfac2e2792b6e1e995ce103d70796aecaf2ec7e4c5fe5474f7acec7b4a677"
+  },
+  "linux_arm64_companions_sha256": {
+    "librockchip_mpp.so.1": "9a7bf791e3c3206a21c79d3c4121d590e297abce98a8c8c19f9012ba83483412",
+    "librockchip_mpp-LICENSE-Apache-2.0.txt": "ed57d96d27be775b22f9571d3724ef84e0d0b8f24b805ec7f87a32189de19a9c",
+    "librockchip_mpp-LICENSE-MIT.txt": "323c587d0ccf10e376f8bf9a7f31fb4ca6078105194b42e0b1e0ee2bc9bde71f",
+    "librockchip_mpp-README.txt": "d2abb2750659d7336d54a522e613bdfe407a54ead4bcf8a3143527654add51a2",
+    "librockchip_mpp-rk_mpi.h": "96dbae7d90e91baaac38821fc06c74a327cac888007841fe5937798259193646"
+  },
+  "private_mpp_source": {
+    "revision": "a9380ef333102ac318628f83b5f7a460d377749e",
+    "archive_asset": "rockchip-mpp-source-a9380ef.tar.gz",
+    "archive_sha256": "68da788139ea4187c249001fa523a98d567e2caa6cfcdd3a5171e0c998c8202b",
+    "recipe_asset": "rockchip-mpp-build-recipe.tar.gz",
+    "recipe_sha256": "dd14d5a64ee64f5055bd9684435e1d5215df0f472da7f0a065c013b5761bdebd"
+  }
+}

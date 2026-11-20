@@ -206,7 +206,7 @@ pub async fn load_hdhr_settings() -> Result<HdhrSettingsPageData, ServerFnError>
         .map_err(ServerFnError::new)?;
     Ok(HdhrSettingsPageData {
         form: hdhr_settings_form(settings),
-        disabled_by_jwt: state.iptv_access_token_verifier.is_enabled(),
+        disabled_by_jwt: state.legacy_streaming_key_configured,
     })
 }
 
@@ -581,7 +581,7 @@ pub async fn save_hdhr_settings_with_state(
     state: &crate::host::state::AppState,
     form: HdhrSettingsForm,
 ) -> Result<(), ServerFnError> {
-    if state.iptv_access_token_verifier.is_enabled() {
+    if state.legacy_streaming_key_configured {
         return Err(ServerFnError::new(tr(TextKey::HdhrDisabledByJwt)));
     }
     state

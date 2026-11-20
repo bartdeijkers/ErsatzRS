@@ -32,7 +32,7 @@ of non-applicability. Earlier accepted UCU windows and Phase9 stay closed.
 | UCU-16 | 286–289 | `c41969b3bba66f14bf1d0be9e041b52218f65871` | Complete; Native retained |
 | UCU-16 continuation | 290–296 | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` | Complete |
 
-The ledger has **296 observed and processed rows, with zero pending in scope**.
+The ledger has **305 observed commits, 305 processed and 0 awaiting disposition**. Rows 297–305 are integrated in the CI candidate. Worker qualification and managed adoption for row 305 remain open.
 Each row has an individual disposition. Approved Deferred rows retain their
 recorded scope. The source maps below preserve the original checkpoints.
 
@@ -1749,11 +1749,10 @@ Canonical acceptance, finite completion list and evidence: `ucu-12` in
   This fixes the new work boundary; it does not advance the accepted Pin table.
 - Fixed accepted UCU-12 target (verified 2026-10-24): `f640c252276d008a5e1697fbfbb65a65fc352a5a`
   — docs: prep for release v26.11.4.
-- Ledger: **296 observed commits**, **289 processed**, **7 pending in the UCU-16 continuation**.
+- See the current ledger counter at the top of this plan.
 - Completed windows through row289 retain **0 pending rows**. The authoritative
   Pin table owns the accepted boundary. UCU-10–15 retain their completed scopes;
-  UCU-16 rows286–289 remain Complete. Only rows290–296 belong to the active
-  continuation; their source notes remain provisional.
+  UCU-16 rows286–289 remain Complete. The accepted continuation covers rows 290–296.
   The original plan covered 152 through
   `495e3799`; the maintainer expanded the target to the latest upstream commit
   on 2026-09-19, so the ten newer commits are also pending in this ledger. The 2026-09-22
@@ -7081,3 +7080,12 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 294 | `fafd9b43` | perf: optimize playout builds (#3144) | Port | classic-scheduling | `096ac73d` | ucu-16-continuation. Accepted 2026-11-18. Classic, next preview and block builds share immutable smart-source results within a build. Batched artist membership preserves hit order, independent playout choices and refresh continuity. |
 | 295 | `1a566770` | fix: jellyfin external stream order (#3145) | Adapt (ADR 0137) | scanner | `8e99a05f, a1a5e30a, b006a45e` | ucu-16-continuation. Accepted 2026-11-18. A separate physical map preserves logical Jellyfin track IDs, stored paths and pins across rescans and SQLite reopen. Real Native and Next playback verifies external-first, external-last and interleaved layouts with international tracks. |
 | 296 | `9c6b3dea` | chore: update next (#3146) | Adapt (ADR 0135) | upstream-baseline-catch-up | `1b6c88d0, a0288bba, 93c97b42` | ucu-16-continuation. Accepted 2026-11-18. The fixed Next successor retains all thirteen corrections and the indexed, selected-track and caption safeguards. Four qualified packages, exact public assets and native Linux and Windows cold and cached acquisition verify the managed pin. |
+| 297 | `bb54ad40` | build: ffmpeg 8.1.2-9 (#3147) | N/A | ffmpeg-9-performance-and-support | `docs(status): assess dependency and runner changes through row 304` | Only the upstream FFmpeg 8 packaging pin changes. ErsatzRS ships FFmpeg 9, with Arabic shaping verified at row 293 (7477ccc0). |
+| 298 | `4b7230b7` | chore: update next (#3148) | Covered | ffmpeg-filter-graph | `48f46423` | Eight Native FFmpeg 9 encodes with scaled RGB PNG and full-range JPEG watermarks preserved the limited-range H.264 tag and all luma samples outside the overlay. The scaled permanent-watermark argv snapshot also passed. The managed Next pin follows its separate qualification process. |
+| 299 | `b04c2422` | chore: update next (#3149) | Port | mpeg-ts-channel-streaming | `91d75ca5` | Classic, Block, YAML and Lua can clip filler or media to a positive window shorter than a frame. Native HLS and MPEG-TS now advance to the next item before encoding that window, using the effective output frame rate. Retained startup admission, cancellation and producer cleanup also apply across the skip. |
+| 300 | `738633eb` | chore: update dependencies (#3150) | N/A | upstream-baseline-catch-up | `docs(status): assess dependency and runner changes through row 304` | The NuGet upgrades affect .NET applications and test tools. The Next tag is managed independently under the row 296 pin contract. |
+| 301 | `ddb16b6c` | fix: refit updates missing from last commit (#3151) | N/A | scanner | `docs(status): assess dependency and runner changes through row 304` | The Refit 17 serializer change has no Rust dependency counterpart. Jellyfin and Emby models.rs deserialize TotalRecordCount and ProductionYear as integers. Plex uses string ratingKey and integer totalSize in plex.rs. Quoted integer compatibility in the upstream regression fixture remains scanner debt. |
+| 302 | `8b2af35c` | fix: remove jwt streaming auth (#3152) | Port | mpeg-ts-channel-streaming | `20ff1b69` | Removed streaming JWT generation, propagation and validation. IPTV and HDHomeRun refuse requests while either legacy signing-key variable is present. The admin shell gives localized removal instructions. With the key removed, public streaming URLs carry no access token. |
+| 303 | `ab318c5c` | ci: build macOS arm64 on macos-26 runners (#3154) | N/A | upstream-baseline-catch-up | `docs(status): assess dependency and runner changes through row 304` | Upstream changes macOS artifact, Next pin and PR runner images. Both macOS CI targets are deferred under the supported-platform decision in AGENTS.md. |
+| 304 | `ebcf9fa6` | fix: troubleshooting results without report (#3153) | Port | support-pages | `39127368` | A Next failure before FFmpeg starts now yields a downloadable troubleshooting ZIP when logs.txt, outcome.txt or ffmpeg_stderr.log is present. Three focused archive tests cover each marker, original paths, report compatibility and metadata-only rejection. |
+| 305 | `ba432329` | chore: update next (#3155) | Adapt | upstream-baseline-catch-up (ADR 0135) | `ci(release): integrate row 305 into the combined candidate` | The 12 reviewed patches apply to Next 9133cd28, including upstream NVIDIA probe shutdown and pre-encoder dossiers. Combined CI qualifies four candidate packages and exercises the row 304 archive path. Qualification results and managed adoption are pending under ucu16-next-row305. |

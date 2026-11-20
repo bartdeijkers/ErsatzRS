@@ -27,7 +27,6 @@ use serde::Deserialize;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::host::state::AppState;
-use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::stream;
 use crate::transport::iptv::streaming_specs;
 use crate::transport::iptv::variant::{
@@ -41,8 +40,6 @@ pub struct HlsQuery {
     pub subtitles: Option<bool>,
     #[serde(default)]
     pub mode: Option<String>,
-    #[serde(default)]
-    pub access_token: Option<String>,
 }
 
 /// HLS content type emitted by every playlist response, matching the
@@ -896,7 +893,6 @@ async fn serve_hls_direct_playlist(
     channel_number: &str,
     scheme: &str,
     host: &str,
-    access_token: &AccessToken,
 ) -> Response {
     let active = match stream::load_active_media_path(&state.pool, channel_id, Utc::now()).await {
         Ok(Some(active)) => active,
@@ -921,7 +917,6 @@ async fn serve_hls_direct_playlist(
         stream::extension_for_output_format(output_format),
         index,
         &time_remaining,
-        access_token,
     );
     hls_response(body)
 }
@@ -997,17 +992,16 @@ fn build_hls_direct_playlist(
     extension: &str,
     index: u64,
     time_remaining: &str,
-    access_token: &AccessToken,
 ) -> String {
     let target_duration = hls_direct_target_duration(time_remaining);
     let mut playlist = format!(
         "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:{target_duration}\n#EXT-X-MEDIA-SEQUENCE:{index}\n#EXT-X-DISCONTINUITY\n"
     );
-    let token = access_token.query_amp();
+
     let _ = std::fmt::Write::write_fmt(
         &mut playlist,
         format_args!(
-            "#EXTINF:{time_remaining},\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={index}{token}\n"
+            "#EXTINF:{time_remaining},\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={index}\n"
         ),
     );
     for offset in 1..=HLS_DIRECT_LOOKAHEAD_SEGMENTS {
@@ -1015,7 +1009,7 @@ fn build_hls_direct_playlist(
         let _ = std::fmt::Write::write_fmt(
             &mut playlist,
             format_args!(
-                "#EXTINF:10.00,\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={next_index}{token}\n"
+                "#EXTINF:10.00,\n{scheme}://{host}/iptv/hls-direct/{channel_number}{extension}?index={next_index}\n"
             ),
         );
     }
@@ -1056,21 +1050,9 @@ pub async fn serve_channel_m3u8(
         Ok(channel) => channel,
         Err(response) => return response,
     };
-    let access_token = AccessToken::for_request(
-        query.access_token.clone(),
-        state.iptv_access_token_verifier.is_enabled(),
-    );
     if channel.streaming_engine == ersatzrs_domain::StreamingEngine::Next {
-        return serve_next_channel_m3u8(
-            state,
-            channel_number,
-            headers,
-            &channel,
-            &access_token,
-            query,
-            deadline,
-        )
-        .await;
+        return serve_next_channel_m3u8(state, channel_number, headers, &channel, query, deadline)
+            .await;
     }
     let mut mode = query.mode.clone().unwrap_or_default();
     if mode.is_empty() || mode == "mixed" {
@@ -1078,7 +1060,7 @@ pub async fn serve_channel_m3u8(
             StreamingMode::HttpLiveStreamingDirect => "hls-direct".to_string(),
             StreamingMode::HttpLiveStreamingSegmenter => "segmenter".to_string(),
             StreamingMode::TransportStream | StreamingMode::TransportStreamHybrid => {
-                let target = format!("/iptv/channel/{channel_number}.ts{}", access_token.query());
+                let target = format!("/iptv/channel/{channel_number}.ts");
                 return axum::response::Redirect::temporary(&target).into_response();
             }
         };
@@ -1096,7 +1078,6 @@ pub async fn serve_channel_m3u8(
                 channel_number,
                 headers,
                 &channel,
-                &access_token,
                 output_format,
                 DEFAULT_INITIAL_SEGMENT_COUNT,
                 query.subtitles.unwrap_or(true),
@@ -1110,7 +1091,6 @@ pub async fn serve_channel_m3u8(
                 channel_number,
                 headers,
                 &channel,
-                &access_token,
                 OutputFormat::Hls,
                 MIN_STABLE_INITIAL_SEGMENT_COUNT,
                 query.subtitles.unwrap_or(true),
@@ -1121,18 +1101,10 @@ pub async fn serve_channel_m3u8(
         "hls-direct-raw" => {
             let scheme = request_scheme(headers);
             let host = request_host(headers);
-            serve_hls_direct_playlist(
-                state,
-                channel.id,
-                &channel.number,
-                &scheme,
-                &host,
-                &access_token,
-            )
-            .await
+            serve_hls_direct_playlist(state, channel.id, &channel.number, &scheme, &host).await
         }
         _ => {
-            let target = format!("/iptv/channel/{channel_number}.ts{}", access_token.query());
+            let target = format!("/iptv/channel/{channel_number}.ts");
             axum::response::Redirect::temporary(&target).into_response()
         }
     }
@@ -1143,7 +1115,6 @@ async fn serve_next_channel_m3u8(
     channel_number: &str,
     headers: &HeaderMap,
     channel: &Channel,
-    access_token: &AccessToken,
     query: &HlsQuery,
     deadline: std::time::Instant,
 ) -> Response {
@@ -1158,7 +1129,7 @@ async fn serve_next_channel_m3u8(
             .as_deref()
             .is_none_or(|mode| mode.trim().is_empty() || mode.trim() == "mixed")
     {
-        let target = format!("/iptv/channel/{channel_number}.ts{}", access_token.query());
+        let target = format!("/iptv/channel/{channel_number}.ts");
         return axum::response::Redirect::temporary(&target).into_response();
     }
     return serve_hls_segmenter_playlist(
@@ -1166,7 +1137,6 @@ async fn serve_next_channel_m3u8(
         channel_number,
         headers,
         channel,
-        access_token,
         OutputFormat::Hls,
         MIN_STABLE_INITIAL_SEGMENT_COUNT,
         query.subtitles.unwrap_or(true),
@@ -1182,7 +1152,6 @@ async fn serve_hls_segmenter_playlist(
     channel_number: &str,
     headers: &HeaderMap,
     channel: &Channel,
-    access_token: &AccessToken,
     output_format: OutputFormat,
     min_initial_segment_count: usize,
     subtitles: bool,
@@ -1313,15 +1282,8 @@ async fn serve_hls_segmenter_playlist(
         channel_number,
         spec.as_ref(),
         channel.streaming_engine,
-        access_token,
     );
-    hls_response(with_next_subtitles(
-        body,
-        channel,
-        false,
-        access_token,
-        subtitles,
-    ))
+    hls_response(with_next_subtitles(body, channel, false, subtitles))
 }
 
 /// `GET /iptv/session/{number}/hls.m3u8` — trimmed variant playlist.
@@ -1334,7 +1296,6 @@ async fn serve_hls_segmenter_playlist(
 pub async fn get_session_playlist(
     State(state): State<AppState>,
     Path(channel_number): Path<String>,
-    Query(query): Query<HlsQuery>,
 ) -> Response {
     if channel_number == TRANSCODE_TROUBLESHOOTING_CHANNEL {
         return serve_troubleshooting_hls_file("live.m3u8").await;
@@ -1346,20 +1307,12 @@ pub async fn get_session_playlist(
             return (StatusCode::SERVICE_UNAVAILABLE, "HLS startup is not ready").into_response();
         }
         let admission_status = handle.admission_status();
-        let access_token = AccessToken::for_request(
-            query.access_token,
-            state.iptv_access_token_verifier.is_enabled(),
-        );
         return match handle.trim_playlist().await {
-            Some(playlist) => {
-                hls_response(propagate_playlist_access_token(&playlist, &access_token))
-            }
+            Some(playlist) => hls_response(playlist),
             None if admission_status == HlsAdmissionStatus::AtCapacity => {
                 let startup_timeout = load_segmenter_startup_timeout(&state).await;
                 match wait_for_capacity_playlist(handle, startup_timeout).await {
-                    Some(playlist) => {
-                        hls_response(propagate_playlist_access_token(&playlist, &access_token))
-                    }
+                    Some(playlist) => hls_response(playlist),
                     None => hls_at_capacity_response(),
                 }
             }
@@ -1381,10 +1334,6 @@ pub async fn get_preview_master_playlist(
         Ok(channel) => channel,
         Err(response) => return response,
     };
-    let access_token = AccessToken::for_request(
-        query.access_token,
-        state.iptv_access_token_verifier.is_enabled(),
-    );
     let mut spec = match startup_read(deadline, async {
         streaming_specs::load_spec(&state.pool, channel.id)
             .await
@@ -1465,7 +1414,6 @@ pub async fn get_preview_master_playlist(
         &headers,
         &channel,
         spec.as_ref(),
-        &access_token,
         query.subtitles.unwrap_or(true),
     )
 }
@@ -1474,7 +1422,6 @@ fn preview_master_response(
     headers: &HeaderMap,
     channel: &Channel,
     spec: Option<&streaming_specs::ChannelStreamingSpec>,
-    access_token: &AccessToken,
     subtitles: bool,
 ) -> Response {
     hls_response(with_next_subtitles(
@@ -1484,11 +1431,9 @@ fn preview_master_response(
             &channel.number,
             spec,
             channel.streaming_engine,
-            access_token,
         ),
         channel,
         true,
-        access_token,
         subtitles,
     ))
 }
@@ -1497,7 +1442,6 @@ fn preview_master_response(
 pub async fn get_preview_session_playlist(
     State(state): State<AppState>,
     Path(channel_number): Path<String>,
-    Query(query): Query<HlsQuery>,
 ) -> Response {
     if let Some(handle) = state.preview_hls_sessions.try_get(&channel_number).await {
         handle.touch();
@@ -1505,20 +1449,12 @@ pub async fn get_preview_session_playlist(
             return (StatusCode::SERVICE_UNAVAILABLE, "HLS startup is not ready").into_response();
         }
         let admission_status = handle.admission_status();
-        let access_token = AccessToken::for_request(
-            query.access_token,
-            state.iptv_access_token_verifier.is_enabled(),
-        );
         return match handle.trim_playlist().await {
-            Some(playlist) => {
-                hls_response(propagate_playlist_access_token(&playlist, &access_token))
-            }
+            Some(playlist) => hls_response(playlist),
             None if admission_status == HlsAdmissionStatus::AtCapacity => {
                 let startup_timeout = load_segmenter_startup_timeout(&state).await;
                 match wait_for_capacity_playlist(handle, startup_timeout).await {
-                    Some(playlist) => {
-                        hls_response(propagate_playlist_access_token(&playlist, &access_token))
-                    }
+                    Some(playlist) => hls_response(playlist),
                     None => hls_at_capacity_response(),
                 }
             }
@@ -1550,34 +1486,6 @@ pub async fn get_preview_session_segment(
         &filename,
     )
     .await
-}
-
-pub(super) fn propagate_playlist_access_token(
-    playlist: &str,
-    access_token: &AccessToken,
-) -> String {
-    let query = access_token.query();
-    if query.is_empty() {
-        return playlist.to_owned();
-    }
-    let query_amp = access_token.query_amp();
-
-    let mut result = String::with_capacity(playlist.len() + 128);
-    for line in playlist.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            result.push_str(line);
-        } else {
-            result.push_str(line);
-            result.push_str(if line.contains('?') {
-                &query_amp
-            } else {
-                &query
-            });
-        }
-        result.push('\n');
-    }
-    result
 }
 
 pub async fn get_session_segment(
@@ -2072,15 +1980,7 @@ mod tests {
 
     #[test]
     fn build_hls_direct_playlist_matches_expected_shape() {
-        let playlist = build_hls_direct_playlist(
-            "https",
-            "example.test",
-            "42",
-            ".mp4",
-            7,
-            "91.25",
-            &AccessToken::new(Some("abc123")),
-        );
+        let playlist = build_hls_direct_playlist("https", "example.test", "42", ".mp4", 7, "91.25");
 
         insta::assert_snapshot!("hls_direct_playlist_mp4", playlist);
     }
@@ -2191,7 +2091,7 @@ mod tests {
     #[tokio::test]
     async fn row291_next_wrapper_caps_saved_count_and_uses_configured_startup_budget() {
         use ersatzrs_domain::StreamingEngine;
-        let state = AppState::for_tests(crate::host::state::IptvAccessTokenVerifier::disabled());
+        let state = AppState::for_tests(false);
         sqlx::migrate!("../../migrations")
             .run(&state.pool)
             .await
@@ -2667,18 +2567,6 @@ mod tests {
         assert_eq!(count_playlist_segments(playlist), 2);
     }
 
-    #[test]
-    fn session_playlist_propagates_access_token_to_segments() {
-        let playlist =
-            "#EXTM3U\n#EXTINF:4.000,\nsegment-1.ts\n#EXTINF:4.000,\nsegment-2.ts?part=1\n";
-        let propagated =
-            propagate_playlist_access_token(playlist, &AccessToken::new(Some("preview-token")));
-
-        assert!(propagated.contains("segment-1.ts?access_token=preview-token"));
-        assert!(propagated.contains("segment-2.ts?part=1&access_token=preview-token"));
-        assert!(!propagated.contains("#EXTM3U?"));
-    }
-
     #[tokio::test]
     async fn converted_subtitle_segments_use_webvtt_content_type_and_no_store() {
         let folder = tempfile::tempdir().unwrap();
@@ -2693,11 +2581,6 @@ mod tests {
             "text/vtt; charset=utf-8"
         );
         assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-        let playlist = propagate_playlist_access_token(
-            "#EXTM3U\n#EXTINF:1.0,\nlive000001.vtt\n",
-            &AccessToken::new(Some("synthetic-token")),
-        );
-        assert!(playlist.contains("live000001.vtt?access_token=synthetic-token"));
     }
     async fn assert_next_hybrid_routes(state: &AppState) {
         sqlx::query(r#"UPDATE "Channel" SET "StreamingMode"=5 WHERE "Id"=1"#)
@@ -2708,19 +2591,14 @@ mod tests {
             let query = HlsQuery {
                 subtitles: None,
                 mode,
-                access_token: Some("synthetic-token".into()),
             };
             let response = serve_channel_m3u8(state, "1", &HeaderMap::new(), &query).await;
             assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
-            assert_eq!(
-                response.headers()[header::LOCATION],
-                "/iptv/channel/1.ts?access_token=synthetic-token"
-            );
+            assert_eq!(response.headers()[header::LOCATION], "/iptv/channel/1.ts");
         }
         let explicit = HlsQuery {
             subtitles: None,
             mode: Some("segmenter".into()),
-            access_token: Some("synthetic-token".into()),
         };
         assert_eq!(
             serve_channel_m3u8(state, "1", &HeaderMap::new(), &explicit)
@@ -2731,7 +2609,6 @@ mod tests {
         let legacy = HlsQuery {
             subtitles: None,
             mode: Some("ts-legacy".into()),
-            ..Default::default()
         };
         assert_eq!(
             stream::serve_transport_stream(state, "1", &HeaderMap::new(), &legacy)
@@ -2802,7 +2679,6 @@ mod tests {
             let query = HlsQuery {
                 subtitles: None,
                 mode: Some(mode.into()),
-                access_token: Some("synthetic-token".into()),
             };
             let response = serve_channel_m3u8(state, "1", &HeaderMap::new(), &query).await;
             assert_eq!(response.status(), StatusCode::OK, "cached HLS mode {mode}");
@@ -2810,8 +2686,8 @@ mod tests {
                 .await
                 .unwrap();
             let text = std::str::from_utf8(&body).unwrap();
-            assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
-            assert!(text.contains("/iptv/session/1/live_sub.m3u8?access_token=synthetic-token"));
+            assert!(text.contains("/iptv/session/1/hls.m3u8"));
+            assert!(text.contains("/iptv/session/1/live_sub.m3u8"));
             assert!(!text.contains("/iptv/hls-direct/"));
             assert!(!text.contains("/ffmpeg/concat/"));
             assert!(Arc::ptr_eq(
@@ -2831,15 +2707,9 @@ mod tests {
         );
     }
 
-    async fn assert_cached_next_routes_keep_authentication(state: &AppState) {
+    async fn assert_cached_next_routes_without_tokens(state: &AppState) {
         use axum::{body::Body, http::Request};
         use tower::ServiceExt;
-        let token = jsonwebtoken::encode(
-            &jsonwebtoken::Header::default(),
-            &serde_json::json!({ "exp": ersatzrs_time::Utc::now().timestamp() + 60 }),
-            &jsonwebtoken::EncodingKey::from_secret(b"synthetic-iptv-secret"),
-        )
-        .unwrap();
         let app = crate::host::router::build_streaming_app(state.clone());
         let original_worker = state.hls_sessions.try_get("1").await.unwrap();
         for (suffix, expected) in [
@@ -2856,7 +2726,7 @@ mod tests {
                     .oneshot(
                         Request::builder()
                             .method(method)
-                            .uri(format!("/iptv/channel/1.{suffix}&access_token={token}"))
+                            .uri(format!("/iptv/channel/1.{suffix}"))
                             .body(Body::empty())
                             .unwrap(),
                     )
@@ -2865,13 +2735,12 @@ mod tests {
                 assert_eq!(response.status(), expected, "authorized {method} {suffix}");
             }
         }
-        assert_cached_next_disabled_and_unknown_routes(state, &app, &token, &original_worker).await;
+        assert_cached_next_disabled_and_unknown_routes(state, &app, &original_worker).await;
     }
 
     async fn assert_cached_next_disabled_and_unknown_routes(
         state: &AppState,
         app: &axum::Router,
-        token: &str,
         original_worker: &Arc<dyn HlsSessionHandle>,
     ) {
         use axum::{body::Body, http::Request};
@@ -2890,11 +2759,9 @@ mod tests {
                 let response = app
                     .clone()
                     .oneshot(
-                        Request::get(format!(
-                            "/iptv/channel/{number}.{suffix}&access_token={token}"
-                        ))
-                        .body(Body::empty())
-                        .unwrap(),
+                        Request::get(format!("/iptv/channel/{number}.{suffix}"))
+                            .body(Body::empty())
+                            .unwrap(),
                     )
                     .await
                     .unwrap();
@@ -2926,7 +2793,6 @@ mod tests {
                 &HlsQuery {
                     subtitles: requested,
                     mode: query.mode.clone(),
-                    access_token: query.access_token.clone(),
                 },
             )
             .await;
@@ -2936,7 +2802,7 @@ mod tests {
                 .unwrap();
             let text = std::str::from_utf8(&body).unwrap();
             assert_eq!(text.contains("TYPE=SUBTITLES"), requested == Some(true));
-            assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
+            assert!(text.contains("/iptv/session/1/hls.m3u8"));
             assert!(Arc::ptr_eq(
                 &existing_worker,
                 &state.hls_sessions.try_get("1").await.unwrap()
@@ -2944,44 +2810,35 @@ mod tests {
         }
     }
 
-    async fn assert_disabled_jwt_omits_query_tokens(state: &AppState) {
-        let mut disabled = state.clone();
-        disabled.iptv_access_token_verifier =
-            crate::host::state::IptvAccessTokenVerifier::from_optional_secret(None);
-        for value in ["synthetic-token", "token&mode=ts", "token%20with-space"] {
-            let query = HlsQuery {
-                access_token: Some(value.into()),
-                mode: Some("ts".into()),
-                subtitles: Some(true),
-            };
-            let master = serve_channel_m3u8(&disabled, "1", &HeaderMap::new(), &query).await;
-            assert_eq!(master.status(), StatusCode::OK);
-            let body = axum::body::to_bytes(master.into_body(), 64 * 1024)
-                .await
-                .unwrap();
-            let text = std::str::from_utf8(&body).unwrap();
-            assert!(text.contains("/iptv/session/1/hls.m3u8"));
-            assert!(text.contains("TYPE=SUBTITLES"));
-            assert!(!text.contains("access_token="));
-            let variant =
-                get_session_playlist(State(disabled.clone()), Path("1".into()), Query(query)).await;
-            assert_eq!(variant.status(), StatusCode::OK);
-            let body = axum::body::to_bytes(variant.into_body(), 64 * 1024)
-                .await
-                .unwrap();
-            let text = std::str::from_utf8(&body).unwrap();
-            assert!(text.contains("next-segment.ts"));
-            assert!(!text.contains("access_token="));
-        }
+    async fn assert_hls_urls_omit_tokens(state: &AppState) {
+        let query = HlsQuery {
+            mode: Some("ts".into()),
+            subtitles: Some(true),
+        };
+        let master = serve_channel_m3u8(state, "1", &HeaderMap::new(), &query).await;
+        assert_eq!(master.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(master.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let text = std::str::from_utf8(&body).unwrap();
+        assert!(text.contains("/iptv/session/1/hls.m3u8"));
+        assert!(text.contains("TYPE=SUBTITLES"));
+        assert!(!text.contains("access_token="));
+        let variant = get_session_playlist(State(state.clone()), Path("1".into())).await;
+        assert_eq!(variant.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(variant.into_body(), 64 * 1024)
+            .await
+            .unwrap();
+        let text = std::str::from_utf8(&body).unwrap();
+        assert!(text.contains("next-segment.ts"));
+        assert!(!text.contains("access_token="));
     }
 
     #[tokio::test]
-    async fn next_engine_routes_preserve_hybrid_hls_tokens_and_reject_native_playback() {
+    async fn next_engine_routes_serve_tokenless_hybrid_hls_and_reject_native_playback() {
         use ersatzrs_core::repositories::FfmpegProfileRepository;
         use ersatzrs_domain::{FFmpegProfile, StreamingEngine};
-        let state = AppState::for_tests(crate::host::state::IptvAccessTokenVerifier::enabled(
-            "synthetic-iptv-secret",
-        ));
+        let state = AppState::for_tests(false);
         sqlx::migrate!("../../migrations")
             .run(&state.pool)
             .await
@@ -3023,7 +2880,6 @@ mod tests {
         let query = HlsQuery {
             subtitles: None,
             mode: Some("ts".into()),
-            access_token: Some("synthetic-token".into()),
         };
         let master = serve_channel_m3u8(&state, "1", &HeaderMap::new(), &query).await;
         assert_eq!(master.status(), StatusCode::OK);
@@ -3031,39 +2887,34 @@ mod tests {
             .await
             .unwrap();
         let text = std::str::from_utf8(&body).unwrap();
-        assert!(text.contains("/iptv/session/1/hls.m3u8?access_token=synthetic-token"));
-        assert!(text.contains("/iptv/session/1/live_sub.m3u8?access_token=synthetic-token"));
+        assert!(text.contains("/iptv/session/1/hls.m3u8"));
+        assert!(text.contains("/iptv/session/1/live_sub.m3u8"));
         assert!(text.contains("SUBTITLES=\"subs\""));
-        assert_disabled_jwt_omits_query_tokens(&state).await;
+        assert_hls_urls_omit_tokens(&state).await;
         assert_requested_next_master_rendition(&state, &query).await;
-        let variant =
-            get_session_playlist(State(state.clone()), Path("1".into()), Query(query)).await;
+        let variant = get_session_playlist(State(state.clone()), Path("1".into())).await;
         assert_eq!(variant.status(), StatusCode::OK);
         let body = axum::body::to_bytes(variant.into_body(), 64 * 1024)
             .await
             .unwrap();
         assert!(std::str::from_utf8(&body)
             .unwrap()
-            .contains("next-segment.ts?access_token=synthetic-token"));
+            .contains("next-segment.ts"));
         let redirect = stream::serve_transport_stream(
             &state,
             "1",
             &HeaderMap::new(),
             &HlsQuery {
                 subtitles: None,
-                access_token: Some("synthetic-token".into()),
                 ..Default::default()
             },
         )
         .await;
         assert_eq!(redirect.status(), StatusCode::TEMPORARY_REDIRECT);
-        assert_eq!(
-            redirect.headers()[header::LOCATION],
-            "/iptv/channel/1.m3u8?access_token=synthetic-token"
-        );
+        assert_eq!(redirect.headers()[header::LOCATION], "/iptv/channel/1.m3u8");
         assert_next_hybrid_routes(&state).await;
         assert_cached_next_hls_modes(&state).await;
-        assert_cached_next_routes_keep_authentication(&state).await;
+        assert_cached_next_routes_without_tokens(&state).await;
         assert_next_native_streams_refused(&state).await;
         assert!(worker.touched.load(Ordering::SeqCst) >= 2);
     }

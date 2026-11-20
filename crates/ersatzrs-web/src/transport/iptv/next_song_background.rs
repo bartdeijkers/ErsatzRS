@@ -151,9 +151,7 @@ mod tests {
 
     #[tokio::test]
     async fn song_admission_rejects_forgery_and_stopped_sessions_without_database_access() {
-        let state = crate::host::state::AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::disabled(),
-        );
+        let state = crate::host::state::AppState::for_tests(false);
         let host = &state.next_engine;
         host.media
             .configure("127.0.0.1:8409".parse().unwrap())

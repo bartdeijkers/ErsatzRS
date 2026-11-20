@@ -102,10 +102,4 @@ playlist through `localhost` and then copying it to another device.
 
 ## Protect IPTV endpoints
 
-IPTV access is open when no JWT signing key is configured. Setting
-`JWT__IssuerSigningKey` enables HS256 JWT validation for IPTV routes. Clients
-must then send a bearer token or add `access_token=<jwt>` to the playlist URL;
-ErsatzRS propagates the query token into guide and stream URLs.
-
-The token must contain an `exp` claim. Treat both the signing key and generated
-tokens as secrets. See the [configuration reference](../reference/configuration.md).
+IPTV and HDHomeRun streams are unauthenticated. For remote access, use a VPN or an authenticated reverse proxy. If either `JWT__IssuerSigningKey` or `JWT:IssuerSigningKey` is set, remove it and restart ErsatzRS to enable streaming.

@@ -82,6 +82,12 @@ release section when tagging a release.
 
 ### Changed
 
+- A delivery can use GitHub-hosted runners for both its pull request and its merge to main by marking the PR title and merge commit with `[github-hosted]`.
+
+- Full CI can qualify the next playback worker on all four required targets and verify that troubleshooting downloads preserve an invalid scheduled item when playback fails before FFmpeg starts.
+
+- **BREAKING CHANGE** IPTV and HDHomeRun streams are unauthenticated. Remove the legacy JWT signing key and restart to enable streaming. Use a VPN or authenticated reverse proxy for remote access.
+
 - Pull request CI runs the Teletext 1.5 Rust job and the teletext browser suite
   only when the change touches teletext; playback, Next, shared UI and build
   changes no longer wait about 45 minutes for them. The suites themselves are
@@ -327,6 +333,8 @@ release section when tagging a release.
 
 ### Fixed
 
+- Playback troubleshooting can download logs when Next fails before FFmpeg starts.
+- Native playback skips playout windows shorter than one video frame before starting the encoder. This protects VAAPI playback at clipped filler boundaries.
 - Keep active Next HLS streams playing on Windows by reliably refreshing their
   session heartbeat.
 - Following a link while an admin page is still loading its interactive

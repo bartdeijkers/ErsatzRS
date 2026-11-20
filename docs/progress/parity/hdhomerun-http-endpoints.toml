@@ -4,6 +4,8 @@ rs_target  = '`crates/ersatzrs-web/src/transport/hdhr/http.rs`'
 status     = 'Ported'
 adr        = []
 summary    = '''
+Row 302 retires streaming JWTs. A configured legacy signing key disables IPTV and HDHomeRun until removed. Generated stream and guide URLs omit access tokens.
+
 Ported: `/discover.json`, `/device.xml`, `/lineup_status.json`, and `/lineup.json` expose the HDHomeRun HTTP shape with verbatim C# field names (DeviceID/LineupURL/GuideNumber/...). Device UUID seeded into `ConfigElement` under `hdhr.uuid`; tuner count read from `hdhr.tuner_count`.
 UCU-01 row 2 ports upstream PR #2848's repository-link correction using the
 ErsatzRS repository declared in Cargo.toml. ManufacturerURL is corrected while

@@ -1,0 +1,146 @@
+name: Next candidate packages
+on:
+  workflow_call:
+    inputs:
+      pool:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  package:
+    name: Candidate ${{ matrix.rid }}
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        include:
+          - {rid: linux-x64, target: x86_64-unknown-linux-gnu}
+          - {rid: linux-arm64, target: aarch64-unknown-linux-gnu}
+          - {rid: linux-arm, target: armv7-unknown-linux-gnueabihf}
+          - {rid: win-x64, target: x86_64-pc-windows-msvc}
+    runs-on: ${{ fromJSON(matrix.rid == 'win-x64' && (inputs.pool == 'github-hosted' && '"windows-2022"' || '["self-hosted","ersatzrs-windows-release"]') || (inputs.pool == 'github-hosted' && '"ubuntu-24.04"' || '["self-hosted","ersatzrs-linux-release"]')) }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      RID: ${{ matrix.rid }}
+      WORKER_TARGET: ${{ matrix.target }}
+      REVIEW: scripts/release/next-patches/row305/manifest.json
+      CARGO_BUILD_JOBS: "1"
+    steps:
+      # The packaging steps read only scripts/ and docker/. A full checkout
+      # exceeds the Windows path limit on hosted runners.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            scripts
+            docker
+      # The self-hosted Windows runner cannot install a tool-cache Python
+      # without administrator rights; use its installed Python as release.yml does.
+      - uses: actions/setup-python@v6
+        if: ${{ !(matrix.rid == 'win-x64' && inputs.pool != 'github-hosted') }}
+        with:
+          python-version: '3.12'
+      # Without this, `bash` resolves to the WSL launcher on the self-hosted
+      # Windows runner, as in release-windows-recovery.yml.
+      - name: Prefer Git Bash on Windows
+        if: ${{ matrix.rid == 'win-x64' && inputs.pool != 'github-hosted' }}
+        shell: pwsh
+        run: |
+          "C:\Program Files\Git\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Use installed Python on Windows
+        if: ${{ matrix.rid == 'win-x64' && inputs.pool != 'github-hosted' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import sys; assert sys.version_info >= (3, 12), 'Python 3.12 or newer is required'"
+          if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer on the Windows release runner' }
+          $pythonDirectory = python -c "import os, sys; print(os.path.dirname(sys.executable))"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot locate installed Python' }
+          $pythonDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      # The self-hosted Windows runner has no rustup on its service PATH; set it
+      # up as release.yml does. The build step installs the pinned compiler.
+      - uses: dtolnay/rust-toolchain@1.97.1
+        if: ${{ matrix.rid == 'win-x64' && inputs.pool != 'github-hosted' }}
+      - name: Fetch the pinned source
+        run: |
+          mkdir -p candidate-source candidate-packages
+          url=$(python -c 'import json,os; print(json.load(open(os.environ["REVIEW"]))["source_archive_url"])')
+          curl -fsSL --retry 3 "$url" -o candidate-source/source.tar.gz
+      - name: Install the worker advisory checker
+        if: matrix.rid == 'linux-x64' && inputs.pool == 'github-hosted'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.21.0
+      # install-action waits for a sudo prompt on the self-hosted runner. Build
+      # the pinned checker into a job-local root, leaving the runner's own
+      # cargo-deny for the CI Cargo deny job untouched.
+      - name: Build the worker advisory checker
+        if: matrix.rid == 'linux-x64' && inputs.pool != 'github-hosted'
+        run: |
+          root="$RUNNER_TEMP/candidate-cargo-deny"
+          cargo install cargo-deny --version 0.21.0 --locked --root "$root"
+          echo "$root/bin" >> "$GITHUB_PATH"
+      - name: Audit the new worker lockfile
+        if: matrix.rid == 'linux-x64'
+        run: |
+          python scripts/release/prepare-next-source.py --source-archive candidate-source/source.tar.gz \
+            --output candidate-audit --manifest "$REVIEW"
+          cd candidate-audit
+          cargo deny --locked check advisories
+      - name: Build and execute the Linux worker
+        if: matrix.rid != 'win-x64'
+        run: |
+          compiler=$(python -c 'import json,os; print(json.load(open(os.environ["REVIEW"]))["rust_toolchain"])')
+          docker buildx build -f docker/next-source.Dockerfile --target candidate-export \
+            --build-arg NEXT_TARGET="$WORKER_TARGET" --build-arg NEXT_TOOLCHAIN="$compiler" \
+            --build-arg NEXT_BUILD_JOBS=1 --build-arg NEXT_REVIEW_MANIFEST=row305/manifest.json \
+            --build-context next-source=candidate-source --output type=local,dest=candidate-payload .
+      - name: Build and execute the Windows worker
+        if: matrix.rid == 'win-x64'
+        run: |
+          python scripts/release/prepare-next-source.py --source-archive candidate-source/source.tar.gz \
+            --output candidate-src --manifest "$REVIEW"
+          compiler=$(python -c 'import json,os; print(json.load(open(os.environ["REVIEW"]))["rust_toolchain"])')
+          version=$(python -c 'import json,os; print(json.load(open(os.environ["REVIEW"]))["distribution_version"])')
+          rustup toolchain install "$compiler" --profile minimal
+          mkdir candidate-payload
+          (
+            cd candidate-src
+            ETV_VERSION="$version" cargo +"$compiler" build --locked --release --all-features \
+              --target "$WORKER_TARGET" --bin ersatztv-channel
+            target_dir=$(cargo +"$compiler" metadata --locked --no-deps --format-version 1 | \
+              python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
+            cp "$target_dir/$WORKER_TARGET/release/ersatztv-channel.exe" LICENSE ersatzrs-source.json ../candidate-payload/
+            rustc +"$compiler" --version > ../candidate-payload/rustc-version.txt
+          )
+      - name: Package the worker with its verified companions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ "$RID" == win-x64 || "$RID" == linux-arm64 ]]; then
+            python scripts/release/stage-next.py --rid "$RID" --output candidate-companions
+            python - <<'PY'
+          import json, os, pathlib, shutil
+          manifest = json.loads(pathlib.Path(os.environ["REVIEW"]).read_text())
+          field = "windows_companions_sha256" if os.environ["RID"] == "win-x64" else "linux_arm64_companions_sha256"
+          for name in manifest[field]:
+              shutil.copyfile(pathlib.Path("candidate-companions") / name, pathlib.Path("candidate-payload") / name)
+          PY
+          fi
+          if [[ "$RID" == win-x64 ]]; then
+            version=$(python -c 'import json,os; print(json.load(open(os.environ["REVIEW"]))["distribution_version"])')
+            test "$(candidate-payload/ersatztv-channel.exe --version | tr -d '\r')" = "ersatztv-channel $version"
+            candidate-payload/ersatztv-channel.exe describe | python -c 'import sys,json; assert "ersatzrs.playout-index.v1" in json.load(sys.stdin)["contract"]["playout_layouts"]'
+          fi
+          python scripts/release/package-next-source.py --manifest "$REVIEW" --rid "$RID" \
+            --payload candidate-payload --source-provenance candidate-payload/ersatzrs-source.json \
+            --rustc "$(tr -d '\r' < candidate-payload/rustc-version.txt)" --output candidate-packages
+      - uses: actions/upload-artifact@v7
+        with:
+          name: next-row305-${{ matrix.rid }}
+          path: candidate-packages/
+          if-no-files-found: error
+          retention-days: 14

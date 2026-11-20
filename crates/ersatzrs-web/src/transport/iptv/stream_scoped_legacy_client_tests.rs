@@ -5,7 +5,7 @@ use super::super::teletext_retained_output::runtime_tests::{decode_text, exact_t
 use super::ordinary_wrapper_tests as checks;
 use crate::host::{
     router::{build_app, build_internal_app},
-    state::{AppState, IptvAccessTokenVerifier, SystemStartup},
+    state::{AppState, SystemStartup},
     teletext_effective_generations::reload_accepted_effective_teletext_generation,
     teletext_runtime_policy::parse_native_teletext_runtime_policy,
 };
@@ -362,7 +362,7 @@ async fn open(directory: &Path, handoff: &Handoff) -> io::Result<(AppState, Vec<
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         2,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         sender,
         ersatzrs_core::locking::EntityLocker::new(),
     );

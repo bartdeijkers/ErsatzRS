@@ -143,7 +143,7 @@ async fn capture(
 }
 
 fn app_state(fixture: &Fixture) -> crate::host::state::AppState {
-    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::{AppState, SystemStartup};
     use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus};
     let (tx, _rx) = tokio::sync::mpsc::unbounded_channel();
     let mut state = AppState::new(
@@ -156,7 +156,7 @@ fn app_state(fixture: &Fixture) -> crate::host::state::AppState {
         FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         1,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         tx,
         ersatzrs_core::locking::EntityLocker::default(),
     );

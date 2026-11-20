@@ -78,9 +78,7 @@ impl Fixture {
             })
             .await
             .unwrap();
-        let mut state = crate::host::state::AppState::for_tests(
-            crate::host::state::IptvAccessTokenVerifier::disabled(),
-        );
+        let mut state = crate::host::state::AppState::for_tests(false);
         state.pool = pool.clone();
         state.next_engine = Arc::new(NextHost::new(
             pool,

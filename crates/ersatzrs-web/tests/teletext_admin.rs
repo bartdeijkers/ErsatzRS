@@ -26,7 +26,7 @@ use ersatzrs_web::{
     },
     host::{
         router::build_app,
-        state::{AppState, IptvAccessTokenVerifier, SystemStartup},
+        state::{AppState, SystemStartup},
     },
 };
 
@@ -86,7 +86,7 @@ impl Fixture {
             FfmpegRuntimeReport::for_tests(),
             Uuid::nil(),
             2,
-            IptvAccessTokenVerifier::disabled(),
+            false,
             sender,
             ersatzrs_core::locking::EntityLocker::default(),
         );

@@ -137,7 +137,7 @@ fn programme_reconciliation_keeps_clock_cells_until_their_own_boundary() {
 }
 
 async fn application() -> crate::host::state::AppState {
-    use crate::host::state::{AppState, IptvAccessTokenVerifier, SystemStartup};
+    use crate::host::state::{AppState, SystemStartup};
     use ersatzrs_core::locking::EntityLocker;
     use ersatzrs_infra::db::{DatabaseBackend, DatabaseSchemaStatus};
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -157,7 +157,7 @@ async fn application() -> crate::host::state::AppState {
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         2,
-        IptvAccessTokenVerifier::disabled(),
+        false,
         sender,
         EntityLocker::new(),
     )

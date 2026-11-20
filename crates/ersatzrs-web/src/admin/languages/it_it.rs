@@ -2740,7 +2740,7 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         }
         TextKey::Troubleshooting => "Risoluzione problemi",
         TextKey::TunerCount => "Numero di sintonizzatori",
-        TextKey::HdhrDisabledByJwt => "Gli endpoint HDHomeRun sono disabilitati perché la protezione JWT per IPTV è attiva. Queste impostazioni non hanno effetto.",
+        TextKey::HdhrDisabledByJwt => "Rimuovi JWT__IssuerSigningKey / JWT:IssuerSigningKey e riavvia ErsatzRS per attivare IPTV e HDHomeRun. I flussi sono accessibili senza autenticazione. Per l’accesso remoto usa una VPN o un proxy inverso con autenticazione.",
         TextKey::TvShows => "Programmi TV",
         TextKey::Ui => "Interfaccia utente",
         TextKey::UnavailableLocalMediaMessage => "{count} elementi non sono disponibili perché ErsatzRS non riesce a trovarli sul disco, tra cui: {items}",

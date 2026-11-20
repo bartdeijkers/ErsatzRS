@@ -2738,7 +2738,7 @@ mod legacy_sql_regressions {
                 ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
                 uuid::Uuid::nil(),
                 1,
-                crate::host::state::IptvAccessTokenVerifier::disabled(),
+                false,
                 playout_build_tx,
                 ersatzrs_core::locking::EntityLocker::default(),
             );

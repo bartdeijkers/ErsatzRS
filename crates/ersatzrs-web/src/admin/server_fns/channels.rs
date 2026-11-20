@@ -694,24 +694,14 @@ pub async fn get_epg_preview_data() -> Result<EpgPreviewData, ServerFnError> {
 /// Returns an on-demand segmenter URL for a streamable channel.
 #[server(prefix = "/admin-api")]
 pub async fn get_channel_preview_url(id: i64) -> Result<String, ServerFnError> {
-    use crate::host::state::AppState;
-    use crate::transport::iptv::access_token::AccessToken;
-
     let watch = get_channel_watch_data(id).await?;
     if !watch.availability.can_play() {
         return Err(ServerFnError::new("Channel is not currently streamable"));
     }
 
-    let state = expect_context::<AppState>();
-    let token = state
-        .iptv_access_token_verifier
-        .issue_preview_token(&watch.number)
-        .map_err(|_| ServerFnError::new("Unable to authorize channel preview"))?;
-    let access_token = AccessToken::new(token);
     Ok(format!(
-        "/iptv/preview/{}/master.m3u8{}",
-        urlencoding::encode(&watch.number),
-        access_token.query()
+        "/iptv/preview/{}/master.m3u8",
+        urlencoding::encode(&watch.number)
     ))
 }
 
@@ -992,7 +982,7 @@ mod tests {
             ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
             uuid::Uuid::nil(),
             1,
-            crate::host::state::IptvAccessTokenVerifier::disabled(),
+            false,
             playout_build_tx,
             ersatzrs_core::locking::EntityLocker::default(),
         );

@@ -57,7 +57,7 @@ pub async fn refresh_health(State(state): State<AppState>) -> axum::response::Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::host::{artwork_cleanup::TokioArtworkCleanupQueue, state::IptvAccessTokenVerifier};
+    use crate::host::artwork_cleanup::TokioArtworkCleanupQueue;
     use axum::{body::Body, http::Request, routing::post, Router};
     use std::sync::Arc;
     use tower::ServiceExt;
@@ -83,7 +83,7 @@ mod tests {
         .await
         .unwrap();
         let (queue, receiver) = TokioArtworkCleanupQueue::channel();
-        let mut state = AppState::for_tests(IptvAccessTokenVerifier::from_optional_secret(None));
+        let mut state = AppState::for_tests(false);
         state.artwork_cleanup = Arc::new(queue);
         let app = Router::new()
             .route("/api/maintenance/clean_artwork", post(clean_artwork))
@@ -144,7 +144,7 @@ mod tests {
     #[tokio::test]
     async fn artwork_cleanup_route_preserves_limits_and_rejects_invalid_input() {
         let (queue, mut receiver) = TokioArtworkCleanupQueue::channel();
-        let mut state = AppState::for_tests(IptvAccessTokenVerifier::from_optional_secret(None));
+        let mut state = AppState::for_tests(false);
         state.artwork_cleanup = Arc::new(queue);
         let app = Router::new()
             .route("/api/maintenance/clean_artwork", post(clean_artwork))

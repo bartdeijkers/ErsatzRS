@@ -543,3 +543,31 @@ description = 'Remove unmaintained chrono from the application dependency graph 
 discovered = '2026-11-17'
 evidence = 'ADR 0138 is implemented at source50403405. The locked all-feature/all-target graph has no chrono dependency and Cargo deny passes unchanged. Compatibility, database reopen, Classic continuity, packaged add-on source, matched headed browsers, Native/Next smoke and 93/86 transport controls pass in the recorded local scope. Milestone ucu-16-continuation retains the exact evidence and the required integrated CI and ordered delivery.'
 resolved = true
+
+[[debt]]
+id = 'ucu16-next-row305'
+adr = '0135'
+discovered = '2026-11-18'
+resolved = false
+description = 'Qualify a managed Next worker for ErsatzTV row 305. The current worker can exit before FFmpeg starts without writing the troubleshooting dossier, and lacks the updated NVIDIA startup probe.'
+evidence = '''
+ErsatzTV ba432329 moves the Next pin from 614dc9be to 9133cd28.
+Next 6f33f247 moves NVIDIA probe teardown off the startup path and waits for it
+at process exit. Commit 82dd16cd changes only the deferred macOS CI runners.
+Commit 9133cd28 preserves invalid scheduled item JSON in playout_item.json and
+writes a dossier on troubleshooting errors before FFmpeg starts. Row 304
+accepts existing logs or an outcome and includes JSON files in the ZIP.
+
+Candidate 0.2.7-9133cd28-ersatzrs.candidate.1 is reproducible from the pinned
+source archive using scripts/release/next-patches/row305/manifest.json. The 12
+patches reproduce the reviewed source and Cargo.lock. Upstream includes the
+dependency fixes previously carried by patch 0003. Four retained patches were
+rebased, including the XMLTV regressions. Cargo resolves the locked worker
+graph for all four required targets.
+
+The combined CI run must build and exercise the four packages, run the Linux
+worker regressions and playback, and archive the real invalid-item dossier
+with its original JSON and outcome. NVIDIA hardware execution retains its
+existing hardware prerequisite. Managed promotion under ADR 0135 requires
+qualified package identities and remains open. Production still uses 6c9e0cf7.
+'''

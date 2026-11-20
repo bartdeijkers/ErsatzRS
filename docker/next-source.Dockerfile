@@ -8,8 +8,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc-aarch64-linux-gnu libc6-dev-arm64-cross \
     && rm -rf /var/lib/apt/lists/*
 ARG NEXT_TARGET=x86_64-unknown-linux-gnu
+ARG NEXT_TOOLCHAIN=1.97.1
+ARG NEXT_BUILD_JOBS=4
 RUN case "$NEXT_TARGET" in x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu|armv7-unknown-linux-gnueabihf) ;; *) exit 1 ;; esac \
-    && rustup target add "$NEXT_TARGET"
+    && rustup toolchain install "$NEXT_TOOLCHAIN" --profile minimal \
+    && rustup target add --toolchain "$NEXT_TOOLCHAIN" "$NEXT_TARGET"
 COPY scripts/release/prepare-next-source.py /build-tools/
 COPY scripts/release/next-patches/ /build-tools/next-patches/
 # Named context contains the reviewed upstream source archive. Its checksum
@@ -20,7 +23,7 @@ RUN python3 /build-tools/prepare-next-source.py \
     --source-archive /inputs/source.tar.gz --output /build/next-source \
     --manifest "/build-tools/next-patches/$NEXT_REVIEW_MANIFEST"
 WORKDIR /build/next-source
-ENV CARGO_BUILD_JOBS=4
+ENV CARGO_BUILD_JOBS=$NEXT_BUILD_JOBS
 ENV CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \
     CC_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-gcc \
     AR_armv7_unknown_linux_gnueabihf=arm-linux-gnueabihf-ar \
@@ -31,7 +34,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/build/next-source/target \
     ETV_VERSION=$(python3 -c 'import json; print(json.load(open("ersatzrs-source.json"))["distribution_version"])') \
-    cargo +1.97.1 build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel \
+    cargo +"$NEXT_TOOLCHAIN" build --locked --release --all-features --target "$NEXT_TARGET" --bin ersatztv-channel \
     && python3 -c 'import hashlib,json; assert hashlib.sha256(open("Cargo.lock","rb").read()).hexdigest() == json.load(open("ersatzrs-source.json"))["cargo_lock_sha256"]' \
     && mkdir /next \
     && cp "target/$NEXT_TARGET/release/ersatztv-channel" LICENSE ersatzrs-source.json /next/ \
@@ -41,6 +44,27 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
          *) strip /next/ersatztv-channel ;; \
        esac \
     && python3 -c 'import re,subprocess; data=subprocess.check_output(["readelf","--version-info","/next/ersatztv-channel"],text=True); versions={tuple(map(int,v.split("."))) for v in re.findall(r"GLIBC_([0-9.]+)",data)}; assert versions and max(versions) <= (2,36), "Next exceeds GLIBC 2.36"' \
-    && rustc +1.97.1 --version > /next/rustc-version.txt
+    && rustc +"$NEXT_TOOLCHAIN" --version > /next/rustc-version.txt
+FROM build AS candidate-check
+# Run the worker's own regressions once on native Linux before exporting its package.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/build/next-source/target \
+    if [ "$NEXT_TARGET" = x86_64-unknown-linux-gnu ]; then \
+      ETV_VERSION=$(python3 -c 'import json; print(json.load(open("ersatzrs-source.json"))["distribution_version"])') \
+      cargo +"$NEXT_TOOLCHAIN" test --locked --release --all-features --workspace --target "$NEXT_TARGET"; \
+    fi
+RUN apt-get update && apt-get install -y --no-install-recommends qemu-user && rm -rf /var/lib/apt/lists/*
+RUN set -eu; case "$NEXT_TARGET" in \
+      armv7-*) set -- qemu-arm -L /usr/arm-linux-gnueabihf ;; \
+      aarch64-*) set -- qemu-aarch64 -L /usr/aarch64-linux-gnu ;; \
+      *) set -- ;; \
+    esac; \
+    version=$(python3 -c 'import json; print(json.load(open("/next/ersatzrs-source.json"))["distribution_version"])'); \
+    test "$("$@" /next/ersatztv-channel --version)" = "ersatztv-channel $version"; \
+    "$@" /next/ersatztv-channel describe | python3 -c 'import json,sys; assert "ersatzrs.playout-index.v1" in json.load(sys.stdin)["contract"]["playout_layouts"]'
+FROM scratch AS candidate-export
+COPY --from=candidate-check /next/ /
+
 FROM scratch AS export
 COPY --from=build /next/ /

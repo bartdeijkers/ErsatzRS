@@ -582,6 +582,21 @@ impl HlsSessionWorker {
         self.set_startup_readiness(HlsStartupReadiness::Pending { deadline });
     }
 
+    fn classify_startup(&self, classified: &mut bool, retained: Option<bool>) {
+        if *classified || retained.is_none() {
+            return;
+        }
+        *classified = true;
+        if retained == Some(false)
+            && matches!(
+                self.startup_readiness(),
+                HlsStartupReadiness::Pending { .. }
+            )
+        {
+            self.set_startup_readiness(HlsStartupReadiness::Legacy);
+        }
+    }
+
     fn set_startup_readiness(&self, next: HlsStartupReadiness) {
         if let Ok(mut state) = self.startup.lock() {
             if matches!(*state, HlsStartupReadiness::Failed) {
@@ -857,7 +872,7 @@ impl HlsSessionWorker {
         let mut cleanup_interval = tokio::time::interval(SEGMENT_CLEANUP_INTERVAL);
         cleanup_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
         self.set_admission_status(HlsAdmissionStatus::Waiting);
-        loop {
+        'playout: loop {
             if let Some(timeout) = idle_timeout {
                 if self.idle_for_duration() >= timeout {
                     break;
@@ -878,31 +893,6 @@ impl HlsSessionWorker {
                 hls_transcode_request_time(transcode_state, transcoded_until, now);
             if matches!(self.startup_readiness(), HlsStartupReadiness::Failed) {
                 break;
-            }
-            if !startup_classified
-                && matches!(
-                    self.startup_readiness(),
-                    HlsStartupReadiness::Pending { .. }
-                )
-            {
-                match self
-                    .startup_read(external::retained(
-                        &pool,
-                        self.channel_id,
-                        &self.path_replacements,
-                        transcode_cursor,
-                    ))
-                    .await
-                {
-                    Ok(Some(retained)) => {
-                        startup_classified = true;
-                        if !retained {
-                            self.set_startup_readiness(HlsStartupReadiness::Legacy);
-                        }
-                    }
-                    Ok(None) => {}
-                    Err(_) => break,
-                }
             }
             let live_remote_stream = match self
                 .startup_read(current_remote_stream_is_live(
@@ -1003,7 +993,7 @@ impl HlsSessionWorker {
             let Some(active_transcode_reservation) = active_transcode_reservation else {
                 // Frozen interval startup includes admission wait, but never
                 // starts a resolver or capacity-slate encoder without capacity.
-                let retained_wait = self
+                let retained = match self
                     .startup_read(external::retained(
                         &pool,
                         self.channel_id,
@@ -1011,9 +1001,13 @@ impl HlsSessionWorker {
                         transcode_cursor,
                     ))
                     .await
-                    .ok()
-                    .flatten()
-                    .unwrap_or(false);
+                {
+                    Ok(retained) => retained,
+                    Err(error) => {
+                        tracing::warn!(%error, channel_id = self.channel_id, "HLS admission lookup failed");
+                        break;
+                    }
+                };
                 if let Some(reclaim) = request_active_transcode_reclaim(
                     &self.channel_number,
                     HLS_ACTIVE_WATCH_WINDOW,
@@ -1029,7 +1023,13 @@ impl HlsSessionWorker {
                     );
                     reclaim.notify.notify_one();
                 }
-                if retained_wait {
+                if retained == Some(true)
+                    || (retained.is_none()
+                        && matches!(
+                            self.startup_readiness(),
+                            HlsStartupReadiness::Pending { .. }
+                        ))
+                {
                     self.set_admission_status(HlsAdmissionStatus::AtCapacity);
                     let deadline = startup_started_at + Duration::from_secs(20);
                     if tokio::time::Instant::now() >= deadline {
@@ -1043,6 +1043,7 @@ impl HlsSessionWorker {
                         () = tokio::time::sleep(HLS_ADMISSION_RETRY_INTERVAL) => continue,
                     }
                 }
+                self.classify_startup(&mut startup_classified, retained);
                 self.set_admission_status(HlsAdmissionStatus::AtCapacity);
                 self.set_session_state(self.session_state().throttle());
                 let _ = self.trim_playlist_inner().await;
@@ -1392,6 +1393,13 @@ impl HlsSessionWorker {
                         continue;
                     }
                 };
+            let Ok(target_frame_rate) = self
+                .startup_read(self.load_target_frame_rate(&pool, "hls worker"))
+                .await
+            else {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            };
             let mut interval_playback =
                 if let Some(crate::remote_stream::RemoteStreamSource::RetainedIntervals(source)) =
                     active.remote_stream.as_ref().map(|stream| &stream.source)
@@ -1569,16 +1577,6 @@ impl HlsSessionWorker {
                     ) => enriched,
                 }
             };
-            let Ok(target_frame_rate) = self
-                .startup_read(self.load_target_frame_rate(&pool, "hls worker"))
-                .await
-            else {
-                if let Some(playback) = interval_playback.take() {
-                    let _ = playback.prepared.cancel().await;
-                }
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                continue;
-            };
             let language_preferences = match self
                 .startup_read(playback_language_preferences(&pool))
                 .await
@@ -1669,6 +1667,40 @@ impl HlsSessionWorker {
                 .as_ref()
                 .and_then(|playback| playback.source_video.clone())
                 .or(source_stream);
+            let output_rate = target_frame_rate
+                .filter(|_| playback_profile.profile.normalize_framerate)
+                .or_else(|| source_stream.as_ref().and_then(|stream| stream.frame_rate));
+            if let Some(finish) = sub_frame_finish(
+                &active,
+                decision.request_time,
+                decision.start_at_zero,
+                output_rate,
+            ) {
+                for producer in [
+                    interval_playback.take().map(|playback| playback.prepared),
+                    live_playback.take().map(|playback| playback.prepared),
+                ]
+                .into_iter()
+                .flatten()
+                {
+                    if producer.cancel().await.is_err() {
+                        active_transcode_reservation.retain_until_restart();
+                        break 'playout;
+                    }
+                }
+                transcoded_until = finish;
+                self.report_transcoded_until(finish);
+                self.set_session_state(next_hls_session_state(
+                    decision.state,
+                    true,
+                    has_slug
+                        && last_playout_item_id
+                            == Some((active.playout_item_id, active.playout_start)),
+                ));
+                interval_startup = None;
+                continue;
+            }
+            self.classify_startup(&mut startup_classified, Some(interval_playback.is_some()));
             let source_audio_streams = live_playback
                 .as_ref()
                 .filter(|playback| playback.probe.is_some())
@@ -5444,6 +5476,20 @@ fn remaining_item_duration(
         request_time.max(active.playout_start)
     };
     (finish - effective_start).to_std().ok()
+}
+
+fn sub_frame_finish(
+    active: &ActiveHlsItem,
+    cursor: DateTime<Utc>,
+    start_at_zero: bool,
+    output_rate: Option<FrameRate>,
+) -> Option<DateTime<Utc>> {
+    let window = remaining_item_duration(active, cursor, start_at_zero)?;
+    if output_rate?.is_sub_frame(window) {
+        active.playout_finish.filter(|finish| *finish > cursor)
+    } else {
+        None
+    }
 }
 
 fn hls_playout_item_duration(
@@ -9466,6 +9512,66 @@ mod tests {
             .store(second_slot.slot_id(), Ordering::Release);
         assert!(worker.take_reclaim_request(second_slot.slot_id()));
         assert_eq!(worker.reclaim_requested_slot_id.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn sub_frame_startup_classifies_the_first_confirmed_successor() {
+        for retained in [true, false] {
+            let worker = HlsSessionWorker::new_with_options(
+                "42".into(),
+                1,
+                HlsSessionOptions::standard("42", std::env::temp_dir().join("synthetic-hls")),
+                OutputFormat::Hls,
+                Vec::new(),
+                test_ffmpeg_runtime(FfmpegCapabilityReport::default()),
+            );
+            let deadline = std::time::Instant::now() + Duration::from_secs(20);
+            worker.initialize_startup(deadline, 3);
+            let pending = HlsStartupReadiness::Pending { deadline };
+            let mut classified = false;
+            worker.classify_startup(&mut classified, None);
+            assert!(!classified);
+            assert_eq!(worker.startup_readiness(), pending);
+            worker.classify_startup(&mut classified, Some(retained));
+            worker.classify_startup(&mut classified, Some(!retained));
+            assert!(classified);
+            assert_eq!(
+                worker.startup_readiness(),
+                if retained {
+                    pending
+                } else {
+                    HlsStartupReadiness::Legacy
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn sub_frame_finish_advances_to_the_next_item_only_for_short_windows() {
+        let start = Utc::now();
+        let finish = start + ersatzrs_time::Duration::milliseconds(100);
+        let active = active_hls_item_for_window(start, finish);
+        for (rate, short, complete) in [
+            (FrameRate::DEFAULT, 33, 34),
+            (FrameRate::new(25, 1), 39, 40),
+        ] {
+            let cursor = finish - ersatzrs_time::Duration::milliseconds(short);
+            assert_eq!(
+                sub_frame_finish(&active, cursor, false, Some(rate)),
+                Some(finish)
+            );
+            assert_eq!(sub_frame_finish(&active, cursor, true, Some(rate)), None);
+            assert_eq!(sub_frame_finish(&active, cursor, false, None), None);
+            assert_eq!(
+                sub_frame_finish(
+                    &active,
+                    finish - ersatzrs_time::Duration::milliseconds(complete),
+                    false,
+                    Some(rate)
+                ),
+                None
+            );
+        }
     }
 
     #[test]

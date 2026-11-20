@@ -1,0 +1,103 @@
+--- a/crates/libmpp-sys/src/probe.rs
++++ b/crates/libmpp-sys/src/probe.rs
+@@ -1,4 +1,6 @@
+ use libloading::Library;
++use std::ffi::c_void;
++use std::ptr;
+ 
+ pub const MPP_OK: i32 = 0;
+ 
+@@ -13,22 +15,58 @@
+ pub struct MppLib {
+     _lib: Library,
+     mpp_check_support_format: unsafe extern "C" fn(ctx_type: i32, coding: i32) -> i32,
++    mpp_create: unsafe extern "C" fn(*mut *mut c_void, *mut *mut c_void) -> i32,
++    mpp_init: unsafe extern "C" fn(*mut c_void, i32, i32) -> i32,
++    mpp_destroy: unsafe extern "C" fn(*mut c_void) -> i32,
+ }
+ 
+ impl MppLib {
+-    pub fn load() -> Result<Self, libloading::Error> {
+-        let name = "librockchip_mpp.so.1";
++    pub fn load() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
++        // ADR 0128: only the verified companion beside this packaged worker.
++        // A bare library name could silently select an unpinned system MPP.
++        let executable = std::env::current_exe()?;
++        let directory = executable
++            .parent()
++            .ok_or_else(|| std::io::Error::other("Next executable has no package directory"))?;
++        let name = directory.join("librockchip_mpp.so.1");
++        if !std::fs::symlink_metadata(&name)?.file_type().is_file() {
++            return Err(std::io::Error::other("MPP companion must be a regular file").into());
++        }
+         unsafe {
+             let lib = Library::new(name)?;
+             let mpp_check_support_format = *lib.get(b"mpp_check_support_format\0")?;
++            let mpp_create = *lib.get(b"mpp_create\0")?;
++            let mpp_init = *lib.get(b"mpp_init\0")?;
++            let mpp_destroy = *lib.get(b"mpp_destroy\0")?;
+             Ok(Self {
+                 _lib: lib,
+                 mpp_check_support_format,
++                mpp_create,
++                mpp_init,
++                mpp_destroy,
+             })
+         }
+     }
+ 
+     pub fn is_supported(&self, ctx_type: i32, coding: i32) -> bool {
+-        unsafe { (self.mpp_check_support_format)(ctx_type, coding) == MPP_OK }
++        // Compiled codec support alone does not establish driver readiness.
++        // Initialize an owned context for each capability, then always release
++        // it before returning. The worker supervisor bounds a stalled driver.
++        unsafe {
++            if (self.mpp_check_support_format)(ctx_type, coding) != MPP_OK {
++                return false;
++            }
++            let mut context = ptr::null_mut();
++            let mut api = ptr::null_mut();
++            let created = (self.mpp_create)(&mut context, &mut api);
++            if context.is_null() {
++                return false;
++            }
++            let ready = created == MPP_OK
++                && !api.is_null()
++                && (self.mpp_init)(context, ctx_type, coding) == MPP_OK;
++            let released = (self.mpp_destroy)(context);
++            ready && released == MPP_OK
++        }
+     }
+ }
+--- /dev/null
++++ b/crates/libmpp-sys/tests/private_companion.rs
+@@ -0,0 +1,29 @@
++//! Software-only companion/fallback checks; these never qualify Rockchip hardware.
++#![cfg(all(target_os = "linux", target_arch = "aarch64"))]
++
++use libmpp_sys::probe::*;
++
++#[test]
++#[ignore = "requires the reviewed private MPP companion and no Rockchip drivers"]
++fn bundled_mpp_without_drivers_advertises_no_hardware() {
++    let library = MppLib::load().expect("reviewed regular companion beside test executable");
++    for context in [MPP_CTX_DEC, MPP_CTX_ENC] {
++        for codec in [
++            MPP_VIDEO_CodingAVC,
++            MPP_VIDEO_CodingHEVC,
++            MPP_VIDEO_CodingVP8,
++            MPP_VIDEO_CodingVP9,
++        ] {
++            assert!(
++                !library.is_supported(context, codec),
++                "compiled codec enumeration must not imply driver readiness: {context}/{codec}"
++            );
++        }
++    }
++}
++
++#[test]
++#[ignore = "requires a missing or symlinked private companion and a library on the system search path"]
++fn missing_or_symlinked_private_companion_never_uses_system_mpp() {
++    assert!(MppLib::load().is_err());
++}

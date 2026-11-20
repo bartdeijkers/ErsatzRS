@@ -227,15 +227,14 @@ impl TeletextOutputAdmission {
 mod tests {
     use super::*;
     use crate::host::{
-        state::{AppState, IptvAccessTokenVerifier},
-        teletext_runtime_policy::parse_native_teletext_runtime_policy,
+        state::AppState, teletext_runtime_policy::parse_native_teletext_runtime_policy,
     };
     use crate::transport::iptv::teletext_live_output::TeletextAcceptedUpdatePolicy;
     use ersatzrs_ffmpeg::{build_mpegts_concat_command, OutputMetadata};
     use std::time::Duration;
 
     fn absent_intent() -> Arc<TeletextLiveOutputIntent> {
-        let state = AppState::for_tests(IptvAccessTokenVerifier::disabled());
+        let state = AppState::for_tests(false);
         let policy = parse_native_teletext_runtime_policy(include_str!(
             "../../../tests/fixtures/teletext-output-policy-v1.json"
         ))

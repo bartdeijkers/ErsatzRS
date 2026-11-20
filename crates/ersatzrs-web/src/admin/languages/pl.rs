@@ -3453,7 +3453,7 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         }
         TextKey::Troubleshooting => "Rozwiązywanie problemów",
         TextKey::TunerCount => "Liczba tunerów",
-        TextKey::HdhrDisabledByJwt => "Punkty końcowe HDHomeRun są wyłączone, ponieważ ochrona JWT dla IPTV jest włączona. Te ustawienia nie mają wpływu.",
+        TextKey::HdhrDisabledByJwt => "Usuń JWT__IssuerSigningKey / JWT:IssuerSigningKey i uruchom ponownie ErsatzRS, aby włączyć IPTV i HDHomeRun. Strumienie są dostępne bez uwierzytelniania. Do dostępu zdalnego użyj sieci VPN lub odwrotnego serwera proxy z uwierzytelnianiem.",
         TextKey::TvShows => "Seriale",
         TextKey::Ui => "Interfejs",
         TextKey::UnavailableLocalMediaMessage => "{count} elementów jest niedostępnych, ponieważ ErsatzRS nie może ich znaleźć na dysku, w tym: {items}",

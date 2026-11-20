@@ -129,7 +129,7 @@ fn state_for_pool(pool: DbPool) -> AppState {
         ersatzrs_ffmpeg::FfmpegRuntimeReport::for_tests(),
         uuid::Uuid::nil(),
         2,
-        crate::host::state::IptvAccessTokenVerifier::disabled(),
+        false,
         sender,
         ersatzrs_core::locking::EntityLocker::default(),
     )

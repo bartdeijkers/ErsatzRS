@@ -2,7 +2,6 @@ use std::fmt::Write as _;
 
 use ersatzrs_domain::{FFmpegProfileAudioFormat, FFmpegProfileVideoFormat, StreamingEngine};
 
-use crate::transport::iptv::access_token::AccessToken;
 use crate::transport::iptv::streaming_specs::ChannelStreamingSpec;
 
 /// Builds the HLS multi-variant playlist for a single channel.
@@ -17,12 +16,8 @@ pub fn build_multi_variant_playlist(
     channel_number: &str,
     spec: Option<&ChannelStreamingSpec>,
     engine: StreamingEngine,
-    access_token: &AccessToken,
 ) -> String {
-    let variant_url = format!(
-        "{scheme}://{host}/iptv/session/{channel_number}/hls.m3u8{}",
-        access_token.query()
-    );
+    let variant_url = format!("{scheme}://{host}/iptv/session/{channel_number}/hls.m3u8");
     build_variant_playlist(&variant_url, spec, engine)
 }
 
@@ -34,12 +29,8 @@ pub fn build_preview_variant_playlist(
     channel_number: &str,
     spec: Option<&ChannelStreamingSpec>,
     engine: StreamingEngine,
-    access_token: &AccessToken,
 ) -> String {
-    let variant_url = format!(
-        "{scheme}://{host}/iptv/preview/{channel_number}/hls.m3u8{}",
-        access_token.query()
-    );
+    let variant_url = format!("{scheme}://{host}/iptv/preview/{channel_number}/hls.m3u8");
     build_variant_playlist(&variant_url, spec, engine)
 }
 
@@ -83,7 +74,6 @@ pub(crate) fn with_next_subtitles(
     playlist: String,
     channel: &ersatzrs_domain::Channel,
     preview: bool,
-    access_token: &AccessToken,
     requested: bool,
 ) -> String {
     use ersatzrs_domain::{NextEngineTextSubtitleMode, StreamingEngine};
@@ -94,11 +84,7 @@ pub(crate) fn with_next_subtitles(
         return playlist;
     }
     let scope = if preview { "preview" } else { "session" };
-    let url = format!(
-        "/iptv/{scope}/{}/live_sub.m3u8{}",
-        channel.number,
-        access_token.query()
-    );
+    let url = format!("/iptv/{scope}/{}/live_sub.m3u8", channel.number);
     let media = format!(
         "#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Selected subtitles\",DEFAULT=NO,AUTOSELECT=YES,FORCED=NO,URI=\"{url}\"\n"
     );
@@ -163,7 +149,6 @@ mod tests {
                 "1",
                 Some(&spec),
                 StreamingEngine::Next,
-                &AccessToken::default(),
             );
             assert!(!playlist.contains("RESOLUTION="));
             assert!(!playlist.contains("CODECS="));
@@ -179,7 +164,6 @@ mod tests {
                 "1",
                 Some(&spec),
                 StreamingEngine::Legacy,
-                &AccessToken::default(),
             );
             assert!(
                 native.contains("RESOLUTION=1920x1080"),
@@ -218,42 +202,38 @@ mod tests {
             preferred_subtitle_language_code: Some("nld".into()),
             ..Default::default()
         };
-        let token = AccessToken::new(Some("synthetic-token"));
         let master = build_multi_variant_playlist(
             "http",
             "example.test",
             "42",
             None,
             StreamingEngine::Legacy,
-            &token,
         );
         for (preview, scope) in [(false, "session"), (true, "preview")] {
-            let converted = with_next_subtitles(master.clone(), &channel, preview, &token, true);
+            let converted = with_next_subtitles(master.clone(), &channel, preview, true);
             assert!(converted.contains("#EXT-X-VERSION:6\n"));
             assert!(converted.contains("DEFAULT=NO,AUTOSELECT=YES"));
             assert_eq!(
-                with_next_subtitles(master.clone(), &channel, preview, &token, false),
+                with_next_subtitles(master.clone(), &channel, preview, false),
                 master,
                 "explicit rendition omission must preserve the audio/video master"
             );
             assert!(converted.contains("TYPE=SUBTITLES,GROUP-ID=\"subs\""));
             assert!(converted.contains("#EXT-X-STREAM-INF:SUBTITLES=\"subs\","));
-            assert!(converted.contains(&format!(
-                "/iptv/{scope}/42/live_sub.m3u8?access_token=synthetic-token"
-            )));
+            assert!(converted.contains(&format!("/iptv/{scope}/42/live_sub.m3u8")));
             // Item language overrides can differ from channel preferences.
             assert!(!converted.contains("LANGUAGE="));
             assert!(!converted.contains("English"));
         }
         channel.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Burn;
         assert_eq!(
-            with_next_subtitles(master.clone(), &channel, false, &token, true),
+            with_next_subtitles(master.clone(), &channel, false, true),
             master
         );
         channel.next_engine_text_subtitle_mode = NextEngineTextSubtitleMode::Convert;
         channel.streaming_engine = StreamingEngine::Legacy;
         assert_eq!(
-            with_next_subtitles(master.clone(), &channel, false, &token, true),
+            with_next_subtitles(master.clone(), &channel, false, true),
             master
         );
     }
@@ -268,7 +248,6 @@ mod tests {
             "1",
             Some(&spec),
             StreamingEngine::Legacy,
-            &AccessToken::default(),
         );
         assert!(!playlist.contains("CODECS="));
         assert!(playlist.contains("RESOLUTION=1920x1080"));
@@ -293,13 +272,12 @@ mod tests {
             "1",
             Some(&h264_aac_1080p()),
             StreamingEngine::Legacy,
-            &AccessToken::default(),
         );
         insta::assert_snapshot!("variant_h264_aac_1080p", output);
     }
 
     #[test]
-    fn build_multi_variant_playlist_hevc_ac3_720p_with_token() {
+    fn build_multi_variant_playlist_hevc_ac3_720p() {
         let spec = ChannelStreamingSpec {
             video_format: FFmpegProfileVideoFormat::Hevc,
             audio_format: FFmpegProfileAudioFormat::Ac3,
@@ -314,9 +292,8 @@ mod tests {
             "42",
             Some(&spec),
             StreamingEngine::Legacy,
-            &AccessToken::new(Some("abc123")),
         );
-        insta::assert_snapshot!("variant_hevc_ac3_720p_token", output);
+        insta::assert_snapshot!("variant_hevc_ac3_720p", output);
     }
 
     #[test]
@@ -327,7 +304,6 @@ mod tests {
             "99",
             None,
             StreamingEngine::Legacy,
-            &AccessToken::default(),
         );
         insta::assert_snapshot!("variant_no_spec", output);
     }
@@ -340,11 +316,9 @@ mod tests {
             "42",
             Some(&h264_aac_1080p()),
             StreamingEngine::Legacy,
-            &AccessToken::new(Some("preview-token")),
         );
         assert!(output.contains("CODECS=\"avc1.4D4028,mp4a.40.2\""));
-        assert!(output
-            .contains("https://example.test/iptv/preview/42/hls.m3u8?access_token=preview-token"));
+        assert!(output.contains("https://example.test/iptv/preview/42/hls.m3u8"));
         assert!(!output.contains("/iptv/session/"));
     }
 }

@@ -124,6 +124,10 @@ separate hosted shards. Cargo tools are prepared in the build job; execution
 jobs use its verified nextest/helper executables. The full test selection remains
 intact. Hosted execution remains an explicit fallback rather than the default.
 
+For a single delivery on GitHub-hosted runners, include `[github-hosted]` in
+the same-repository PR title and the merge commit message. Automatic PR and
+push checks then use the hosted pool even when local runners are online.
+
 **Automatic hosted fallback.** Pull requests never use it: they always wait
 for the self-hosted pool, so a pull request opened while the workstation is off
 queues until its runners are back (maintainer decision, 2026-11-20; hosted
@@ -185,10 +189,7 @@ running on that branch. Mixed focused modes are rejected, and an audit-only
 success never proves full CI or skips a later full gate. Reuse unaffected
 evidence and separately recheck behavior affected by the dependency correction.
 
-Native JWT cryptography statically links AWS-LC through `aws-lc-rs`. A C/C++
-compiler is required; Windows x64 builds also use NASM. The selected non-FIPS
-backend does not change the application's HS256-only token contract. See the
-[upstream build requirements](https://aws.github.io/aws-lc-rs/requirements/index.html).
+IPTV and HDHomeRun streams are unauthenticated. For remote access, use a VPN or an authenticated reverse proxy. If either `JWT__IssuerSigningKey` or `JWT:IssuerSigningKey` is set, remove it and restart ErsatzRS to enable streaming.
 
 Two self-hosted runners share one physical machine. Each runner runs its jobs
 serially in its own workspace, so sharing build output across that runner's
@@ -772,6 +773,21 @@ The run is titled `CI (Test only)` and cannot suppress a later full CI run throu
 the duplicate-run check. It is scoped test evidence, not full CI acceptance.
 When deliberately preserving earlier checks, `[skip ci]` on the repair commit
 prevents the automatic full PR run; the manual dispatch still checks that commit.
+
+### Qualify the row 305 worker alongside full application CI
+
+Run the full suite on the combined candidate branch:
+
+```bash
+gh workflow run ci.yml --ref integrate/ucu16-rows-297-305 -f runner=github-hosted -f qualify_next_candidate=true
+```
+
+CI packages the reviewed Next source for Linux x64, ARM64, ARMv7 and Windows
+x64 one at a time. The Next engine job verifies the Linux package receipt,
+exercises playback and checks that the troubleshooting ZIP contains the invalid
+scheduled item and its outcome. The general Chromium job exercises the streaming
+JWT migration. Packages stay attached to the run for 14 days. Managed worker
+promotion is a separate decision under ADR 0135.
 
 ### Rerun only Next engine checks after a fixture repair
 

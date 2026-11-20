@@ -3464,7 +3464,7 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
         }
         TextKey::Troubleshooting => "Solução de problemas",
         TextKey::TunerCount => "Quantidade de sintonizadores",
-        TextKey::HdhrDisabledByJwt => "Os endpoints HDHomeRun estão desativados porque a proteção JWT para IPTV está ativada. Estas configurações não têm efeito.",
+        TextKey::HdhrDisabledByJwt => "Remova JWT__IssuerSigningKey / JWT:IssuerSigningKey e reinicie o ErsatzRS para ativar IPTV e HDHomeRun. As transmissões são acessíveis sem autenticação. Para acesso remoto, use uma VPN ou um proxy reverso com autenticação.",
         TextKey::TvShows => "Séries",
         TextKey::Ui => "Interface",
         TextKey::UnavailableLocalMediaMessage => "Há {count} itens indisponíveis porque o ErsatzRS não consegue encontrá-los no disco, incluindo: {items}",
