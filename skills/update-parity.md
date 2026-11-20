@@ -84,7 +84,9 @@ When runtime evidence disproves a completed claim:
    existing Session Handoff mechanism in `AGENTS.md` at handoff.
 
 When closing the regression, record the resolution and concrete test/runtime
-evidence. Complete the owning milestone only when all its acceptance is proven;
+evidence, set `resolved = true`, and move the entry to
+`docs/progress/parity-debt-archive.toml` with a `feature = '<slug>'` line so
+the parity file keeps only open debt. Complete the owning milestone only when all its acceptance is proven;
 restore `Ported`/`Implemented` only when no linked debt remains. Prune a plan
 only after its substance is preserved in structured progress.
 

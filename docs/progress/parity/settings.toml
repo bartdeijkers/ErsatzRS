@@ -24,26 +24,3 @@ whole-second values default to 2 and 16, require minimum no greater than
 maximum, persist across restart, and apply without restart while the
 provider-host limiter continues to govern automatic and manual requests.
 '''
-
-[[debt]]
-id          = 'addon-detail-cooldown-settings-are-missing'
-description = 'Expose localized Add-ons settings for the global minimum and maximum randomized item-detail wait instead of fixing the range at 2–16 seconds.'
-discovered  = '2026-08-23'
-adr         = '0079'
-evidence    = 'ConfigElement-backed application commands atomically validate and save the pair; the coordinator loads the current pair for every later sample. All nine locale modules translate the form and validation. Unit, health, MySQL 8.4, Chromium, and Firefox tests prove 2/16 defaults, rejection of 12/11 without mutation, round-trip of 7/11, restart persistence, and no-restart use.'
-resolved    = true
-resolution  = 'Operators can configure the global provider-host detail pacing range safely from the localized Add-ons settings page.'
-
-[[debt]]
-id          = 'settings-i18n-browser-proof'
-description = 'Full admin-route text coverage and four-language browser proof remain incomplete.'
-discovered  = '2026-06-10'
-evidence    = 'Resolved 2026-08-11: tests/e2e/settings-i18n.spec.ts switches pages.language through every supported culture and proves all eight settings routes render translated labels/actions without English fallback leakage outside intentional technical values.'
-resolved    = true
-
-[[debt]]
-id          = 'managed-ffmpeg-windows-settings-paths'
-description = 'On win-x64 the managed FFmpeg runtime downloaded under `%USERPROFILE%\\.ersatzrs\\ffmpeg`, but the runtime was not copied next to `ErsatzRS.exe` and `/settings/ffmpeg` continued to display a generic PATH/Chocolatey tool path instead of the freshly acquired ffmpeg/ffprobe pair.'
-discovered  = '2026-06-22'
-evidence    = 'Fixed 2026-06-22: `crates/ersatzrs-web/src/host/bootstrap.rs` copies managed/downloaded runtime files into the current executable directory on Windows, persists the accepted ffmpeg/ffprobe paths to `ConfigElement`, and leaves explicit overrides/PATH fallback untouched. `/settings/ffmpeg` now uses the startup runtime report as the resolved-path display source. Focused bootstrap tests cover companion-file copy, managed-path persistence, and PATH fallback preservation.'
-resolved    = true

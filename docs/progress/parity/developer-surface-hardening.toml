@@ -25,17 +25,3 @@ missing links; all 139 pinned design hashes and moved image bytes were preserved
 A disposable relocated preview returned HTTP 200 for five task pages, CSS and
 artwork. No product test gate, CI, commit or release acceptance is implied.
 '''
-
-[[debt]]
-id          = 'development-routes-are-production-visible'
-description = 'The component gallery and Big Buck Bunny FFmpeg stream route are unconditionally registered in the normal application router.'
-discovered  = '2026-07-21'
-evidence    = 'Resolved 2026-07-22: both route registrations require the non-default `development-routes` feature and `ERSATZRS_ENABLE_DEVELOPMENT_ROUTES`; focused default and feature-enabled web checks pass.'
-resolved    = true
-
-[[debt]]
-id          = 'per-page-e2e-index-has-stale-todos'
-description = 'TEST.md duplicates route verification state and still marks several routes TODO after structured hydration and Playwright coverage landed; the playout row also mixes browser-smoke evidence with a real missing durable workflow spec.'
-discovered  = '2026-07-21'
-evidence    = 'Resolved 2026-07-22: `hydration.toml` owns browser-verification state, TEST.md links to `cargo xtask progress routes`, progress validation detects both mismatch directions, and `playouts-feedback.spec.ts` exercises the detailed workflow.'
-resolved    = true

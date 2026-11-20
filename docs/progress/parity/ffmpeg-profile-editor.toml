@@ -31,10 +31,3 @@ editor exposes FFmpeg 9 presets `p1` through `p7` and tunes `hq`, `ll`, `ull`,
 and `lossless` independently; the additive migration preserves legacy
 `llhp`/`llhq` intent.
 '''
-
-[[debt]]
-id          = 'profile-editor-video-audio-section-spacing'
-description = 'On `/ffmpeg/{ffmpeg_profile_id}`, the Video and Audio sections use different vertical spacing between elements than the General section.'
-discovered  = '2026-07-01'
-evidence    = 'Resolved 2026-07-02: the visibility-toggle wrappers in the Video and Audio sections (and the VAAPI sub-panel wrapper) use the new `section-fields` class in `editor.module.css`, matching the General section rhythm. Live-browser measurement on `/ffmpeg/1` went from Video gaps `[16,57,17,0,0,0]` / Audio gaps `[16,0,0,0]` to a uniform 16px field rhythm in all sections, desktop (1440px) and mobile (390px). Regression test `General, Video, and Audio sections keep a consistent vertical rhythm` in `tests/e2e/ffmpeg-profiles.spec.ts` measures adjacent field gaps per section in both viewports and passed in Chromium and Firefox; hydrated save and no-JS fallback tests still pass.'
-resolved    = true
