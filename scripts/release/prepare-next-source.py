@@ -79,6 +79,9 @@ def prepare(archive, output, manifest_path=MANIFEST, revision=None, unpatched=Fa
     if digest(output / "Cargo.lock") != manifest["source_lock_sha256"]:
         raise ValueError("Next source Cargo.lock SHA-256 mismatch")
     subprocess.run(["git", "init", "-q", str(output)], check=True)
+    # A runner-wide core.autocrlf=true (common on Windows) would rewrite the
+    # patched files, including Cargo.lock, with CRLF line endings.
+    subprocess.run(["git", "-C", str(output), "config", "core.autocrlf", "false"], check=True)
     if not unpatched:
         for patch in manifest["patches"]:
             file = str(manifest_path.parent / patch["file"])
