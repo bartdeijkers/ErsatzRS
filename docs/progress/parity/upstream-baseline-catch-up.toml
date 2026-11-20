@@ -583,4 +583,10 @@ output settings, the 0.2.7 changelog heading and the 0.2.7 workspace pins.
 The prepare script reproduces the reviewed tree from the pinned archive, and
 Cargo resolves the locked graph for all four required targets. The same
 combined CI qualification and ADR 0135 promotion remain open.
+
+2026-11-20: PR 185 CI qualified candidate.1 on all four required targets.
+With maintainer approval to publish, the unchanged source is renamed
+0.2.7-aa0aedb5-ersatzrs.1 so the published packages carry their release
+version. Publication uses the exact packages that this run qualifies,
+without rebuilding.
 '''
