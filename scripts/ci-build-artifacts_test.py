@@ -1029,6 +1029,33 @@ def preflight(**outputs):
     return SimpleNamespace(preflight=SimpleNamespace(outputs=Outputs(**outputs)))
 
 
+class HeavyChecks(unittest.TestCase):
+    """The on-demand heavy run reuses the full lane without becoming `CI ok`."""
+
+    def setUp(self):
+        root = Path(__file__).resolve().parents[1] / ".github/workflows"
+        self.ci = (root / "ci.yml").read_text()
+        self.heavy = (root / "heavy-checks.yml").read_text()
+
+    def test_heavy_run_calls_the_full_lane(self):
+        self.assertIn("uses: ./.github/workflows/ci.yml", self.heavy)
+        self.assertIn("full_lane: true", self.heavy)
+        self.assertIn("secrets: inherit", self.heavy)
+        self.assertIn("      full_lane:\n        type: boolean\n        default: false", self.ci)
+        duplicate = self.ci.split("      - id: duplicate\n", 1)[1].split("\n      - ", 1)[0]
+        self.assertIn("CI_FULL_LANE: ${{ inputs.full_lane }}", duplicate)
+        # The full lane is chosen before the pull-request lane can select domains.
+        self.assertLess(duplicate.index("process.env.CI_FULL_LANE === 'true'"),
+                        duplicate.index("context.eventName === 'pull_request'"))
+
+    def test_labels_cannot_cancel_or_start_unrelated_runs(self):
+        self.assertIn("context.payload.label?.name === label", self.heavy)
+        self.assertIn("github.event.label.name != 'heavy-checks'", self.heavy)
+        self.assertIn("format('label-{0}', github.run_id)", self.heavy)
+        # Ordinary PR checks still never trigger on labels.
+        self.assertNotRegex(self.ci, r"(?m)^    types:.*\blabeled\b")
+
+
 class FocusedAuditSelection(unittest.TestCase):
     """Evaluate actual job conditions, including implicit successful-needs gates."""
 
@@ -1697,6 +1724,11 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertIn("secrets.CI_RUNNER_STATUS_TOKEN", step)
         self.assertIn("continue-on-error: true", step.split("script:", 1)[0])
         self.assertIn("github-authentication-token-expiration", step)
+        # Pull requests never fall back to hosted runners; the check precedes
+        # the runner status call.
+        guard = step.index("context.eventName === 'pull_request'")
+        self.assertLess(guard, step.index("core.setOutput('pool', 'github-hosted')"))
+        self.assertLess(guard, step.index("GET /repos/{owner}/{repo}/actions/runners"))
         self.assertIn("steps.hosted_delivery.outcome == 'success' && 'github-hosted' || steps.pool.outputs.pool", self.jobs["preflight"])
 
     def test_hosted_delivery_marker_is_scoped_to_the_requested_pr_or_push(self):

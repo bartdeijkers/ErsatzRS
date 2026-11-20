@@ -77,28 +77,28 @@
     "include": ["logs-workbench", "island-hydration"], "exclude": ["scheduling-route-family", "channel-watch"]
   },
   {
-    "name": "known native FFmpeg filter does not imply Next",
+    "name": "known native FFmpeg filter does not imply Next or teletext",
     "paths": ["crates/ersatzrs-ffmpeg/src/filter/audio.rs"],
-    "rust": true, "teletext": true, "next": false,
-    "include": ["channel-watch", "channels-source-teletext-delivery"], "exclude": ["teletext-editor-flow"]
+    "rust": true, "teletext": false, "next": false,
+    "include": ["channel-watch"], "exclude": ["teletext-editor-flow", "channels-source-teletext-delivery"]
   },
   {
-    "name": "shared pipeline configuration includes Next",
+    "name": "shared pipeline configuration includes Next but not teletext",
     "paths": ["crates/ersatzrs-ffmpeg/src/options.rs"],
-    "rust": true, "teletext": true, "next": true,
-    "include": ["channel-watch", "teletext-restart-flow"], "exclude": []
+    "rust": true, "teletext": false, "next": true,
+    "include": ["channel-watch"], "exclude": ["teletext-restart-flow"]
   },
   {
     "name": "served image is browser input not documentation",
     "paths": ["crates/ersatzrs-web/public/images/ersatzrs.png"],
-    "rust": false, "teletext": true, "next": false,
-    "include": ["local-library-deletion", "teletext-editor-flow"], "exclude": []
+    "rust": false, "teletext": false, "next": false,
+    "include": ["local-library-deletion"], "exclude": ["teletext-editor-flow"]
   },
   {
-    "name": "build manifest keeps full required gate",
+    "name": "build manifest keeps the full gate except teletext",
     "paths": ["Cargo.toml"],
-    "rust": true, "teletext": true, "next": true,
-    "include": ["local-library-deletion", "teletext-editor-flow"], "exclude": []
+    "rust": true, "teletext": false, "next": true,
+    "include": ["local-library-deletion"], "exclude": ["teletext-editor-flow"]
   },
   {
     "name": "documentation remains lightweight",

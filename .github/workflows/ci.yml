@@ -23,6 +23,11 @@ on:
       quick_only:
         type: boolean
         default: false
+      # Heavy checks (heavy-checks.yml): run the full lane, every suite in
+      # both browsers, also when the caller is a pull request event.
+      full_lane:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       runner:
@@ -201,6 +206,7 @@ jobs:
       - id: duplicate
         env:
           CI_QUICK_ONLY: ${{ inputs.quick_only }}
+          CI_FULL_LANE: ${{ inputs.full_lane }}
         uses: actions/github-script@v9
         with:
           script: |
@@ -220,6 +226,11 @@ jobs:
             })).data.tree.sha;
             if (process.env.CI_QUICK_ONLY === 'true') {
               lane('light');
+              return;
+            }
+            if (process.env.CI_FULL_LANE === 'true') {
+              await full();
+              core.info('Heavy checks: the full lane runs every suite in both browsers.');
               return;
             }
             if (context.eventName === 'pull_request') {
@@ -530,6 +541,15 @@ jobs:
             // CI_RUNNER_STATUS_TOKEN secret (and on fork pull requests, which
             // get no secrets) the run keeps the self-hosted pool and queues
             // until a runner comes online, as before.
+            // Pull requests always wait for the self-hosted pool (maintainer
+            // decision 2026-11-20): hosted fallback builds took 47-70 min and
+            // lost runners, so an overnight PR queues until the workstation
+            // runners are back. Pushes, the weekly full run and manual
+            // dispatches keep the fallback.
+            if (context.eventName === 'pull_request') {
+              core.info('Pull request: using the self-hosted pool (no hosted fallback).');
+              return;
+            }
             const token = process.env.RUNNER_STATUS_TOKEN;
             if (!token) {
               core.info('No CI_RUNNER_STATUS_TOKEN: using the self-hosted pool.');

@@ -31,6 +31,10 @@ release section when tagging a release.
 
 ### Added
 
+- A "Heavy checks" workflow runs the full CI scope (all suites, Chromium and
+  Firefox) on demand: by hand, with the `heavy-checks` pull request label, or
+  automatically for changes to the HDR/4K colour filters and hardware probing.
+
 - Modern Next sessions and finite previews use an application-owned shared
   still-watermark cache, with schema checks before process startup. The indexed
   extension requires its distinct schema; explicit older configurations remain available.
@@ -83,6 +87,15 @@ release section when tagging a release.
 - Full CI can qualify the next playback worker on all four required targets and verify that troubleshooting downloads preserve an invalid scheduled item when playback fails before FFmpeg starts.
 
 - **BREAKING CHANGE** IPTV and HDHomeRun streams are unauthenticated. Remove the legacy JWT signing key and restart to enable streaming. Use a VPN or authenticated reverse proxy for remote access.
+
+- Pull request CI runs the Teletext 1.5 Rust job and the teletext browser suite
+  only when the change touches teletext; playback, Next, shared UI and build
+  changes no longer wait about 45 minutes for them. The suites themselves are
+  unchanged and still run weekly and on manual dispatch. Pull requests no
+  longer fall back to the slower GitHub-hosted runners while the self-hosted
+  runners are offline, and CONTRIBUTING.md now asks contributors not to merge
+  `main` into a PR without a conflict, to stop after two red runs, and to keep
+  CI changes in separate pull requests.
 
 - Replace chrono with Jiff for application clocks and elapsed time. Existing
   database dates, schedules and add-on time formats remain readable.

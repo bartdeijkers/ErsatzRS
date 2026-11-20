@@ -59,7 +59,8 @@ class DomainSelection(unittest.TestCase):
                 self.assertTrue(domains.select([path], added_paths=[path])["everything"])
         for path in ("crates/ersatzrs-domain/src/lib.rs", "crates/ersatzrs-core/src/locking.rs",
                      "crates/ersatzrs-core/src/teletext/deleted.rs", "crates/ersatzrs-time/src/lib.rs",
-                     ".github/workflows/ci-fast.yml", ".github/workflows/full-verification.yml"):
+                     ".github/workflows/ci-fast.yml", ".github/workflows/full-verification.yml",
+                     ".github/workflows/heavy-checks.yml"):
             self.assertTrue(domains.select([path])["everything"])
         mixed = domains.select(["crates/ersatzrs-core/src/repositories/watermark.rs", "Cargo.lock"])
         self.assertTrue(mixed["everything"])
@@ -199,7 +200,11 @@ class DomainSelection(unittest.TestCase):
                 self.assertTrue(result["everything"], result)
                 self.assertEqual(result["general_specs"], "all")
                 self.assertEqual(result["rust_packages"], sorted(MEMBERS))
-                self.assertTrue(result["next"] and result["teletext_rust"] and result["teletext_browser"])
+                self.assertTrue(result["next"])
+                # Teletext checks run only when the change touches teletext.
+                touched = bool(domains.TELETEXT_PATH.search(path))
+                self.assertEqual(result["teletext_rust"], touched)
+                self.assertEqual(result["teletext_browser"], touched)
 
     def test_docs_and_other_workflows_select_nothing(self):
         result = select("docs/adr/0001.md", "README.md", ".github/workflows/cleanup-actions.yml",
@@ -231,12 +236,11 @@ class DomainSelection(unittest.TestCase):
                 for spec in ("support-pages", "next-version") + domains.SMOKE_SPECS:
                     self.assertIn(spec, result["general_specs"])
                 self.assertNotIn("scheduling-route-family", result["general_specs"])
-                self.assertFalse(result["teletext_browser"] or result["next"])
-                self.assertEqual(result["teletext_rust"], path.endswith((".rs", ".js")))
+                self.assertFalse(result["teletext_browser"] or result["next"] or result["teletext_rust"])
         # The route table's own style has no traceable owner.
         result = select("crates/ersatzrs-web/src/admin/app.module.css")
         self.assertEqual(result["general_specs"], "all")
-        self.assertTrue(result["teletext_browser"])
+        self.assertFalse(result["teletext_browser"])
         # A new shell file still needs an ownership review.
         path = "crates/ersatzrs-web/src/admin/layout/nav.rs"
         self.assertTrue(domains.select([path], added_paths=[path])["everything"])
@@ -249,13 +253,13 @@ class DomainSelection(unittest.TestCase):
             target.write_text("pub fn App() {}\n")
             result = domains.select([path], members={"ersatzrs-web"}, specs=SPECS, root=Path(folder))
             self.assertEqual(result["general_specs"], "all")
-            self.assertTrue(result["teletext_browser"])
+            self.assertFalse(result["teletext_browser"])
 
     def test_unreviewed_server_functions_select_their_calling_pages(self):
         logs = select("crates/ersatzrs-web/src/admin/server_fns/logs.rs")
         self.assertFalse(logs["everything"] or logs["next"] or logs["teletext_browser"])
         self.assertEqual(logs["rust_packages"], ["ersatzrs-web"])
-        self.assertTrue(logs["teletext_rust"])
+        self.assertFalse(logs["teletext_rust"])
         self.assertIn("logs-workbench", logs["general_specs"])
         self.assertNotIn("scheduling-route-family", logs["general_specs"])
         # The shell reads settings, so its specs join the settings page specs;
@@ -318,11 +322,14 @@ class DomainSelection(unittest.TestCase):
         self.assertNotIn("channels-edit-numbers", epg["general_specs"])
         self.assertEqual(epg["teletext_specs"], [])
         self.assertEqual(epg["rust_packages"], [])
-        # The channel editor is driven by base teletext specs; they stay.
+        # The channel editor is not a teletext change: no teletext checks.
         editor = select("crates/ersatzrs-web/src/admin/pages/channels/editor.rs")
-        self.assertIn("channels-source-teletext-delivery", editor["teletext_specs"])
-        self.assertNotIn("teletext-restart-flow", editor["teletext_specs"])
-        self.assertTrue(editor["teletext_rust"])
+        self.assertEqual(editor["teletext_specs"], [])
+        self.assertFalse(editor["teletext_rust"])
+        # The channel teletext page keeps its teletext specs and Rust job.
+        page = select("crates/ersatzrs-web/src/admin/pages/channels/teletext.rs")
+        self.assertIn("channels-source-teletext-delivery", page["teletext_specs"])
+        self.assertTrue(page["teletext_rust"])
         # Route evidence crosses the directory layout.
         workspace = select("crates/ersatzrs-web/src/admin/pages/media/addon_lists/workspace.rs")
         self.assertIn("addon-list-workspace", workspace["general_specs"])
@@ -346,16 +353,17 @@ class DomainSelection(unittest.TestCase):
         self.assertNotEqual(narrow["general_specs"], "all")
         self.assertIn("admin-row-actions", narrow["general_specs"])
         self.assertNotIn("addon-list-workspace", narrow["general_specs"])
-        self.assertNotIn("teletext-restart-flow", narrow["teletext_specs"])
-        self.assertTrue(narrow["teletext_rust"])
+        self.assertEqual(narrow["teletext_specs"], [])
+        self.assertFalse(narrow["teletext_rust"])
         styled = select("crates/ersatzrs-web/src/admin/ui/primitives/row_actions.module.css")
         for key in ("general_specs", "teletext_specs"):
             self.assertEqual(narrow[key], styled[key])
         self.assertEqual(styled["rust_packages"], [])
-        # A primitive of the channel teletext page keeps every teletext family.
+        # A shared primitive also used by the teletext pages is not a teletext
+        # change: its general consumers run, the teletext checks do not.
         wide = select("crates/ersatzrs-web/src/admin/ui/primitives/button.rs")
-        self.assertIn("teletext-editor-flow", wide["teletext_specs"])
-        self.assertIn("teletext-restart-flow", wide["teletext_specs"])
+        self.assertEqual(wide["teletext_specs"], [])
+        self.assertFalse(wide["teletext_rust"])
         self.assertIn("ffmpeg-profiles", wide["general_specs"])
 
     def test_new_admin_interface_module_is_classified_by_location(self):
@@ -380,7 +388,7 @@ class DomainSelection(unittest.TestCase):
         self.assertIn("settings-i18n", result["general_specs"])
         self.assertIn("watermark-preview", result["general_specs"])
         self.assertNotIn("ffmpeg-profiles", result["general_specs"])
-        self.assertTrue(result["teletext_rust"])
+        self.assertFalse(result["teletext_rust"])
         # A change outside the key tables and helper functions stays broad.
         before[dutch] = current[dutch].replace("pub struct DutchStrings;", "pub struct DutchStrings {}")
         self.assertEqual(domains.select([dutch], base_text=before.get)["general_specs"], "all")
@@ -414,7 +422,7 @@ class DomainSelection(unittest.TestCase):
             target.write_text("")
             result = domains.select([path], MEMBERS, SPECS, root=Path(tmp))
             self.assertEqual(result["general_specs"], "all")
-            self.assertTrue(result["teletext_browser"])
+            self.assertFalse(result["teletext_browser"])
 
     def test_every_required_spec_has_route_evidence_or_a_reviewed_area(self):
         evidence = domains._evidence.Evidence(ROOT)
@@ -433,8 +441,24 @@ class DomainSelection(unittest.TestCase):
         self.assertFalse(teletext["next"])
         nxt = select("crates/ersatzrs-infra/src/next_engine/coordinator.rs")
         self.assertTrue(nxt["next"])
-        self.assertTrue(nxt["teletext_browser"])
+        self.assertFalse(nxt["teletext_browser"] or nxt["teletext_rust"])
         self.assertFalse(select("tests/e2e/next-version.spec.ts")["next"])
+
+    def test_teletext_checks_need_a_teletext_change(self):
+        # Maintainer decision 2026-11-20: playback-only changes skip teletext.
+        heartbeat = select("crates/ersatzrs-infra/src/next_engine/process.rs", "CHANGELOG.md")
+        self.assertTrue(heartbeat["next"])
+        self.assertFalse(heartbeat["teletext_rust"] or heartbeat["teletext_browser"])
+        self.assertIn("no teletext change: Teletext Rust and teletext browser checks not selected",
+                      heartbeat["reasons"])
+        # Adding a teletext path to the same change selects them again.
+        mixed = select("crates/ersatzrs-infra/src/next_engine/process.rs",
+                       "crates/ersatzrs-web/src/transport/iptv/teletext_output.rs")
+        self.assertTrue(mixed["teletext_rust"] and mixed["teletext_browser"])
+        # Provider-source Health stays proven by its only spec.
+        source = select("crates/ersatzrs-infra/src/repositories/media_source.rs")
+        self.assertEqual(source["teletext_specs"], ["teletext-decoder-health"])
+        self.assertFalse(source["teletext_rust"])
 
     def test_service_crate_files_map_by_keyword_or_select_everything_general(self):
         mapped = select("crates/ersatzrs-infra/src/repositories/media_source.rs")
@@ -552,7 +576,9 @@ class DomainSelection(unittest.TestCase):
             "crates/ersatzrs-web/src/admin/pages/watermarks/list.rs":
                 dict(lane="pr", run_next="false", run_teletext="false", run_browser="true"),
             "docs/readme-only.md": dict(lane="light", run_browser="false"),
-            "Cargo.toml": dict(lane="pr", run_next="true", run_teletext="true", run_browser="true"),
+            "Cargo.toml": dict(lane="pr", run_next="true", run_teletext="false", run_browser="true"),
+            "crates/ersatzrs-domain/src/teletext/page.rs":
+                dict(lane="pr", run_next="true", run_teletext="true", run_browser="true"),
         }
         with tempfile.TemporaryDirectory() as tmp:
             for path, expected in cases.items():

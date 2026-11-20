@@ -43,7 +43,7 @@ EVERYTHING = (
     "Cargo.toml", "Cargo.lock", "rust-toolchain*", ".cargo/*", ".config/*", "deny.toml",
     "package.json", "package-lock.json", "playwright.config.ts", "tsconfig*.json",
     ".github/workflows/ci.yml", ".github/workflows/ci-fast.yml",
-    ".github/workflows/full-verification.yml", ".github/workflows/release.yml", ".github/actions/*", "scripts/ci-*", "scripts/e2e/*", "scripts/release/*", "scripts/calibration/*",
+    ".github/workflows/full-verification.yml", ".github/workflows/heavy-checks.yml", ".github/workflows/release.yml", ".github/actions/*", "scripts/ci-*", "scripts/e2e/*", "scripts/release/*", "scripts/calibration/*",
     "run.sh", "run.ps1", "run.cmd", "assets/*", "migrations/*",
     # Foundation crates every other crate builds on.
     "crates/ersatzrs-domain/*", "crates/ersatzrs-core/*", "crates/ersatzrs-time/*",
@@ -88,6 +88,14 @@ CRATE_SPECS = {
     "xtask": (),
 }
 TELETEXT_PATH = re.compile(r"teletext|drcs|zvbi|tti_", re.I)
+# Maintainer decision (2026-11-20): the Teletext Rust job and the base
+# teletext browser suite run only for pull requests that change teletext
+# itself: a non-documentation path naming teletext, or a browser fixture the
+# teletext specs import. Playback, shared UI and broad build inputs no longer
+# pull them in; the weekly full run and the manual `teletext_only` dispatch
+# keep covering them. The selected suites themselves are not shortened. The
+# provider-source Health scenarios in teletext-decoder-health stay with the
+# media-source area because no other spec proves them.
 WEB_SRC = "crates/ersatzrs-web/src/"
 
 # Whole specs may own several families: retain their serial groups and fixtures.
@@ -256,6 +264,9 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
     base = [s for s in specs if re.search(_suites.browser_filter("1.5"), s + ".spec.ts")]
     out = dict(everything=False, rust_packages=set(), teletext_rust=False, teletext_browser=False,
                next=False, general_specs=set(), teletext_specs=set(), domains=set(), reasons=[])
+    teletext_change = False
+    # Non-teletext behavior that only a base teletext spec proves stays selected.
+    kept_teletext_specs = set()
     if not paths:
         raise ValueError("changed-file selection must not be empty")
     if not set(added_paths) <= set(paths):
@@ -289,6 +300,7 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                 # This file also owns provider-source storage Health scenarios;
                 # its name alone does not describe all of its dependencies.
                 out["teletext_specs"].add("teletext-decoder-health")
+                kept_teletext_specs.add("teletext-decoder-health")
 
     def shell():
         """The application shell: the specs naming the elements only it renders.
@@ -490,6 +502,8 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
             out["domains"].add("release-notes")
             out["reasons"].append(f"{path}: embedded release notes and /changelog.md response")
             continue
+        if TELETEXT_PATH.search(path):
+            teletext_change = True
         owner = foundation_owner(path)
         if matches(path, EVERYTHING) and not owner:
             everything(f"{path} is shared build/CI input")
@@ -521,8 +535,10 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
                 users = importers(path)
             if not users or not set(users) <= set(specs):
                 all_browsers()
+                teletext_change = True
                 out["reasons"].append(f"{path}: unknown fixture/import reach; all required browsers")
             else:
+                teletext_change |= bool(set(users) & set(base))
                 out["general_specs"].update(set(users) & set(general))
                 out["teletext_specs"].update(set(users) & set(base))
                 # Enhanced-only edits still prove required base fallback; the
@@ -640,6 +656,11 @@ def select(paths, members=None, specs=None, importers=importers, root=ROOT, adde
         out.update(rust_packages=set(members), teletext_rust=True,
                    next=True, general_specs=set(general), teletext_specs=set(base))
         out["domains"].add("full-required")
+    if not teletext_change and (out["teletext_rust"] or out["teletext_specs"]):
+        out["teletext_rust"] = False
+        out["teletext_specs"] &= kept_teletext_specs
+        out["domains"] = {d for d in out["domains"] if not d.startswith("teletext-")}
+        out["reasons"].append("no teletext change: Teletext Rust and teletext browser checks not selected")
     if out["general_specs"] or out["teletext_specs"]:
         out["general_specs"].update(set(SMOKE_SPECS) & set(general))
     out["teletext_browser"] = bool(out["teletext_specs"])

@@ -128,7 +128,11 @@ For a single delivery on GitHub-hosted runners, include `[github-hosted]` in
 the same-repository PR title and the merge commit message. Automatic PR and
 push checks then use the hosted pool even when local runners are online.
 
-**Automatic hosted fallback.** When the repository secret
+**Automatic hosted fallback.** Pull requests never use it: they always wait
+for the self-hosted pool, so a pull request opened while the workstation is off
+queues until its runners are back (maintainer decision, 2026-11-20; hosted
+fallback builds took 47-70 minutes and lost runners). For other runs, when the
+repository secret
 `CI_RUNNER_STATUS_TOKEN` is set, a run that was not dispatched with an explicit
 `runner` checks the runner status in Preflight. If no self-hosted runner with
 the `self-hosted` and `Linux` labels is online, every later job of that
@@ -160,6 +164,18 @@ On a smaller runner they leave them out, add a notice, and list them in the job
 summary as skipped. Their budgets are never relaxed. The self-hosted runners
 and the weekly full run on `main` keep proving them; a change merged from a
 hosted run is covered by the next weekly run on the self-hosted runners.
+
+**Heavy checks.** [`heavy-checks.yml`](.github/workflows/heavy-checks.yml)
+runs the full lane for one pull request or branch: every Rust, Next and
+teletext job and the general and Level 1.5 browser suites in Chromium and
+Firefox, the same scope as the weekly full run. Start it from **Actions →
+Heavy checks → Run workflow** (choose the branch and runner pool), by adding
+the `heavy-checks` label to a pull request, or automatically for pull requests
+that change the HDR/4K colour filters (`filter/hdr.rs`, `filter/tonemap.rs`,
+`filter/colorspace.rs`) or `ersatzrs-hwprobe`. Other labels start nothing and
+cannot cancel a running heavy run. It builds its own artifacts and reports
+`verify / CI ok`, never the required `CI ok` check. Pull-request heavy runs use
+the self-hosted pool; a manual run may choose `github-hosted`.
 
 For a dependency-audit correction, use the existing workflow's focused mode:
 
@@ -566,6 +582,16 @@ pull request's changed paths to work:
   Wrappers lose that exemption when their source shape gains native behavior.
   Mixed Rust modules and server functions keep native coverage. A selected
   general Rust filter that matches zero tests fails.
+- **Teletext checks need a teletext change** (maintainer decision,
+  2026-11-20). The `Teletext 1.5` Rust job and the base teletext browser suite
+  run only when a non-documentation path names teletext (`teletext`, `drcs`,
+  `zvbi`, `tti_`) or a changed browser fixture is imported by a teletext spec.
+  Playback, Next, FFmpeg, shared UI, translations and broad build/CI inputs no
+  longer select them; the selected suites themselves are not shortened. The
+  weekly full run and the manual `teletext_only` dispatch keep covering
+  teletext for other changes. The only exception is `teletext-decoder-health`
+  for source-storage changes, whose provider Health scenarios no other spec
+  proves. When a teletext change selects them:
 - Teletext browser tests: whole authoring, editor and runtime specs, including
   explicit cross-family and shared dependencies. Crate membership alone does
   not select them. Shared hydration selects every affected browser family;
@@ -613,7 +639,7 @@ pull request's changed paths to work:
   that page, and the weekly full run owns that residual risk.
 - Build, toolchain and CI inputs, `ersatzrs-core`, `ersatzrs-domain`,
   migrations, shared Playwright infrastructure and any unmapped path select
-  everything, except the reviewed foundation ownership described above. New
+  everything except the teletext checks (unless the change touches teletext), except the reviewed foundation ownership described above. New
   production inputs, deletions and unknown paths also retain
   this conservative fallback until ownership is reviewed. A new admin
   interface module (page, page helper, primitive or its CSS) is the exception:
