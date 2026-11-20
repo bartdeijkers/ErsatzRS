@@ -1668,6 +1668,11 @@ class FocusedAuditSelection(unittest.TestCase):
         self.assertIn("secrets.CI_RUNNER_STATUS_TOKEN", step)
         self.assertIn("continue-on-error: true", step.split("script:", 1)[0])
         self.assertIn("github-authentication-token-expiration", step)
+        # Pull requests never fall back to hosted runners; the check precedes
+        # the runner status call.
+        guard = step.index("context.eventName === 'pull_request'")
+        self.assertLess(guard, step.index("core.setOutput('pool', 'github-hosted')"))
+        self.assertLess(guard, step.index("GET /repos/{owner}/{repo}/actions/runners"))
         self.assertIn("pool: ${{ steps.pool.outputs.pool }}", self.jobs["preflight"])
 
     def test_reuse_has_no_download_fallback_and_has_an_honest_job_name(self):
