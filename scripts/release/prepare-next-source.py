@@ -58,7 +58,10 @@ def extract(archive, output):
             if member.islnk():
                 member.linkname = member.linkname.partition("/")[2]
             members.append(member)
-        source.extractall(output, members=members, filter="data")
+        # Debian bookworm's Python 3.11.2 predates extraction filters. The
+        # archive's SHA-256 is verified before this call either way.
+        safety = {"filter": "data"} if hasattr(tarfile, "data_filter") else {}
+        source.extractall(output, members=members, **safety)
 
 
 def prepare(archive, output, manifest_path=MANIFEST, revision=None, unpatched=False):
