@@ -180,6 +180,22 @@ impl TeletextLiveOutputIntent {
     }
 }
 
+fn log_live_rejected(
+    intent: &TeletextLiveOutputIntent,
+    stage: &'static str,
+    error: &TeletextPumpError,
+) {
+    tracing::debug!(
+        target: "ersatzrs_web::transport::iptv::teletext_provenance",
+        event = "live_rejected_before_commitment",
+        stage,
+        intent_id = %intent.trace_id,
+        channel_id = intent.context.channel_id,
+        %error,
+        "live teletext output replays the unchanged source"
+    );
+}
+
 /// Forward one source and one sink with response-owned accepted-state recovery.
 /// Qualification/probe rejection before commitment replays the original prefix.
 /// Off remains a qualified absent gate, allowing later explicit accepted output
@@ -198,6 +214,7 @@ pub async fn forward_live_teletext_output(
         .mpegts_output_policy()
         .and_then(|command| intent.context.source.qualify(command).ok());
     let Some(qualified) = qualified else {
+        log_live_rejected(intent, "qualify", &TeletextPumpError::Configuration);
         return Ok(OptionalTeletextOutput {
             bytes: replay_direct_prefix(source, sink, Vec::new()).await?,
             rejection: Some(TeletextPumpError::Configuration),
@@ -228,6 +245,7 @@ pub async fn forward_live_teletext_output(
             if terminal {
                 return Err(error);
             }
+            log_live_rejected(intent, "probe", &error);
             return Ok(OptionalTeletextOutput {
                 bytes: replay_direct_prefix(source, sink, failure.raw_prefix).await?,
                 rejection: Some(error),
@@ -252,6 +270,7 @@ pub async fn forward_live_teletext_output(
     let binding = match binding {
         Ok(binding) => binding,
         Err(error) => {
+            log_live_rejected(intent, "binding", &error);
             return Ok(OptionalTeletextOutput {
                 bytes: replay_direct_prefix(source, sink, admitted.prefix.into_bytes()).await?,
                 rejection: Some(error),

@@ -322,6 +322,8 @@ release section when tagging a release.
 
 - Playback troubleshooting can download logs when Next fails before FFmpeg starts.
 - Native playback skips playout windows shorter than one video frame before starting the encoder. This protects VAAPI playback at clipped filler boundaries.
+- Keep active Next HLS streams playing on Windows by reliably refreshing their
+  session heartbeat.
 - Following a link while an admin page is still loading its interactive
   code no longer reports an uncaught "The operation was aborted" error in
   Firefox; the cancelled download is recorded as an aborted start, and every

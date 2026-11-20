@@ -96,10 +96,32 @@ async fn readiness_requires_complete_stdin_and_stop_reaps_the_managed_child() {
         serde_json::from_slice(&std::fs::read(folder.path().join("received.json")).unwrap())
             .unwrap();
     assert_eq!(received, serde_json::to_value(config).unwrap());
-    process.touch().await.unwrap();
-    assert!(folder.path().join(".heartbeat").is_file());
     process.stop().await.unwrap();
     assert!(!process.wait().await.unwrap().success());
+}
+
+#[tokio::test]
+async fn heartbeat_refresh_updates_existing_empty_file_timestamp() {
+    let folder = tempfile::tempdir().unwrap();
+    let mut process = super::fixture_process(folder.path(), "ready")
+        .await
+        .unwrap();
+    let heartbeat = folder.path().join(".heartbeat");
+
+    process.touch().await.unwrap();
+    assert_eq!(std::fs::metadata(&heartbeat).unwrap().len(), 0);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&heartbeat)
+        .unwrap()
+        .set_modified(SystemTime::UNIX_EPOCH)
+        .unwrap();
+
+    process.touch().await.unwrap();
+    let metadata = std::fs::metadata(&heartbeat).unwrap();
+    assert!(metadata.modified().unwrap() > SystemTime::UNIX_EPOCH);
+    assert_eq!(metadata.len(), 0);
+    process.stop().await.unwrap();
 }
 
 #[tokio::test]
