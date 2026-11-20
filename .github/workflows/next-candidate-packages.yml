@@ -39,7 +39,7 @@ jobs:
             docker
       # The self-hosted Windows runner cannot install a tool-cache Python
       # without administrator rights; use its installed Python as release.yml does.
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         if: ${{ !(matrix.rid == 'win-x64' && inputs.pool != 'github-hosted') }}
         with:
           python-version: '3.12'
