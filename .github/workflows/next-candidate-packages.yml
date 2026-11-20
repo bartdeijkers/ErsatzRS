@@ -37,19 +37,41 @@ jobs:
           sparse-checkout: |
             scripts
             docker
+      # The self-hosted Windows runner cannot install a tool-cache Python
+      # without administrator rights; use its installed Python as release.yml does.
       - uses: actions/setup-python@v6
+        if: ${{ !(matrix.rid == 'win-x64' && inputs.pool != 'github-hosted') }}
         with:
           python-version: '3.12'
+      - name: Use installed Python on Windows
+        if: ${{ matrix.rid == 'win-x64' && inputs.pool != 'github-hosted' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c "import sys; assert sys.version_info >= (3, 12), 'Python 3.12 or newer is required'"
+          if ($LASTEXITCODE -ne 0) { throw 'Install Python 3.12 or newer on the Windows release runner' }
+          $pythonDirectory = python -c "import os, sys; print(os.path.dirname(sys.executable))"
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot locate installed Python' }
+          $pythonDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Fetch the pinned source
         run: |
           mkdir -p candidate-source candidate-packages
           url=$(python -c 'import json,os; print(json.load(open(os.environ["REVIEW"]))["source_archive_url"])')
           curl -fsSL --retry 3 "$url" -o candidate-source/source.tar.gz
       - name: Install the worker advisory checker
-        if: matrix.rid == 'linux-x64'
+        if: matrix.rid == 'linux-x64' && inputs.pool == 'github-hosted'
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny@0.21.0
+      # install-action waits for a sudo prompt on the self-hosted runner. Build
+      # the pinned checker into a job-local root, leaving the runner's own
+      # cargo-deny for the CI Cargo deny job untouched.
+      - name: Build the worker advisory checker
+        if: matrix.rid == 'linux-x64' && inputs.pool != 'github-hosted'
+        run: |
+          root="$RUNNER_TEMP/candidate-cargo-deny"
+          cargo install cargo-deny --version 0.21.0 --locked --root "$root"
+          echo "$root/bin" >> "$GITHUB_PATH"
       - name: Audit the new worker lockfile
         if: matrix.rid == 'linux-x64'
         run: |
