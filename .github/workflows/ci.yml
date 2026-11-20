@@ -23,6 +23,11 @@ on:
       quick_only:
         type: boolean
         default: false
+      # Heavy checks (heavy-checks.yml): run the full lane, every suite in
+      # both browsers, also when the caller is a pull request event.
+      full_lane:
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       runner:
@@ -191,6 +196,7 @@ jobs:
       - id: duplicate
         env:
           CI_QUICK_ONLY: ${{ inputs.quick_only }}
+          CI_FULL_LANE: ${{ inputs.full_lane }}
         uses: actions/github-script@v9
         with:
           script: |
@@ -210,6 +216,11 @@ jobs:
             })).data.tree.sha;
             if (process.env.CI_QUICK_ONLY === 'true') {
               lane('light');
+              return;
+            }
+            if (process.env.CI_FULL_LANE === 'true') {
+              await full();
+              core.info('Heavy checks: the full lane runs every suite in both browsers.');
               return;
             }
             if (context.eventName === 'pull_request') {

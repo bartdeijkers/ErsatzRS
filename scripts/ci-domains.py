@@ -43,7 +43,7 @@ EVERYTHING = (
     "Cargo.toml", "Cargo.lock", "rust-toolchain*", ".cargo/*", ".config/*", "deny.toml",
     "package.json", "package-lock.json", "playwright.config.ts", "tsconfig*.json",
     ".github/workflows/ci.yml", ".github/workflows/ci-fast.yml",
-    ".github/workflows/full-verification.yml", ".github/workflows/release.yml", ".github/actions/*", "scripts/ci-*", "scripts/e2e/*", "scripts/release/*", "scripts/calibration/*",
+    ".github/workflows/full-verification.yml", ".github/workflows/heavy-checks.yml", ".github/workflows/release.yml", ".github/actions/*", "scripts/ci-*", "scripts/e2e/*", "scripts/release/*", "scripts/calibration/*",
     "run.sh", "run.ps1", "run.cmd", "assets/*", "migrations/*",
     # Foundation crates every other crate builds on.
     "crates/ersatzrs-domain/*", "crates/ersatzrs-core/*", "crates/ersatzrs-time/*",

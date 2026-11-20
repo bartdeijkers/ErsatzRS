@@ -161,6 +161,18 @@ summary as skipped. Their budgets are never relaxed. The self-hosted runners
 and the weekly full run on `main` keep proving them; a change merged from a
 hosted run is covered by the next weekly run on the self-hosted runners.
 
+**Heavy checks.** [`heavy-checks.yml`](.github/workflows/heavy-checks.yml)
+runs the full lane for one pull request or branch: every Rust, Next and
+teletext job and the general and Level 1.5 browser suites in Chromium and
+Firefox, the same scope as the weekly full run. Start it from **Actions →
+Heavy checks → Run workflow** (choose the branch and runner pool), by adding
+the `heavy-checks` label to a pull request, or automatically for pull requests
+that change the HDR/4K colour filters (`filter/hdr.rs`, `filter/tonemap.rs`,
+`filter/colorspace.rs`) or `ersatzrs-hwprobe`. Other labels start nothing and
+cannot cancel a running heavy run. It builds its own artifacts and reports
+`verify / CI ok`, never the required `CI ok` check. Pull-request heavy runs use
+the self-hosted pool; a manual run may choose `github-hosted`.
+
 For a dependency-audit correction, use the existing workflow's focused mode:
 
 ```bash
