@@ -333,6 +333,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- Packaged builds started outside their build checkout listen on the documented
+  `0.0.0.0:8409` again instead of Leptos' `127.0.0.1:3000` default, so the
+  Windows tray package serves the admin UI and IPTV streams without extra
+  configuration. `LEPTOS_SITE_ADDR` still overrides the address.
 - Playback troubleshooting can download logs when Next fails before FFmpeg starts.
 - Native playback skips playout windows shorter than one video frame before starting the encoder. This protects VAAPI playback at clipped filler boundaries.
 - Keep active Next HLS streams playing on Windows by reliably refreshing their
