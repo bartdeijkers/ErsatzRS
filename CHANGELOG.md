@@ -31,6 +31,10 @@ release section when tagging a release.
 
 ### Added
 
+- A "Heavy checks" workflow runs the full CI scope (all suites, Chromium and
+  Firefox) on demand: by hand, with the `heavy-checks` pull request label, or
+  automatically for changes to the HDR/4K colour filters and hardware probing.
+
 - Modern Next sessions and finite previews use an application-owned shared
   still-watermark cache, with schema checks before process startup. The indexed
   extension requires its distinct schema; explicit older configurations remain available.

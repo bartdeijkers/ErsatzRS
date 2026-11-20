@@ -1,0 +1,72 @@
+name: Heavy checks
+# On-demand full verification for one pull request or branch (maintainer
+# decision, 2026-11-20): every Rust, Next and teletext job and both browser
+# suites in Chromium and Firefox. Ordinary PR checks select only the touched
+# domains; this workflow is the explicit heavy run next to the weekly one.
+# It starts by hand (Actions -> Heavy checks -> Run workflow), when a pull
+# request gets the `heavy-checks` label, or automatically for pull requests
+# that change the HDR/4K colour pipeline. It never reports the required
+# `CI ok` check: its gate is `verify / CI ok`.
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner used for this heavy run
+        type: choice
+        default: self-hosted
+        options: [self-hosted, github-hosted]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+permissions:
+  contents: read
+  actions: read
+  pull-requests: read
+concurrency:
+  # A label other than `heavy-checks` gets its own group, so it can never
+  # cancel a heavy run that is already going.
+  group: heavy-checks-${{ (github.event.action == 'labeled' && github.event.label.name != 'heavy-checks') && format('label-{0}', github.run_id) || github.head_ref || github.ref_name }}-${{ inputs.runner || 'self-hosted' }}
+  cancel-in-progress: true
+jobs:
+  select:
+    name: Select heavy run
+    runs-on: ubuntu-24.04
+    outputs:
+      run: ${{ steps.select.outputs.run }}
+    steps:
+      - id: select
+        uses: actions/github-script@v9
+        with:
+          script: |
+            if (context.eventName !== 'pull_request') {
+              core.setOutput('run', 'true');
+              return;
+            }
+            const pr = context.payload.pull_request;
+            if (pr.draft) {
+              core.notice('Draft pull request: no heavy run.');
+              core.setOutput('run', 'false');
+              return;
+            }
+            const label = 'heavy-checks';
+            const labelled = (pr.labels ?? []).some((item) => item.name === label);
+            if (context.payload.action === 'labeled') {
+              // Other labels (dependency automation adds several) start nothing.
+              core.setOutput('run', String(context.payload.label?.name === label));
+              return;
+            }
+            // The HDR/4K colour pipeline and hardware probing: their full
+            // proof needs every playback suite in both browsers.
+            const heavy = /^crates\/ersatzrs-ffmpeg\/src\/filter\/(hdr|tonemap|colorspace)\.rs$|^crates\/ersatzrs-hwprobe\//;
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { ...context.repo, pull_number: pr.number, per_page: 100 });
+            const matched = files.map((file) => file.filename).filter((name) => heavy.test(name));
+            if (matched.length) core.notice(`Heavy paths changed: ${matched.join(', ')}`);
+            core.setOutput('run', String(labelled || matched.length > 0));
+  verify:
+    needs: select
+    if: needs.select.outputs.run == 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      runner: ${{ inputs.runner || '' }}
+      full_lane: true
+    secrets: inherit
