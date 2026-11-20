@@ -1554,6 +1554,20 @@ async fn assert_row291_real_session(
         assert!(!task.is_finished(), "Keep Running stopped without viewers");
         assert!(registry.stop_channel("1").await);
     } else {
+        if count.is_none() {
+            // The fixture expires after one idle second. Keep viewing across
+            // that deadline before exercising the normal expiry below.
+            let watching = Instant::now();
+            while watching.elapsed() < Duration::from_secs(2) {
+                handle.touch();
+                assert!(handle.trim_playlist().await.is_some());
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            assert!(
+                !task.is_finished(),
+                "Next stopped while a viewer was active"
+            );
+        }
         timeout(Duration::from_secs(5), async {
             while registry.try_get("1").await.is_some() {
                 tokio::time::sleep(Duration::from_millis(10)).await;

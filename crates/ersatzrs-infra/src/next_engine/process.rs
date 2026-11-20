@@ -3,7 +3,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{ExitStatus, Stdio};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -301,9 +301,18 @@ impl NextProcess {
     /// Refresh Next's heartbeat while the host's session/idle policy permits it.
     ///
     /// # Errors
-    /// Returns a redacted error if the heartbeat cannot be written.
+    /// Returns a redacted error if the heartbeat timestamp cannot be refreshed.
     pub async fn touch(&self) -> Result<(), ProcessError> {
-        tokio::fs::write(self.output_folder.join(".heartbeat"), b"")
+        let heartbeat = tokio::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(self.output_folder.join(".heartbeat"))
+            .await
+            .map_err(|error| io_error("heartbeat", &error))?;
+        // Next reads the modification time. Rewriting an empty file can leave it unchanged.
+        heartbeat
+            .set_modified(SystemTime::now())
             .await
             .map_err(|error| io_error("heartbeat", &error))
     }
