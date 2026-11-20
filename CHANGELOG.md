@@ -82,6 +82,9 @@ release section when tagging a release.
 
 ### Changed
 
+- CONTRIBUTING.md lists the available labels and when to apply them; only
+  `heavy-checks` starts CI.
+
 - A delivery can use GitHub-hosted runners for both its pull request and its merge to main by marking the PR title and merge commit with `[github-hosted]`.
 
 - Full CI can qualify the next playback worker on all four required targets and verify that troubleshooting downloads preserve an invalid scheduled item when playback fails before FFmpeg starts.

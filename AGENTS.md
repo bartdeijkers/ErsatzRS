@@ -405,7 +405,9 @@ Read the relevant contract before changing that area:
   **no maintainer-machine absolute paths** (`/home/<user>/...`, `/Users/<user>/...`,
   `C:\Users\...`, or other local mount paths) — use repo-relative paths and the
   `$ERSATZTV_SRC` env var; small reviewable changes; Conventional Commits; and
-  ErsatzTV behavior preserved unless an ADR records the deviation.
+  ErsatzTV behavior preserved unless an ADR records the deviation. Its
+  [Labels](CONTRIBUTING.md#labels) section lists the available labels and when
+  to apply them (for example `heavy-checks`).
 - [CHANGELOG.md](CHANGELOG.md) for the main release overview; keep
   `[Unreleased]` current for notable changes.
 - [BUILD.md](BUILD.md) before changing the build cycle, profile flags,
