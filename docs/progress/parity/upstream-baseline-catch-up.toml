@@ -570,4 +570,17 @@ worker regressions and playback, and archive the real invalid-item dossier
 with its original JSON and outcome. NVIDIA hardware execution retains its
 existing hardware prerequisite. Managed promotion under ADR 0135 requires
 qualified package identities and remains open. Production still uses 6c9e0cf7.
+
+2026-11-20: rows 307 and 308 move the upstream Next pin through fac6121c to
+the v0.2.7 release aa0aedb5 before this candidate was qualified, so the
+candidate follows them instead of qualifying 9133cd28 first. v0.2.7 adds a
+libplacebo shader cache in the `libplacebo` subfolder of the configured
+`cache.folder`, swept by write age, and creates the XDG_CACHE_HOME and
+CUDA_CACHE_PATH folders before probing. Candidate
+0.2.7-aa0aedb5-ersatzrs.candidate.1 keeps all 12 patches: nine apply
+byte-for-byte, and 0010, 0011 and 0012 are rebased for the new shader-cache
+output settings, the 0.2.7 changelog heading and the 0.2.7 workspace pins.
+The prepare script reproduces the reviewed tree from the pinned archive, and
+Cargo resolves the locked graph for all four required targets. The same
+combined CI qualification and ADR 0135 promotion remain open.
 '''

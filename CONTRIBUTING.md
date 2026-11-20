@@ -198,6 +198,20 @@ Preserve qualification runs needed for acceptance. Small CI success remains
 distinct from integration proof and exact-source release qualification; this
 procedure changes neither their required gates nor delivery authorization.
 
+## Labels
+
+Labels describe a pull request or issue. Only `heavy-checks` starts CI; no
+other label selects jobs or runners (the `ci.yml` trigger contract forbids it).
+
+| Label | Set it when |
+|---|---|
+| `heavy-checks` | The pull request needs the full scope on top of its domain-selected checks: HDR/4K, colour pipeline, hardware acceleration or performance work, a broad runtime change, or when the maintainer asks. It starts [Heavy checks](BUILD.md#ci-runner-selection) (every suite, Chromium and Firefox); it is not the required `CI ok`. HDR/4K colour filters and `ersatzrs-hwprobe` start it without the label. |
+| `bug`, `enhancement`, `porting` | Issue templates apply them; keep them on the issue. |
+| `dependencies`, `rust`, `github_actions` | Dependabot applies them; agents do not add them by hand. |
+| `documentation`, `question`, `duplicate`, `invalid`, `wontfix`, `good first issue`, `help wanted` | GitHub defaults for triage; use them only to describe an issue or pull request. |
+
+Do not invent new labels in a pull request; propose them here first.
+
 ## Pull Request Checklist
 
 - The change is in English.

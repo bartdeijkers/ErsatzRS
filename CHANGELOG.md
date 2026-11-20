@@ -82,6 +82,15 @@ release section when tagging a release.
 
 ### Changed
 
+- The Next source candidate now builds from upstream Next v0.2.7 instead of
+  9133cd28. It keeps all twelve ErsatzRS patches and adds the upstream
+  libplacebo shader cache and GPU driver cache folders, which shorten channel
+  startup with tone mapping and CUDA. Production keeps its current worker
+  until the candidate is qualified.
+
+- CONTRIBUTING.md lists the available labels and when to apply them; only
+  `heavy-checks` starts CI.
+
 - A delivery can use GitHub-hosted runners for both its pull request and its merge to main by marking the PR title and merge commit with `[github-hosted]`.
 
 - Full CI can qualify the next playback worker on all four required targets and verify that troubleshooting downloads preserve an invalid scheduled item when playback fails before FFmpeg starts.
@@ -337,6 +346,10 @@ release section when tagging a release.
   `0.0.0.0:8409` again instead of Leptos' `127.0.0.1:3000` default, so the
   Windows tray package serves the admin UI and IPTV streams without extra
   configuration. `LEPTOS_SITE_ADDR` still overrides the address.
+- ErsatzRS creates the folders named by `XDG_CACHE_HOME` and `CUDA_CACHE_PATH`
+  at startup, as ErsatzTV 26.13.0 does. GPU drivers only create their own
+  subfolder there, so pointing these variables at an empty volume no longer
+  makes FFmpeg recompile CUDA kernels and shaders on every stream start.
 - Playback troubleshooting can download logs when Next fails before FFmpeg starts.
 - Native playback skips playout windows shorter than one video frame before starting the encoder. This protects VAAPI playback at clipped filler boundaries.
 - Keep active Next HLS streams playing on Windows by reliably refreshing their
