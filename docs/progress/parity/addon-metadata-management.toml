@@ -108,13 +108,6 @@ scheduling change is included in the N-03 acceptance-probe correction.
 '''
 
 [[debt]]
-id          = 'addon-ytdlp-missing-maxres-thumbnail'
-description = 'P2 (official yt-dlp add-on): the selected item thumbnail is maxresdefault.webp even when YouTube has no such size, so the item publishes without artwork.'
-discovered  = '2026-09-18'
-resolved    = false
-evidence    = 'Windows dogfood: 14 published Best of the Worst items; maxresdefault.webp returns HTTP 404 while hqdefault.jpg returns 200 for every sampled id. Correction belongs in the official add-ons repository: choose an existing thumbnail from the yt-dlp thumbnails list or fall back to a smaller size.'
-
-[[debt]]
 id = 'historical-caption-exhaustion-without-causal-diagnostics'
 description = 'Eight existing required caption tasks exhausted their attempt budget without retained causal provider diagnostics, leaving preparation recovery unproven.'
 discovered = '2026-10-09'
