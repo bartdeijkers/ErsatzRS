@@ -82,6 +82,12 @@ release section when tagging a release.
 
 ### Changed
 
+- The Next source candidate now builds from upstream Next v0.2.7 instead of
+  9133cd28. It keeps all twelve ErsatzRS patches and adds the upstream
+  libplacebo shader cache and GPU driver cache folders, which shorten channel
+  startup with tone mapping and CUDA. Production keeps its current worker
+  until the candidate is qualified.
+
 - CONTRIBUTING.md lists the available labels and when to apply them; only
   `heavy-checks` starts CI.
 
