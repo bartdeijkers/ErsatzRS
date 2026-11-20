@@ -336,6 +336,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- ErsatzRS creates the folders named by `XDG_CACHE_HOME` and `CUDA_CACHE_PATH`
+  at startup, as ErsatzTV 26.13.0 does. GPU drivers only create their own
+  subfolder there, so pointing these variables at an empty volume no longer
+  makes FFmpeg recompile CUDA kernels and shaders on every stream start.
 - Playback troubleshooting can download logs when Next fails before FFmpeg starts.
 - Native playback skips playout windows shorter than one video frame before starting the encoder. This protects VAAPI playback at clipped filler boundaries.
 - Keep active Next HLS streams playing on Windows by reliably refreshing their

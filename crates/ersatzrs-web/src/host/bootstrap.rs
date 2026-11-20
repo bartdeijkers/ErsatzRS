@@ -357,6 +357,44 @@ async fn prepare_streaming_resources() {
     if let Err(error) = create_user_content_folders().await {
         tracing::warn!(%error, "failed to create user content folders");
     }
+    create_driver_cache_folders(driver_cache_variables()).await;
+}
+
+#[allow(
+    clippy::disallowed_methods,
+    reason = "GPU drivers read these variables directly; they are not ErsatzRS settings"
+)]
+fn driver_cache_variables() -> Vec<(&'static str, Option<std::ffi::OsString>)> {
+    DRIVER_CACHE_VARIABLES
+        .iter()
+        .map(|variable| (*variable, std::env::var_os(variable)))
+        .collect()
+}
+
+/// GPU driver cache variables that ErsatzTV's `Startup.cs` prepares.
+const DRIVER_CACHE_VARIABLES: &[&str] = &["XDG_CACHE_HOME", "CUDA_CACHE_PATH"];
+
+/// Create the folders named by the GPU driver cache variables. Drivers only
+/// create their own subfolder inside them, so an operator who points them at a
+/// fresh volume would otherwise lose every compiled CUDA kernel and shader and
+/// recompile them on each `FFmpeg` launch. Failure only logs a warning, as in
+/// ErsatzTV.
+async fn create_driver_cache_folders(
+    variables: impl IntoIterator<Item = (&'static str, Option<std::ffi::OsString>)>,
+) {
+    for (variable, folder) in variables {
+        let Some(folder) = folder.filter(|folder| !folder.is_empty()) else {
+            continue;
+        };
+        if let Err(error) = tokio::fs::create_dir_all(&folder).await {
+            tracing::warn!(
+                %error,
+                variable,
+                folder = %Path::new(&folder).display(),
+                "failed to create GPU driver cache folder"
+            );
+        }
+    }
 }
 
 /// Create the folders users drop their own content into, mirroring ErsatzTV's
@@ -1134,6 +1172,28 @@ pub async fn healthz(axum::extract::State(state): axum::extract::State<AppState>
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn driver_cache_folders_are_created_from_configured_variables() {
+        let root = tempfile::tempdir().expect("temporary folder");
+        let cuda = root.path().join("cache").join("cuda");
+        let xdg = root.path().join("cache").join("xdg");
+        let blocked = root.path().join("blocked");
+        std::fs::write(&blocked, b"file").expect("blocking file");
+
+        super::create_driver_cache_folders([
+            ("XDG_CACHE_HOME", Some(xdg.clone().into_os_string())),
+            ("CUDA_CACHE_PATH", Some(cuda.clone().into_os_string())),
+            ("UNSET", None),
+            ("EMPTY", Some(std::ffi::OsString::new())),
+            ("BLOCKED", Some(blocked.join("child").into_os_string())),
+        ])
+        .await;
+
+        assert!(xdg.is_dir());
+        assert!(cuda.is_dir());
+        assert!(blocked.is_file());
+    }
+
     use super::*;
     use std::collections::BTreeMap;
     use std::sync::Mutex;
