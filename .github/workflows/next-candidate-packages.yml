@@ -60,6 +60,10 @@ jobs:
           $pythonDirectory = python -c "import os, sys; print(os.path.dirname(sys.executable))"
           if ($LASTEXITCODE -ne 0) { throw 'Cannot locate installed Python' }
           $pythonDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      # The self-hosted Windows runner has no rustup on its service PATH; set it
+      # up as release.yml does. The build step installs the pinned compiler.
+      - uses: dtolnay/rust-toolchain@1.97.1
+        if: ${{ matrix.rid == 'win-x64' && inputs.pool != 'github-hosted' }}
       - name: Fetch the pinned source
         run: |
           mkdir -p candidate-source candidate-packages
