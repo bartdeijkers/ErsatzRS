@@ -181,6 +181,19 @@ permission to commit, push or merge.
    superseding it; the replacement must satisfy its required checks. A queued or
    slow run alone is not grounds for this exception.
 
+Keep pull requests moving (maintainer decision, 2026-11-20):
+
+- Do not merge or rebase `main` into an open pull request unless GitHub reports
+  a conflict or the change needs something only `main` has. The `main` ruleset
+  does not require an up-to-date branch, and every update restarts the PR run.
+- After two red runs of the same check on one pull request, stop rerunning it.
+  Find out whether the cause is the change, a flaky test or the runner, record
+  it in the pull request and fix or report it before starting another run.
+- Put CI, workflow and runner-prerequisite changes in their own pull request,
+  separate from feature and upstream catch-up work. Keep integration pull
+  requests small, and do not stack other pull requests on an unmerged one
+  unless they really depend on it.
+
 Preserve qualification runs needed for acceptance. Small CI success remains
 distinct from integration proof and exact-source release qualification; this
 procedure changes neither their required gates nor delivery authorization.

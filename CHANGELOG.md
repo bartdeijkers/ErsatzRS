@@ -78,6 +78,15 @@ release section when tagging a release.
 
 ### Changed
 
+- Pull request CI runs the Teletext 1.5 Rust job and the teletext browser suite
+  only when the change touches teletext; playback, Next, shared UI and build
+  changes no longer wait about 45 minutes for them. The suites themselves are
+  unchanged and still run weekly and on manual dispatch. Pull requests no
+  longer fall back to the slower GitHub-hosted runners while the self-hosted
+  runners are offline, and CONTRIBUTING.md now asks contributors not to merge
+  `main` into a PR without a conflict, to stop after two red runs, and to keep
+  CI changes in separate pull requests.
+
 - Replace chrono with Jiff for application clocks and elapsed time. Existing
   database dates, schedules and add-on time formats remain readable.
 
