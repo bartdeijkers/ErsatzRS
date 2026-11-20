@@ -5280,3 +5280,96 @@ resolution  = '''
 Closed 2026-11-20: the maintainer confirmed that channel 1 works correctly on the native Windows installation, completing the last open part (7). Parts 1-6 and 8 were already proven and merged (PR #155).
 '''
 resolved    = true
+
+[[debt]]
+feature     = 'addon-metadata-management'
+id = 'historical-caption-exhaustion-without-causal-diagnostics'
+description = 'Eight existing required caption tasks exhausted their attempt budget without retained causal provider diagnostics, leaving preparation recovery unproven.'
+discovered = '2026-10-09'
+evidence = 'Native read-only inspection preserves eight failed revision-specific caption jobs from October 3-4. Their closed result is AttemptsExhausted with three attempts; original stderr is not retained. A normal access test succeeds once, but does not prove subtitle download or conversion. Absence of requested manual captions is a successful empty result, not an adequate explanation for exhaustion.'
+resolution  = '''
+Closed 2026-11-20 by maintainer approval: the eight October 3-4 caption jobs ran on a superseded provider package, and AMM-M-02 and AMM-N-03 (both Complete) later proved current caption publication and the broadened lifecycle. The historical jobs are no longer tracked; a new failure needs a new debt with current-package diagnostics. Earlier note: The installed provider is now 0.11.8; historical failed and successful preparation jobs have prior-package fingerprints. Normal bulk preparation would refresh additional interval and caption requirements, not only eight failures, and no per-item caption retry is exposed. Preserve published selection, operator metadata and existing artifacts. Next: capture current-package causal diagnostics through a bounded normal preparation retry before claiming caption recovery. Evidence: test-results/windows-admin-fixes-20261009/native/live-addon-diagnostics.json.
+'''
+resolved    = true
+
+[[debt]]
+feature     = 'addon-platform'
+id          = 'transitive-proc-macro-error2-future-compatibility'
+description = 'proc-macro-error2 2.0.1 re-exports a private proc_macro extern crate and triggers Rust future-compatibility warning E0365.'
+discovered  = '2026-09-14'
+evidence    = 'cargo report future-incompatibilities --id 1 identifies the transitive dependency warning. Dependency upgrades are outside the accepted dogfood corrections; this is separate from the removed ignored Leptos env/watch metadata.'
+resolution  = '''
+Closed 2026-11-20: proc-macro-error2 no longer appears in Cargo.lock, so the future-compatibility warning can no longer occur.
+'''
+resolved    = true
+
+[[debt]]
+feature     = 'application-use-case-layer'
+id          = 'scheduling-engine-ownership-contract-drift'
+description = 'P3: Make `ersatzrs-core` the documented owner of storage-neutral playout scheduling traits, policies, engines, and dispatch, and define `ersatzrs-scheduler` as the native background worker that consumes durable work and coordinates runtime execution.'
+discovered  = '2026-09-02'
+adr         = '0051'
+evidence    = '`crates/ersatzrs-core/src/scheduling` implements Block, Classic, Scripted, YAML, and External JSON engines and `playout_builder.rs` dispatches them, while `crates/ersatzrs-scheduler/src/runner.rs` owns ticking, queue consumption, maintenance, retries, locking, and shutdown. `ARCHITECTURE.md` currently assigns the engines to `ersatzrs-scheduler`, contradicting both the implementation and ADR 0051. Closure requires aligned workspace/rule text and explicit core/scheduler module documentation without moving policy into the infrastructure-dependent worker crate.'
+resolution  = '''
+Closed 2026-11-20: ARCHITECTURE.md now names ersatzrs-core as owner of the storage-neutral scheduling traits, policies, engines and dispatch, and ersatzrs-scheduler as the native background worker, matching the implementation and ADR 0051.
+'''
+resolved    = true
+
+[[debt]]
+feature     = 'classic-scheduling'
+id          = 'classic-deterministic-chapter-expression-profile'
+description = 'Accepted ADR 0098 defines deterministic collation, numeric conversions, date/time literal formats and explicit resource limits for saved chapter expressions. The implementation uses pinned ICU4X 2.2.0 compiled collation data, invariant real/integer conversion and strictly validated slash/ISO date and elapsed-time literals; all-six-platform acceptance remains open.'
+discovered  = '2026-09-23'
+adr         = '0098'
+evidence    = 'Exact NCalcSync 5.12.0 probes across invariant/en-US/nl-NL/tr-TR demonstrate deployment-sensitive string comparisons and numeric/date conversions. The maintainer accepted ADR 0098 on 2026-09-23; 238 focused core/SQL tests passed, followed by 19 expression/atomic-failure tests after eager literal validation was added. Eight profile regressions passed in each of four separate language-environment processes. Dependency audit passed. Native MPEG-TS/HLS smoke and decoded Unicode-selected chapter playback pass, including persisted fractional fallback intervals. On 2026-10-01 the maintainer approved outstanding ARM/macOS application proof as explicit unverified acceptance debt under UCU-09; Linux x64 and Windows x64 checks remain required. See ADR 0098, UCU-09 and ucu-arm-macos-application-acceptance in the catch-up parity record.'
+resolution  = '''
+Closed 2026-11-20: the implementation and required-platform profile regressions are accepted. The remaining all-six-platform residue is the ARM/macOS acceptance tracked by ucu-arm-macos-application-acceptance, which names ADR 0098.
+'''
+resolved    = true
+
+[[debt]]
+feature     = 'ffmpeg-command-generation'
+id = 'ucu15-native-source-format-safety'
+discovered = '2026-11-07'
+description = 'Row277 Native source-format, row274 short-GOP NVENC and row276 still-watermark reconfiguration software corrections are locally verified. Row274 also intersects native encoder capabilities with the selected FFmpeg inventory to preserve valid software-only startup; the portable regression and scoped strict lint pass, with current proof in ucu-15. Complete the unchanged UCU platform/application and final integration gates before closing the extended corpus claim; retain earlier qualified command behavior.'
+evidence = 'Owning milestone ucu-15 and tmp/ucu14/native-pixel-format-proof.json retain175 distinct selected cases, two reviewed snapshots, actual Linux software output for4:4:4 H264/12-bit HEVC, and actual native Windows FFmpeg209/NVENC commands with independently decoded picture/Dutch audio/profile. Final ffmpeg/infra/web strict lint and architecture lint pass. This is not a native Windows Rust/application build or ARM/full-window acceptance; existing nativeARM/macOS/hardware debt stays unverified. Native short-GOP source/probe/argv and actual Windows command plus complete HLS decode4/4 are recorded in ucu-15 and tmp/ucu14/native-nvenc-timing-proof.json. Row276 Native still-watermark software proof has339 composed checks, nine software scenarios, Windows command/capture and HTTP logo proof; ucu-15 and tmp/ucu14/native-reconfiguration-proof.json own the evidence and remaining gates. No accepted UCU12 or Phase9 milestone is reopened.'
+resolution  = '''
+Closed 2026-11-20: the remaining UCU platform/application and final integration gates belonged to milestone ucu-15, which is Complete. Native ARM/macOS and hardware residue keep their own debt entries.
+'''
+resolved    = true
+
+[[debt]]
+feature     = 'scanner'
+id          = 'windows-local-tv-case-alias-identity'
+description = 'Case-only Windows directory changes can create duplicate folder and episode registrations, producing a Local television identity warning that a full scan does not resolve.'
+discovered  = '2026-10-02'
+adr         = '0060'
+evidence    = 'Headed Playwright on the native Windows installation reproduced one show/season conflict after a successful full scan. Eight episode pairs identify the same files ignoring case. Native filesystem checks confirmed two folder aliases. A backed-up scoped transaction merged the aliases and relinked eight media files; protected media, stream, collection, playlist and scheduling tables remained unchanged. Explicit browser refresh reports Pass, including after a second successful full scan. All 22 focused folder/television tests, strict scanner Clippy, formatting and diff checks pass. With the application stopped, a verified backup and isolated repair/rollback tests preceded removal of eight unreferenced duplicate episode registrations. Original IDs and current path spelling were retained; 188 other tables, including scheduling/checkpoints and stream pins, stayed byte-equivalent at the row level. Independent post-repair checks report 32 unique episodes, no physical-file duplicates or television provenance conflicts, integrity_check ok and zero foreign-key violations.'
+resolution  = '''
+Closed 2026-11-20: the preventive case-alias reconciliation shipped in the CHANGELOG (release 1.2.0 and later) and the affected native database was repaired. Automatic reference-aware merging of legacy duplicates was explicitly scoped out.
+'''
+resolved    = true
+
+[[debt]]
+feature     = 'upstream-baseline-catch-up'
+id          = 'ucu-optional-next-engine-integration'
+description = 'Implement Next as an optional second engine alongside the native pipeline: persisted selection, package/runtime integration, supervised process and configuration exchange, health/troubleshooting, and verified playback with subtitle/audio handling and recovery on the supported platforms.'
+discovered  = '2026-09-22'
+adr         = '0095'
+evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. The following earlier checkpoints describe the integration sequence, not additional current blockers: ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. The authenticated media-open route now resolves current credentials and bounded identity-verified Plex failover, with Range/redirect tests and decoded failover proof. Real-host Next HTTP/preview smoke passes; row 20 is Port. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
+resolution  = '''
+Closed 2026-11-20: the remaining final window gates belonged to UCU-09, which is Complete. The only open residue, ARM/macOS application acceptance, is tracked by ucu-arm-macos-application-acceptance.
+'''
+resolved    = true
+
+[[debt]]
+feature     = 'upstream-baseline-catch-up'
+id          = 'ucu-javascript-audio-selector-parity'
+description = 'ADR 0096 implements bounded movie.js and episode.js audio selection for native playback and Next. Full native execution evidence across all six supported platforms remains open.'
+discovered  = '2026-09-23'
+adr         = '0096'
+evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. Earlier checkpoints: Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'
+resolution  = '''
+Closed 2026-11-20: Linux x64 and Windows x64 execution is proven under UCU-09 (Complete). The remaining all-six-platform residue is the ARM/macOS acceptance tracked by ucu-arm-macos-application-acceptance, which names ADR 0096.
+'''
+resolved    = true

@@ -82,6 +82,10 @@ release section when tagging a release.
 
 ### Changed
 
+- Progress records keep only open parity debt: 453 resolved entries moved to
+  `docs/progress/parity-debt-archive.toml`, nine verified or duplicate items
+  were closed, the yt-dlp thumbnail item moved to the add-ons repository, and
+  ARCHITECTURE.md now names `ersatzrs-core` as owner of the scheduling engines.
 - CONTRIBUTING.md lists the available labels and when to apply them; only
   `heavy-checks` starts CI.
 

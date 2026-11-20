@@ -110,22 +110,6 @@ adr         = '0128'
 evidence    = 'The maintainer explicitly approved this bounded unverified hardware acceptance debt on 2026-10-24. It does not claim hardware passed or waive builds, software, checksum, source/provenance, no-device fallback or other acceptance requirements. Close each path only with exact candidate identity and native decoded behavior on the corresponding hardware/driver; cross-builds, emulation and another GPU do not qualify it. UCU-12 owns available evidence and the remaining non-deferred gates.'
 
 [[debt]]
-id          = 'ucu-optional-next-engine-integration'
-description = 'Implement Next as an optional second engine alongside the native pipeline: persisted selection, package/runtime integration, supervised process and configuration exchange, health/troubleshooting, and verified playback with subtitle/audio handling and recovery on the supported platforms.'
-discovered  = '2026-09-22'
-resolved    = false
-adr         = '0095'
-evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. The following earlier checkpoints describe the integration sequence, not additional current blockers: ADR 0095 is accepted by maintainer direction. UCU-02 row 13 now connects local-video HLS dispatch, persisted schedules, session/capacity ownership and runtime/profile health, with real Linux decoding and route regression proof. Preview engine/capacity/codec isolation and rebuild forwarding have focused runtime/regression proof. Linux Next/native HTTP lifecycle smoke and the new separate CI job selection pass locally. Continue-build publication passes a persisted-schedule regression, including mixed-engine mirrors and preserved future items. Authenticated browser and platform proof remain open. Row 20 connects scoped local paths and authenticated HTTP for all three media servers, retaining exact Plex file identity and selected tracks, with decoded Linux proof. The authenticated media-open route now resolves current credentials and bounded identity-verified Plex failover, with Range/redirect tests and decoded failover proof. Real-host Next HTTP/preview smoke passes; row 20 is Port. Graphics projection remains owned by later ordered rows. Unsupported profile output contracts fail explicitly; native policy fields without Next API equivalents still require review and operator-visible handling. Reconcile the Next integration rows in UCU-01 through UCU-09; isolated engine proof or a working native path does not close Next acceptance.'
-
-[[debt]]
-id          = 'ucu-javascript-audio-selector-parity'
-description = 'ADR 0096 implements bounded movie.js and episode.js audio selection for native playback and Next. Full native execution evidence across all six supported platforms remains open.'
-discovered  = '2026-09-23'
-resolved    = false
-adr         = '0096'
-evidence    = 'Current UCU-09 evidence includes native Linux and Windows application playback/selection tests. Outstanding ARM/macOS application acceptance is explicitly approved unverified debt (2026-10-01), tracked by ucu-arm-macos-application-acceptance; final window gates remain. Earlier checkpoints: Maintainer accepted ADR 0096 and authorized implementation on 2026-09-23. rquickjs 0.14.0 passes Linux callback, metadata, heap/deadline/cancellation and decoded Next non-default-audio tests; original subtitle, YAML/pin precedence and fallback remain verified. Rust/C dependency builds pass on Windows MSVC and ARMv7 GNU. Linked callback/heap/interrupt probes also pass on native Windows and under ARMv7 emulation. These are dependency proofs, not native application fixtures on all six targets. UCU-02 and the program platform gates retain that acceptance obligation.'
-
-[[debt]]
 id = 'ucu-12-macos-build-deferral'
 description = 'Complete native macOS FFmpeg and corrected Next candidate builds and package/software acceptance after the maintainer resumes them.'
 discovered = '2026-10-24'

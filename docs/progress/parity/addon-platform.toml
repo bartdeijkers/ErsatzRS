@@ -75,10 +75,3 @@ discovered  = '2026-08-19'
 evidence    = 'ADR 0072 records the resolver as the enabling step and the channel package as deliberate future work. `ersatzrs_infra::addon_source_routing::resolve_source_addon` is provider-neutral and already callable from an importer; no feed format, upload surface, or /channels UI exists yet.'
 adr         = '0072'
 resolved    = false
-
-[[debt]]
-id          = 'transitive-proc-macro-error2-future-compatibility'
-description = 'proc-macro-error2 2.0.1 re-exports a private proc_macro extern crate and triggers Rust future-compatibility warning E0365.'
-discovered  = '2026-09-14'
-resolved    = false
-evidence    = 'cargo report future-incompatibilities --id 1 identifies the transitive dependency warning. Dependency upgrades are outside the accepted dogfood corrections; this is separate from the removed ignored Leptos env/watch metadata.'

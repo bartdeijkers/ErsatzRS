@@ -47,11 +47,3 @@ discovered  = '2026-09-02'
 adr         = '0051'
 evidence    = '`xtask/src/architecture_lint.rs` limits the audited web roots to `crates/ersatzrs-web/src/admin` and `crates/ersatzrs-web/src/api`, so the production query in `transport/iptv/stream.rs` is a current false negative. Closure requires transport-tree coverage with adversarial tests for qualified, renamed, glob-imported, executor, raw-SQL, row-decode-default, and raw-pool forms, plus a zero or ratcheted baseline that cannot grow.'
 resolved    = false
-
-[[debt]]
-id          = 'scheduling-engine-ownership-contract-drift'
-description = 'P3: Make `ersatzrs-core` the documented owner of storage-neutral playout scheduling traits, policies, engines, and dispatch, and define `ersatzrs-scheduler` as the native background worker that consumes durable work and coordinates runtime execution.'
-discovered  = '2026-09-02'
-adr         = '0051'
-evidence    = '`crates/ersatzrs-core/src/scheduling` implements Block, Classic, Scripted, YAML, and External JSON engines and `playout_builder.rs` dispatches them, while `crates/ersatzrs-scheduler/src/runner.rs` owns ticking, queue consumption, maintenance, retries, locking, and shutdown. `ARCHITECTURE.md` currently assigns the engines to `ersatzrs-scheduler`, contradicting both the implementation and ADR 0051. Closure requires aligned workspace/rule text and explicit core/scheduler module documentation without moving policy into the infrastructure-dependent worker crate.'
-resolved    = false

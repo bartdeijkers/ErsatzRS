@@ -71,15 +71,6 @@ infrastructure boundary.
 '''
 
 [[debt]]
-id          = 'windows-local-tv-case-alias-identity'
-description = 'Case-only Windows directory changes can create duplicate folder and episode registrations, producing a Local television identity warning that a full scan does not resolve.'
-discovered  = '2026-10-02'
-resolved    = false
-adr         = '0060'
-evidence    = 'Headed Playwright on the native Windows installation reproduced one show/season conflict after a successful full scan. Eight episode pairs identify the same files ignoring case. Native filesystem checks confirmed two folder aliases. A backed-up scoped transaction merged the aliases and relinked eight media files; protected media, stream, collection, playlist and scheduling tables remained unchanged. Explicit browser refresh reports Pass, including after a second successful full scan. All 22 focused folder/television tests, strict scanner Clippy, formatting and diff checks pass. With the application stopped, a verified backup and isolated repair/rollback tests preceded removal of eight unreferenced duplicate episode registrations. Original IDs and current path spelling were retained; 188 other tables, including scheduling/checkpoints and stream pins, stayed byte-equivalent at the row level. Independent post-repair checks report 32 unique episodes, no physical-file duplicates or television provenance conflicts, integrity_check ok and zero foreign-key violations.'
-resolution  = 'Local source reconciliation and alias lookup cover idempotency, rollback, distinct/missing directories, image-duration safety and stream/reference retention. The preventive source change is scheduled for v1.1.1 and has not been deployed to the native Windows installation. The affected native database now has no legacy duplicate episodes after a guarded offline repair. Automatic reference-aware legacy episode merging remains outside this preventive fix.'
-
-[[debt]]
 id          = 'scanner-owns-persistence-implementation'
 description = 'P2: Move local and playlist scan persistence behind infrastructure-owned repository ports so `ersatzrs-scanner` owns scan discovery and execution rather than SQL, transactions, database rows, and schema knowledge.'
 discovered  = '2026-09-02'

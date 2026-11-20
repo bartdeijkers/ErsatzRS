@@ -66,10 +66,3 @@ UCU15 raw source-format safety is locally verified; its retained platform/final
 integration obligation is recorded below without erasing earlier command proof.
 
 '''
-
-[[debt]]
-id = 'ucu15-native-source-format-safety'
-discovered = '2026-11-07'
-description = 'Row277 Native source-format, row274 short-GOP NVENC and row276 still-watermark reconfiguration software corrections are locally verified. Row274 also intersects native encoder capabilities with the selected FFmpeg inventory to preserve valid software-only startup; the portable regression and scoped strict lint pass, with current proof in ucu-15. Complete the unchanged UCU platform/application and final integration gates before closing the extended corpus claim; retain earlier qualified command behavior.'
-evidence = 'Owning milestone ucu-15 and tmp/ucu14/native-pixel-format-proof.json retain175 distinct selected cases, two reviewed snapshots, actual Linux software output for4:4:4 H264/12-bit HEVC, and actual native Windows FFmpeg209/NVENC commands with independently decoded picture/Dutch audio/profile. Final ffmpeg/infra/web strict lint and architecture lint pass. This is not a native Windows Rust/application build or ARM/full-window acceptance; existing nativeARM/macOS/hardware debt stays unverified. Native short-GOP source/probe/argv and actual Windows command plus complete HLS decode4/4 are recorded in ucu-15 and tmp/ucu14/native-nvenc-timing-proof.json. Row276 Native still-watermark software proof has339 composed checks, nine software scenarios, Windows command/capture and HTTP logo proof; ucu-15 and tmp/ucu14/native-reconfiguration-proof.json own the evidence and remaining gates. No accepted UCU12 or Phase9 milestone is reopened.'
-resolved = false

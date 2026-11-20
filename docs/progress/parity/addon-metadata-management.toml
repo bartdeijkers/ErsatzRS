@@ -106,11 +106,3 @@ actual provider cooldowns, Retry-After deadlines and execution fencing; it must
 not indiscriminately reset deferred work to run immediately. No production
 scheduling change is included in the N-03 acceptance-probe correction.
 '''
-
-[[debt]]
-id = 'historical-caption-exhaustion-without-causal-diagnostics'
-description = 'Eight existing required caption tasks exhausted their attempt budget without retained causal provider diagnostics, leaving preparation recovery unproven.'
-discovered = '2026-10-09'
-resolved = false
-evidence = 'Native read-only inspection preserves eight failed revision-specific caption jobs from October 3-4. Their closed result is AttemptsExhausted with three attempts; original stderr is not retained. A normal access test succeeds once, but does not prove subtitle download or conversion. Absence of requested manual captions is a successful empty result, not an adequate explanation for exhaustion.'
-resolution = 'The installed provider is now 0.11.8; historical failed and successful preparation jobs have prior-package fingerprints. Normal bulk preparation would refresh additional interval and caption requirements, not only eight failures, and no per-item caption retry is exposed. Preserve published selection, operator metadata and existing artifacts. Next: capture current-package causal diagnostics through a bounded normal preparation retry before claiming caption recovery. Evidence: test-results/windows-admin-fixes-20261009/native/live-addon-diagnostics.json.'
