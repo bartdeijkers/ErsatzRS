@@ -346,6 +346,9 @@ release section when tagging a release.
   `0.0.0.0:8409` again instead of Leptos' `127.0.0.1:3000` default, so the
   Windows tray package serves the admin UI and IPTV streams without extra
   configuration. `LEPTOS_SITE_ADDR` still overrides the address.
+- The Windows `ErsatzRS.exe` launcher shows the release version (from the
+  release tag, otherwise the crate version) in its file properties instead of a
+  fixed `0.1.0.0`.
 - ErsatzRS creates the folders named by `XDG_CACHE_HOME` and `CUDA_CACHE_PATH`
   at startup, as ErsatzTV 26.13.0 does. GPU drivers only create their own
   subfolder there, so pointing these variables at an empty volume no longer
