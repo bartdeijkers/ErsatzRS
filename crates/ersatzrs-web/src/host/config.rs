@@ -1,11 +1,18 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use leptos::config::{get_configuration, ConfFile, LeptosOptions};
+use leptos::config::{
+    get_config_from_env, get_config_from_str, get_configuration, ConfFile, LeptosOptions,
+};
 
 use crate::host::assets::{site_pkg_dir, DEFAULT_OUTPUT_NAME};
 
 const WEB_CRATE_CARGO_TOML: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml");
+/// Compiled-in copy of the web crate manifest. Packaged binaries run on hosts
+/// without the build checkout, so they read `[package.metadata.leptos]` (for
+/// example `site-addr = "0.0.0.0:8409"`) from this copy instead of falling back
+/// to Leptos' environment-only defaults (`127.0.0.1:3000`).
+const EMBEDDED_CARGO_TOML: &str = include_str!("../../Cargo.toml");
 const DEVELOPMENT_ROUTES_ENV: &str = "ERSATZRS_ENABLE_DEVELOPMENT_ROUTES";
 const STREAMING_ADDR_ENV: &str = "ERSATZRS_STREAMING_ADDR";
 
@@ -43,7 +50,14 @@ pub fn leptos_configuration() -> ConfFile {
     let mut config = if manifest.is_file() {
         get_configuration(manifest.to_str())
     } else {
-        get_configuration(None)
+        // `LEPTOS_*` environment variables still override the embedded values.
+        // `ConfFile` is non-exhaustive, so start from the env-only value.
+        get_config_from_str(EMBEDDED_CARGO_TOML).and_then(|leptos_options| {
+            get_config_from_env().map(|mut conf| {
+                conf.leptos_options = leptos_options;
+                conf
+            })
+        })
     };
 
     let config = config.as_mut().expect("valid leptos config");
@@ -126,6 +140,14 @@ mod tests {
         ] {
             assert!(parse_streaming_listen_addr(Some(value)).is_err(), "{value}");
         }
+    }
+
+    #[test]
+    fn embedded_manifest_keeps_the_documented_packaged_listener() {
+        let options = get_config_from_str(EMBEDDED_CARGO_TOML).expect("embedded leptos metadata");
+        assert_eq!(options.site_addr, "0.0.0.0:8409".parse().unwrap());
+        assert_eq!(options.output_name.as_ref(), DEFAULT_OUTPUT_NAME);
+        assert_eq!(options.site_pkg_dir.as_ref(), "pkg");
     }
 
     #[test]
