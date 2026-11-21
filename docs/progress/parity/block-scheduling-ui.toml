@@ -11,10 +11,3 @@ Reset mode, and enriched rows for the media items actually added by the
 builder. The inline editor exposes stable idle, loading, empty, ready, and
 localized error states while leaving the draft unpersisted.
 '''
-
-[[debt]]
-id          = 'block-preview-bypasses-real-scheduling-engine'
-description = 'Unsaved block preview now constructs temporary scheduling state and invokes the real block builder in Reset mode through the application boundary. It returns only actual generated rows enriched from real reference data, and typed storage, validation, scheduling, and missing-reference failures reach a localized error state instead of becoming an empty preview.'
-discovered  = '2026-07-21'
-evidence    = 'Source-mapped against `$ERSATZTV_SRC/ErsatzTV.Application/Scheduling/Commands/PreviewBlockPlayoutHandler.cs`. `ersatzrs-app::queries::preview_block_playout` creates the upstream-shaped temporary state and calls the injected production `PlayoutBuilder`; `SqliteSchedulingContentRepository` hydrates real scheduler inputs, and the web adapter preserves the existing public DTO. Focused regressions cover all real collection kinds and failure classes. Database-seeded Chromium and Firefox coverage proves real generated rows, unsaved-draft isolation, the five UI states, stable geometry, and mobile containment.'
-resolved    = true

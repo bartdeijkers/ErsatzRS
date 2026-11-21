@@ -18,49 +18,6 @@ Ported: sequential dispatch, resolver-backed content sources, SQL-backed collect
 '''
 
 [[debt]]
-id          = 'yaml-playlist-refresh-cycle-state'
-description = 'Playlist Refresh and legacy Continue lacked complete shuffled-cycle state and production SQL loading bypassed structured groups.'
-discovered  = '2026-09-25'
-evidence    = 'Resolved in UCU-05 row 78: structured SQL loading, versioned sparse snapshots, original-membership replay followed by identity reconciliation, baseline-preserving cleanup, refusal of incomplete history before clearing, and explicit Reset recovery. Core and restarted SQLite builder/repository/scheduler proof pass; see milestone evidence.'
-resolved    = true
-
-[[debt]]
-id          = 'playlist-shuffle-cycle-history'
-description = 'UCU-08 row 123 covers parent and independently shuffled child cycle seeds, repeated-source slots, safe history positioning and marathon source validation. Ordinary history lacks seeds and scripted group shuffling runs only once; shared playlist children do not reshuffle when they wrap. Resolved with nullable history seeds, compatible cycle/checkpoint state, runtime validation and additive SQLite migration.'
-discovered  = '2026-09-27'
-evidence    = 'UCU-08 row 123: 228 scheduling tests (ec549a1a-2de1-405a-b4ca-66bde7d70b4c), 55 repository tests (c9e9fba2-31fe-4e2b-b00c-e5cb08315421), legacy migration (66eb5b6e-71f7-4472-a912-c74cf96ab4db) and strict affected lint pass. Real SQL later-cycle restart matches 100 uninterrupted items, including independently wrapping children. Source map records substantive review and remaining milestone gates.'
-resolved    = true
-
-[[debt]]
-id          = 'fallback-window-duration'
-description = 'A fallback shorter than the remaining YAML duration window was clamped to its media length while the cursor jumped to the target, leaving an uncovered interval.'
-discovered  = '2026-09-27'
-evidence    = 'Resolved in UCU-08 row 126: use the complete remaining interval, matching upstream and native scripted scheduling. Red/green regression proves the short-fallback defect; both-engine matrices preserve fallback-owned history, locked/unlocked guide groups, main-content position and audio/subtitle preferences. All 96 YAML/scripted tests and strict core lint pass; milestone evidence owns test IDs and window gates.'
-resolved    = true
-
-[[debt]]
-id = 'ucu09-row147-yaml-ambient-state'
-description = 'Continue loses active post-roll, mid-roll and graphics settings because YAML anchor serialization omits those fields. Preserve active values, explicit clears and legacy missing-field defaults; verify generated items across a persisted restart.'
-discovered = '2026-09-29'
-resolved = true
-evidence = 'Upstream b3f7f3fe adds all three fields to YamlPlayoutContext.State. Three red core regressions confirm the missing anchor fields. Five checks pass after serialization and production graphics-reference loading are corrected, including three SQLite restart builds across midnight (ddb01a1f-03e5-4da5-a78c-7b44a2f0e5a3). All 78 YAML checks pass (49a372d6-8592-4acb-b3d2-7e2c2c917156), followed by six final checks after extracting the full persisted-item comparison (38efa297-9116-4158-83ff-ba6bf1780099). Imported/reset/named graphics lookup, strict core/infra all-target lint and native smoke pass. UCU-09 owns acceptance; row147 is Port.'
-
-[[debt]]
-id = 'ucu10-nested-filler-expansion'
-description = 'Nested pre/mid/post-roll sequences must retain repetition, custom titles and selection state across calls and continuation.'
-discovered = '2026-10-13'
-resolved = true
-evidence = 'UCU-10: baseline production-builder tests failed nested repetition/title and continuation, while cycle refusal passed. Existing bounded expansion once per build corrects the two fields without changing main/scheduled-list order fingerprints, schema or state formats. All87 affected YAML tests pass. SQLite persistence/reopen proves complete items, anchor and shared selection state after each real database restart; existing KeepCurrent Refresh, legacy-checkpoint refusal, explicit Reset and overlapping-rewind refusal remain green (ab7f6c79). Persisted shuffled sequence restart also passes (d6ebe22e). Strict core/infra all-target lint passes after final tests. No database repair or automatic reset is performed. Final ordered row230/window acceptance remains in UCU-10.'
-
-[[debt]]
-id = 'ucu10-windows-yaml-schedule-paths'
-description = 'Native Windows reference loading treats a rooted schedule-file path as inline YAML, preventing imports/reset/named-list graphics lookup. Use native path-root detection and prove the existing actual-file regression on both available platforms.'
-discovered = '2026-10-14'
-resolved = true
-evidence = 'UCU-10 owns104 passing native Windows YAML checks with exit0 and101 passing focused Linux YAML checks after portable path-root detection. The existing actual schedule-file/import/reset/named-list graphics regression passes on both platforms, along with nested filler and SQLite continuity. Strict affected core lint passes; application models, inline definitions and existing import behavior are preserved.'
-
-
-[[debt]]
 id = 'yaml-chapter-midroll-expressions'
 description = 'YAML mid-roll only recognizes the literal true expression and appends that sequence after the unsplit programme. Port actual chapter splitting and point expressions before claiming complete YAML mid-roll parity.'
 discovered = '2026-11-11'

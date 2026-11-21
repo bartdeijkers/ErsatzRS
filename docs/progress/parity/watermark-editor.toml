@@ -13,24 +13,3 @@ watermarks without returning to the list, with explicit end states and a
 localized dirty-form confirmation before navigation. Loading, unavailable,
 ready, and render-failure states remain distinct.
 '''
-
-[[debt]]
-id          = 'actual-size-preview-uses-fixed-placeholder'
-description = 'The watermark preview labels size mode Actual Size but hard-codes a 32-pixel height instead of using the selected watermark asset dimensions.'
-discovered  = '2026-07-21'
-evidence    = '`preview_watermark_asset_placement` safely resolves the selected watermark asset, probes its native dimensions, and renders the real composite with FFmpeg. Unit and Chromium/Firefox browser coverage proves 1024x1024 Actual Size input maps to the expected 171x171 preview geometry, Scaled preserves aspect ratio, and oversized/clamped placement stays contained.'
-resolved    = true
-
-[[debt]]
-id          = 'preview-lacks-aspect-ratio-positioning-guides'
-description = 'The placement preview does not show a clearly distinguishable centered 4:3 content-boundary helper line, making it difficult to position a watermark consistently relative to 4:3 content.'
-discovered  = '2026-07-21'
-evidence    = 'The real composite renders a centered amber 4:3 frame with a localized legend label in every supported culture and intentionally leaves the outer 16:9 preview edge unmarked. Chromium and Firefox pixel-sampling coverage proves the 4:3 guide is present, the removed 16:9 guide is absent, and the preview plus legend remain contained at a 390x844 mobile viewport.'
-resolved    = true
-
-[[debt]]
-id          = 'preview-lacks-previous-next-watermark-navigation'
-description = 'The editor has no Previous/Next controls for moving directly between saved watermarks, so aligning multiple channel watermarks requires repeatedly returning to the list and reopening editors.'
-discovered  = '2026-07-21'
-evidence    = '`get_watermark_editor` derives previous and next identities from repository order (`Name`, then `Id`) while preserving typed absence and failure. Localized controls expose disabled ends; Chromium/Firefox coverage proves deterministic titles plus cancel/confirm dirty-navigation behavior.'
-resolved    = true

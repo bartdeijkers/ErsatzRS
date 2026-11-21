@@ -60,10 +60,3 @@ debt remains open in that feature because this machine still has
 CUDA-filter-capable FFmpeg builds rather than the required encoder-only /
 no-CUDA-filter build.
 '''
-
-[[debt]]
-id          = 'opacity-expression-time-variable-semantics'
-description = 'Snapshot-covered clock semantics are now implemented in native FFmpeg eval (`content_seconds = in-point/seek + T`, `channel_seconds = channel uptime at spawn + T`, `time_of_day_seconds = mod(seconds-since-midnight-at-spawn + T, 86400)`, `content_total_seconds = probed MediaVersion.Duration`) and threaded through direct IPTV `.ts`, HLS segmenter, and troubleshooting preview builders. Remaining parity debt: no live IPTV/HLS runtime proof has yet captured these exact wall-clock/in-point/duration bindings in an actual stream, so the feature must stay `In progress`.'
-discovered  = '2026-06-12'
-evidence    = '`$ERSATZTV_SRC/ErsatzTV.Infrastructure/Streaming/Graphics/OpacityExpressionHelper.cs` `GetOpacity` and `GraphicsEngine.cs` bind the four clocks per frame. ErsatzRS translates the same variables through `WatermarkOpacityClock`; `watermark_input_for_stream` now loops still opacity-expression inputs so `T` advances at runtime. Live direct `.ts` proof `cargo test -p ersatzrs-web transport::iptv::stream::tests::stream_body_live_proves_opacity_expression_clock_bindings -- --ignored --nocapture` captured `-loop 1`, `-ss 00:00:05.0000000`, `(5+T)`, `(30+T)`, `mod((86399.5+T),86400)`, and `lt((5+T),12)`, then decoded black -> red -> black samples. Live HLS proof `cargo test -p ersatzrs-infra hls_segmenter_live_proves_opacity_expression_clock_bindings -- --ignored --nocapture` captured the same bindings and decoded the first generated segment with the same opacity transition.'
-resolved    = true

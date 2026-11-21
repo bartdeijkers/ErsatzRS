@@ -28,19 +28,3 @@ own overrides. Proven by
 `duplicate_collection_rows_with_distinct_overrides_persist_and_remove_independently`
 (ersatzrs-web).
 '''
-
-[[debt]]
-id          = 'collection-item-duplicate-playback-overrides'
-adr         = '0048'
-description = 'The same movie should be addable to the same collection multiple times when each row has a different playback override, so movies with multiple commentary or alternate audio tracks can have every track represented in one collection.'
-discovered  = '2026-07-02'
-evidence    = 'Maintainer request on 2026-07-02. Current SQLite and MySQL schemas keep `CollectionItem` keyed by `(CollectionId, MediaItemId)` (`PK_CollectionItem`), and the ADR 0048 migration only adds nullable override columns, so the model cannot represent two rows for the same movie in one collection even when `PreferredAudioTitle`, preferred audio/subtitle language, or `SubtitleMode` differ. Reclose only after the collection item identity, add-to-collection flow, collection detail UI, scheduling expansion, SQLite/MySQL migrations, and focused tests prove duplicate same-movie rows with distinct overrides persist and schedule separately.'
-resolved    = true
-
-[[debt]]
-id          = 'playlist-item-ordering-needs-persisted-admin-proof'
-description = 'Make playlist-item ordering a reliable admin UI capability for editable playlists: an administrator must be able to move items, save the new order, reload the editor, and have preview and scheduling consume that persisted order. Keep generated/system playlists read-only, localize the controls and failures, and preserve an accessible non-drag interaction plus the no-JS save path.'
-discovered  = '2026-08-31'
-evidence    = 'Maintainer request on 2026-08-31. The hydrated editor already exposes Move Up and Move Down and normalizes row indexes before save, but the route-family browser fixture contains only one playlist item and proves only that Move Down is disabled. No focused browser regression currently moves one of at least two items, saves, reloads, and verifies the stored order and preview/scheduling result. Close after that end-to-end proof passes, repairing the implementation if it exposes a persistence, hydration, or fallback defect.'
-resolved    = true
-resolution  = 'The editor now server-renders its initial form, emits Move Up and Move Down as normal submit controls whose `item_move` command is validated and applied before the existing ordered replacement, and enhances the same rows with a localized drag handle after hydration. The route-family Playwright regression seeds two item types, proves no-JavaScript Move Down persists `5,0`, drags the first row back after hydration, saves, and proves persisted `0,5`; focused parser tests cover valid and out-of-bounds move commands.'

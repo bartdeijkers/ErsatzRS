@@ -21,6 +21,7 @@ source of truth, and is unrelated to the application's runtime database.
 | `hydration.toml` | Per-page Leptos islands hydration parity. |
 | `sessions.ndjson` | Append-only session/handoff log, one JSON object per line. |
 | `persistence-gap-matrix.md` | Human-maintained repository and real-world decode coverage tracker. |
+| `parity-debt-archive.toml` | Resolved `[[debt]]` history moved out of `parity/`; not loaded by the tooling. |
 
 The ADR matrix is **derived** by scanning `docs/adr/*.md` and reverse-linking
 features through each parity file's `adr` field; there is no separate ADR file

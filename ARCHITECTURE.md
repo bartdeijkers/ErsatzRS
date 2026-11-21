@@ -10,13 +10,13 @@ crates/
   ersatzrs-time/      Jiff-backed time values and compatibility codecs
   ersatzrs-addon-contract/ versioned package, runtime, and NDJSON wire DTOs
   ersatzrs-domain/    entities, enums, value objects
-  ersatzrs-core/      business logic, scheduling traits, repository traits
+  ersatzrs-core/      business logic, playout scheduling engines, repository traits
   ersatzrs-hwprobe/   native OS/GPU capability probes behind a safe API
   ersatzrs-platform/  dependency-light operating-system integrations
   ersatzrs-ffmpeg/    FFmpeg argument and filter-graph builders
   ersatzrs-infra/     sqlx repositories, migrations, provider clients
   ersatzrs-app/       use-case handlers
-  ersatzrs-scheduler/ playout scheduling engines and background scheduling work
+  ersatzrs-scheduler/ background scheduling worker (queue, ticks, retries)
   ersatzrs-web/       axum + Leptos host, IPTV, HLS, HDHR, API routes
   ersatzrs-scanner/   scanner binary
   ersatzrs-healthcheck/ readiness-probe binary
@@ -75,9 +75,13 @@ Rules:
   `host` for runtime, `transport` for IPTV/HDHomeRun-style protocols, `api` for
   plain axum admin APIs, and `admin` for the Leptos UI.
 - `ersatzrs-scanner` owns scanner CLI concerns.
-- `ersatzrs-scheduler` owns the playout scheduling engines and background
-  scheduling work. Its current runtime integration depends on application,
-  FFmpeg, infrastructure, and SQLx types as shown in the table above.
+- `ersatzrs-core` owns the storage-neutral playout scheduling traits,
+  policies, engines (Block, Classic, Scripted, YAML, External JSON) and their
+  dispatch in `playout_builder.rs` (ADR 0051).
+- `ersatzrs-scheduler` is the native background worker: it consumes durable
+  work and owns ticking, queue consumption, maintenance, retries, locking and
+  shutdown. Its runtime integration depends on application, FFmpeg,
+  infrastructure, and SQLx types as shown in the table above.
 - `ersatzrs-ffmpeg` owns FFmpeg argv and filter-graph construction, and consumes
   safe hardware capability rows from `ersatzrs-hwprobe`.
 - `ersatzrs-launcher` is the Windows-only system-tray launcher. Its real logic

@@ -12,24 +12,3 @@ Reopened 2026-06-27 from MTV channel dogfood: the generated schedule-items serve
 
 Resolved 2026-07-19 from Windows MTV dogfood: the intended three-video/one-bumper loop is represented by two ordered schedule items, `Multiple (3)` followed by `One`, both without roll filler. The editor now explains that schedule-item pre-, mid-, and post-roll filler applies to every selected media item. Persistence and hydrated browser regressions prove that the two-row topology and order survive replace/save/reload.
 '''
-
-[[debt]]
-id          = 'schedule-items-add-button-regression'
-description = 'The hydrated Add Schedule Item button on `/schedules/:id/items` stopped opening a new editable schedule item reliably.'
-discovered  = '2026-06-22'
-evidence    = 'Fixed 2026-06-22: `ScheduleItemsIsland` now updates selection outside the `items.update` mutation and marks hydrated command buttons as `type="button"` so add/copy/reorder/delete clicks cannot be interpreted as implicit form submits.'
-resolved    = true
-
-[[debt]]
-id          = 'schedule-multiple-then-one-cycle-regression'
-description = 'Schedule item coverage did not protect an ordered Multiple (3) then One topology, allowing a three-video/one-bumper loop to be reconfigured as one Multiple item with post-roll filler, which inserts a bumper after every video.'
-discovered  = '2026-07-19'
-evidence    = 'Resolved 2026-07-19: server-function integration coverage round-trips two ordered rows with no post-roll filler, the scheduling route-family Playwright proof saves and reloads Multiple (3) then One, and the localized editor guidance states that roll filler applies to every selected media item.'
-resolved    = true
-
-[[debt]]
-id          = 'schedule-items-fallback-vector-form-deserialization'
-description = 'The raw `/api/schedules/items/save` fallback rejects or drops repeated schedule-item vector fields, so saving multiple schedule rows through the fallback path can leave the schedule empty.'
-discovered  = '2026-06-27'
-evidence    = 'MTV dogfood channel setup: posting repeated `item_index=0`-style fields returned 422 (`item_index: invalid type: string "0", expected a sequence`); bracketed/indexed retries returned success but persisted zero `ProgramScheduleItem` rows. Fixed 2026-06-28: `save_schedule_items_form` now consumes `Bytes` and `ScheduleItemsSaveForm::from_urlencoded_bytes` accepts repeated raw form fields before `to_items` aligns rows. Regression tests cover repeated scalar row fields, checkbox indexes, percent/plus decoding, filler/watermark/graphics/language values, and add-item fallback fields.'
-resolved    = true
