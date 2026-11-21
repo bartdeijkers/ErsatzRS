@@ -9,6 +9,7 @@ tutorials, how-to guides, reference pages, or explanations.
 - [Pinned ErsatzTV parity baseline](parity-baseline.md)
 - [Runtime evidence triage](runtime-triage.md)
 - [Clippy exemption cleanup](clippy-cleanup-routine.md)
+- [Daily upstream catch-up and release follow-through](daily-upstream-catch-up.md)
 
 Change an automation contract only when the corresponding scheduled workflow
 must change. The external scheduler remains responsible for selecting and
