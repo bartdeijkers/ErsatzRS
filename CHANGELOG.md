@@ -86,6 +86,11 @@ release section when tagging a release.
   `docs/progress/parity-debt-archive.toml`, nine verified or duplicate items
   were closed, the yt-dlp thumbnail item moved to the add-ons repository, and
   ARCHITECTURE.md now names `ersatzrs-core` as owner of the scheduling engines.
+- The Next source candidate now builds from upstream Next v0.2.7 instead of
+  9133cd28. It keeps all twelve ErsatzRS patches and adds the upstream
+  libplacebo shader cache and GPU driver cache folders, which shorten channel
+  startup with tone mapping and CUDA. Production keeps its current worker
+  until the candidate is qualified.
 - CONTRIBUTING.md lists the available labels and when to apply them; only
   `heavy-checks` starts CI.
 
@@ -340,6 +345,10 @@ release section when tagging a release.
 
 ### Fixed
 
+- ErsatzRS creates the folders named by `XDG_CACHE_HOME` and `CUDA_CACHE_PATH`
+  at startup, as ErsatzTV 26.13.0 does. GPU drivers only create their own
+  subfolder there, so pointing these variables at an empty volume no longer
+  makes FFmpeg recompile CUDA kernels and shaders on every stream start.
 - Playback troubleshooting can download logs when Next fails before FFmpeg starts.
 - Native playback skips playout windows shorter than one video frame before starting the encoder. This protects VAAPI playback at clipped filler boundaries.
 - Keep active Next HLS streams playing on Windows by reliably refreshing their

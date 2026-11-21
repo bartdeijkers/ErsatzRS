@@ -1,19 +1,18 @@
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index 4d6819d..8ddb613 100644
+index 6fe3973..1ff80be 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
  (`0.B.C`, the same rule as the [config versions](https://ersatztv.org/next-docs/configuration/versions)).
  
  ## [Unreleased]
 +### Added
 +- Optional `ersatzrs.playout-index.v1` indexed playout with immutable day files and reader leases (channel config schema 0.1.6).
-+
- ### Changed
- - Reduce channel startup latency with `cuda` acceleration
  
+ ## [0.2.7] - 2026-11-20
+ ### Fixed
 diff --git a/Cargo.lock b/Cargo.lock
-index f8cac70..e92d9f8 100644
+index 8b9807f..99d236c 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -154,6 +154,15 @@ version = "2.13.2"
@@ -88,7 +87,7 @@ index f8cac70..e92d9f8 100644
   "tempfile",
   "thiserror",
 @@ -476,9 +512,11 @@ name = "ersatztv-playout"
- version = "0.2.6"
+ version = "0.2.7"
  dependencies = [
   "ersatztv-core",
 + "libc",
@@ -147,7 +146,7 @@ index f8cac70..e92d9f8 100644
  name = "unicase"
  version = "2.10.0"
 diff --git a/Cargo.toml b/Cargo.toml
-index 8bad3fc..9dc5e6d 100644
+index 39c199d..db24373 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -56,6 +56,7 @@ rstest = "0.26.1"
@@ -170,7 +169,7 @@ index 1544643..1a42a1c 100644
 +[dev-dependencies]
 +sha2 = { workspace = true }
 diff --git a/crates/ersatztv-channel/src/config.rs b/crates/ersatztv-channel/src/config.rs
-index d1bf06a..46dfdcd 100644
+index 2441e63..7b93efa 100644
 --- a/crates/ersatztv-channel/src/config.rs
 +++ b/crates/ersatztv-channel/src/config.rs
 @@ -14,7 +14,7 @@ use crate::error::{ChannelError, IoContext};
@@ -205,7 +204,7 @@ index d1bf06a..46dfdcd 100644
      /// Folder of playout files, named `{start}_{finish}.json`.
      pub folder: String,
      /// Play the playout as if the channel started at this time instead of now. RFC 3339, e.g.
-@@ -930,6 +944,7 @@ impl ChannelConfig {
+@@ -934,6 +948,7 @@ impl ChannelConfig {
  
              ersatztv_core::resolve_relative_paths(&mut v, &relative_to, PATH_FIELDS);
  
@@ -213,7 +212,7 @@ index d1bf06a..46dfdcd 100644
              ersatztv_core::deep_merge(&mut config_value, v);
          }
  
-@@ -1036,6 +1051,28 @@ fn deserialize_filter_option<'de, D: Deserializer<'de>>(d: D) -> Result<Option<S
+@@ -1040,6 +1055,28 @@ fn deserialize_filter_option<'de, D: Deserializer<'de>>(d: D) -> Result<Option<S
      }
  }
  
@@ -242,7 +241,7 @@ index d1bf06a..46dfdcd 100644
  fn deserialize_optional_path<'de, D: Deserializer<'de>>(d: D) -> Result<Option<PathBuf>, D::Error> {
      Ok(Option::<PathBuf>::deserialize(d)?.filter(|p| !p.as_os_str().is_empty()))
  }
-@@ -1105,6 +1142,46 @@ mod tests {
+@@ -1109,6 +1146,46 @@ mod tests {
          assert_eq!(config.version, Some(SCHEMA.uri()));
      }
  
@@ -289,7 +288,7 @@ index d1bf06a..46dfdcd 100644
      /// Before 0.1.0, `"format": null` in an overlay meant copy. It must not load as transcode now.
      #[tokio::test]
      async fn unversioned_overlay_is_rejected() {
-@@ -1389,3 +1466,32 @@ mod tests {
+@@ -1393,3 +1470,32 @@ mod tests {
          );
      }
  }
@@ -1217,7 +1216,7 @@ index 082f16d..843ffea 100644
      "folder": "./playout"
    },
 diff --git a/schema/channel_config.json b/schema/channel_config.json
-index 9b14092..ceb3b8e 100644
+index 4b38296..c700188 100644
 --- a/schema/channel_config.json
 +++ b/schema/channel_config.json
 @@ -1,5 +1,5 @@
