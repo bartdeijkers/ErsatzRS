@@ -84,6 +84,12 @@ function translation(module: string): (key: string) => string {
 async function ready(page: Page, js: boolean): Promise<void> {
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
   if (js) await waitForHydration(page);
+  // These scenarios exercise the full editor. Open its public disclosure just
+  // as an operator would; the guided flow below checks the folded default.
+  const editor = page.getByTestId('teletext-full-editor');
+  if (await editor.count() && await editor.getAttribute('open') === null) {
+    await editor.locator(':scope > summary').click();
+  }
   // Current-guide preview lives inside the page's native advanced disclosure.
   // Follow the visible control instead of treating hidden rendered data as proof.
   if (new URL(page.url()).searchParams.has('guide_preview')) {
@@ -264,6 +270,79 @@ function savedOriginal(fixture: TeletextChannelFixture, channel: number): SavedO
   const row = fixture.database.prepare('SELECT Document FROM TeletextDesignRevision WHERE DesignId=? AND Revision=?')
     .get(designs[0].Id, designs[0].Revision) as { Document: Uint8Array };
   return JSON.parse(Buffer.from(row.Document).toString('utf8'));
+}
+
+for (const js of [false, true]) {
+  test(`guided channel setup and stale profile repair (JavaScript ${js})`, async ({ browser, baseURL }) => {
+    test.setTimeout(120_000);
+    const fixture = new TeletextChannelFixture(databasePath!, { retainPublication: true });
+    const channel = fixture.channels[1];
+    const db = fixture.database;
+    const context = await browser.newContext({ baseURL, javaScriptEnabled: js, viewport: { width: 360, height: 780 } });
+    let media: number | undefined;
+    try {
+      media = seedSqlGuide(fixture);
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(error.message));
+      page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
+      await page.goto(`/channels/${channel}/teletext`);
+      if (js) await waitForHydration(page);
+      const check = page.getByTestId('teletext-broadcast-check');
+      await check.locator(':scope > summary').press('Enter');
+      const capacity = page.getByTestId('teletext-capacity-form');
+      await capacity.locator('[name="profile"]').selectOption('tvguide-16');
+      await capacity.locator('[name="confirm_scope"]').check();
+      await capacity.getByRole('button').click();
+      await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'capacity');
+      await page.goto(`/channels/${channel}/teletext`);
+      const guide = page.getByTestId('teletext-guide-setup');
+      const editor = page.getByTestId('teletext-full-editor');
+      const binding = () => db.prepare('SELECT ProfileId FROM ChannelTeletextBinding WHERE ChannelId=? AND AddonId=?')
+        .get(channel, addonId) as { ProfileId: number };
+      const generations = () => db.prepare('SELECT COUNT(*) AS n FROM TeletextAcceptedGeneration WHERE ChannelId=?')
+        .get(channel) as { n: number };
+      await expect(editor).not.toHaveAttribute('open');
+      await guide.getByRole('button', { name: 'Set up programme guide' }).click();
+      await expect(guide.getByRole('img')).toBeVisible();
+      expect(savedOriginal(fixture, channel).guide_source.channel_ids).toEqual([channel]);
+      expect(generations().n).toBe(0);
+      await guide.getByRole('link', { name: /201$/ }).click();
+      await expect(guide.getByRole('img')).toHaveAttribute('alt', /201$/);
+      const image = await guide.getByRole('img').boundingBox();
+      expect(image).not.toBeNull();
+      expect(image!.x + image!.width).toBeLessThanOrEqual(360);
+      await guide.getByRole('button', { name: /Publish on channel/ }).click();
+      await expect.poll(() => generations().n).toBe(1);
+      const old = binding().ProfileId;
+      // A new installation revision invalidates the saved profile just as a
+      // package update does. Preserve the installed payload and its channels.
+      db.prepare('UPDATE AddonInstallation SET StateRevision=? WHERE AddonId=?')
+        .run('60978c69-8a75-44b1-946a-e2bac7eb3c90', addonId);
+      await page.goto(`/channels/${channel}/teletext`);
+      await expect(editor).not.toHaveAttribute('open');
+      await guide.getByRole('button', { name: 'Repair programme guide' }).click();
+      await expect(guide.getByRole('img')).toBeVisible();
+      expect(binding().ProfileId).not.toBe(old);
+      expect(db.prepare('SELECT Revision,IsDeleted FROM TeletextProfile WHERE Id=?').get(old))
+        .toEqual({ Revision: 1, IsDeleted: 0 });
+      expect(generations().n).toBe(1);
+      await guide.getByRole('button', { name: /Publish on channel/ }).click();
+      await expect.poll(() => generations().n).toBe(2);
+      await expect(guide.getByRole('status')).toContainText('Programme guide published on channel');
+      await editor.locator(':scope > summary').press('Enter');
+      await expect(page.getByTestId('teletext-custom-pages')).toBeVisible();
+      expect(errors).toEqual([]);
+    } finally {
+      await context.close();
+      db.prepare('UPDATE AddonInstallation SET StateRevision=? WHERE AddonId=?').run(installed.StateRevision, addonId);
+      if (media !== undefined) {
+        db.prepare('DELETE FROM Playout WHERE Id=?').run(media);
+        db.prepare('DELETE FROM MediaSource WHERE Id=?').run(media);
+      }
+      fixture.close();
+    }
+  });
 }
 
 for (const js of [true, false]) {

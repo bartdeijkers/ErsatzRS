@@ -136,6 +136,33 @@ pub struct TeletextAddonData {
     pub binding: Option<TeletextBindingData>,
 }
 
+/// Production guide package with a known index and programme-page contract.
+pub(crate) const GUIDE_ADDON: &str = "org.ersatzrs.addon.tvguide-teletext";
+
+/// The effective value of the first listed setting key for the channel's
+/// selected profile: profile override, then installation value, then default.
+pub(crate) fn effective_setting(addon: &TeletextAddonData, keys: &[&str]) -> Option<String> {
+    let profile = addon.binding.as_ref().and_then(|binding| {
+        addon
+            .profiles
+            .iter()
+            .find(|profile| profile.id == binding.profile_id)
+    });
+    keys.iter().find_map(|key| {
+        let setting = addon
+            .settings
+            .iter()
+            .find(|setting| setting.definition.key == *key)?;
+        profile
+            .and_then(|profile| profile.settings.iter().find(|value| value.key == *key))
+            .or(setting.inherited.as_ref())
+            .filter(|value| value.mode == "literal" && !value.redacted)
+            .map(|value| value.value.clone())
+            .or_else(|| setting.definition.default.clone())
+            .filter(|value| !value.trim().is_empty())
+    })
+}
+
 /// Exact rendered CAS observation, never replaced with a later write-time read.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

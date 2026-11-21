@@ -311,6 +311,15 @@ subtitle, alternate-audio, required-platform, native/Next, browser and TSDuck
 gates remain. ADR 0121 owns the 2026-10-26 private-period macOS deferral; it is
 not macOS acceptance and changes no functional requirement.
 
+### Channel guide confirmation (2026-11-21)
+
+The channel guide may present request and acceptance as one explicit Publish
+action after preview. Both storage transitions still run, in order, with the
+rendered head, pending and accepted fences. Acceptance targets the request ID
+returned by that operation. If acceptance fails, the pending request remains
+recoverable in the existing editor. Setup and repair only prepare a draft.
+The full editor keeps the independent request and publication controls.
+
 ## Consequences
 
 Profiles and timeline overrides require bounded, transactionally consistent
