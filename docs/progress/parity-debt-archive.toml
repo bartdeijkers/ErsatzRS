@@ -5373,3 +5373,59 @@ resolution  = '''
 Closed 2026-11-20: Linux x64 and Windows x64 execution is proven under UCU-09 (Complete). The remaining all-six-platform residue is the ARM/macOS acceptance tracked by ucu-arm-macos-application-acceptance, which names ADR 0096.
 '''
 resolved    = true
+
+[[debt]]
+feature     = 'upstream-baseline-catch-up'
+id          = 'ucu16-next-row305'
+description = 'Qualify a managed Next worker for ErsatzTV row 305. The current worker can exit before FFmpeg starts without writing the troubleshooting dossier, and lacks the updated NVIDIA startup probe.'
+discovered  = '2026-11-18'
+evidence    = '''
+ErsatzTV ba432329 moves the Next pin from 614dc9be to 9133cd28.
+Next 6f33f247 moves NVIDIA probe teardown off the startup path and waits for it
+at process exit. Commit 82dd16cd changes only the deferred macOS CI runners.
+Commit 9133cd28 preserves invalid scheduled item JSON in playout_item.json and
+writes a dossier on troubleshooting errors before FFmpeg starts. Row 304
+accepts existing logs or an outcome and includes JSON files in the ZIP.
+
+Candidate 0.2.7-9133cd28-ersatzrs.candidate.1 is reproducible from the pinned
+source archive using scripts/release/next-patches/row305/manifest.json. The 12
+patches reproduce the reviewed source and Cargo.lock. Upstream includes the
+dependency fixes previously carried by patch 0003. Four retained patches were
+rebased, including the XMLTV regressions. Cargo resolves the locked worker
+graph for all four required targets.
+
+The combined CI run must build and exercise the four packages, run the Linux
+worker regressions and playback, and archive the real invalid-item dossier
+with its original JSON and outcome. NVIDIA hardware execution retains its
+existing hardware prerequisite. Managed promotion under ADR 0135 requires
+qualified package identities and remains open. Production still uses 6c9e0cf7.
+
+2026-11-20: rows 307 and 308 move the upstream Next pin through fac6121c to
+the v0.2.7 release aa0aedb5 before this candidate was qualified, so the
+candidate follows them instead of qualifying 9133cd28 first. v0.2.7 adds a
+libplacebo shader cache in the `libplacebo` subfolder of the configured
+`cache.folder`, swept by write age, and creates the XDG_CACHE_HOME and
+CUDA_CACHE_PATH folders before probing. Candidate
+0.2.7-aa0aedb5-ersatzrs.candidate.1 keeps all 12 patches: nine apply
+byte-for-byte, and 0010, 0011 and 0012 are rebased for the new shader-cache
+output settings, the 0.2.7 changelog heading and the 0.2.7 workspace pins.
+The prepare script reproduces the reviewed tree from the pinned archive, and
+Cargo resolves the locked graph for all four required targets. The same
+combined CI qualification and ADR 0135 promotion remain open.
+
+2026-11-20: PR 185 CI qualified candidate.1 on all four required targets.
+With maintainer approval to publish, the unchanged source is renamed
+0.2.7-aa0aedb5-ersatzrs.1 so the published packages carry their release
+version. Publication uses the exact packages that this run qualifies,
+without rebuilding.
+
+2026-11-21: PR 189 CI qualified the release-named packages on all four
+required targets. The maintainer approved publication, managed adoption and
+the pin advance. Release next-0.2.7-aa0aedb5-ersatzrs.1 in
+bartdeijkers/ErsatzRS-next publishes those exact packages without
+rebuilding, and scripts/release/next-patches/manifest.json now pins them for
+managed acquisition. The parity pin advances to v26.13.0. NVIDIA hardware
+execution keeps its existing hardware prerequisite.
+'''
+adr         = '0135'
+resolved    = true

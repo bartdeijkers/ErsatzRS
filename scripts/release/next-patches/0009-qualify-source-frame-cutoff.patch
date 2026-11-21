@@ -1,9 +1,8 @@
-Rebase retained finite source cut onto exact6c, preserving LocalInputSource and still-image boundary imports.
-
 diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-channel/src/channel_session.rs
+index 7becc96..3eb1c2a 100644
 --- a/crates/ersatztv-channel/src/channel_session.rs
 +++ b/crates/ersatztv-channel/src/channel_session.rs
-@@ -26,6 +26,7 @@
+@@ -26,6 +26,7 @@ use ffpipeline::frame_size::FrameSize;
  use ffpipeline::input::{
      FfmpegInputArgs, GraphicsInput, HttpInputOptions, HttpInputSource, InputSettings, InputSource,
      LavfiInputSource, LocalInputSource, ProbedInput, RtspInputOptions, RtspInputSource,
@@ -11,22 +10,21 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
  };
  use ffpipeline::keyframe_seek::{
      CopySeekRequest, InputStart, Keyframe, KeyframeLocator, plan_copy_seek,
-@@ -778,7 +779,13 @@
+@@ -780,7 +781,13 @@ impl ChannelSession {
              channel_number: Some(self.channel_config.number().to_owned()),
              video_copy_seek: None,
              video_copy_blockers: Vec::new(),
--        };
 +            source_frame_cut: None,
-+        };
+         };
 +        input_settings.source_frame_cut = selected_source_frame_cut(
 +            current_item,
 +            &video_source,
 +            input_settings.select_video_stream()?.stream_index,
 +        )?;
  
-         let copy_timing = if output_settings.video.copy.is_some()
-             && !is_live
-@@ -2043,6 +2050,45 @@
+         let window = input_settings.duration();
+         let output_frame_rate = output_settings.frame_rate.clone().or_else(|| {
+@@ -2103,6 +2110,45 @@ fn source_is_live(source: &PlayoutItemSource) -> bool {
      )
  }
  
@@ -72,11 +70,10 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
  fn probe_hint_to_result(hint: &ProbeHint, path: String) -> ProbeResult {
      let video = hint.video.iter().map(|v| {
          ProbeResultStream::Video(Box::new(ProbeResultVideoStream {
-@@ -2114,6 +2160,115 @@
-     use ffpipeline::output_format::OutputFormat;
+@@ -2198,6 +2244,115 @@ mod tests {
      use serde_json::json;
      use time::macros::datetime;
-+
+ 
 +    fn source_cut_fixture() -> (PlayoutItem, PlayoutItemSource) {
 +        let start = datetime!(2026-01-01 12:00 UTC);
 +        let item = PlayoutItem::new(
@@ -185,10 +182,11 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
 +                .is_err()
 +        );
 +    }
- 
++
      use super::*;
  
-@@ -2399,6 +2554,7 @@
+     #[test]
+@@ -2482,6 +2637,7 @@ mod tests {
              channel_number: None,
              video_copy_seek: None,
              video_copy_blockers: Vec::new(),
@@ -197,9 +195,10 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
          let output = OutputSettings {
              audio,
 diff --git a/crates/ersatztv-channel/src/dynamic.rs b/crates/ersatztv-channel/src/dynamic.rs
+index b71ef1a..1a76e3f 100644
 --- a/crates/ersatztv-channel/src/dynamic.rs
 +++ b/crates/ersatztv-channel/src/dynamic.rs
-@@ -89,6 +89,12 @@
+@@ -89,6 +89,12 @@ pub async fn resolve(
          "playout schema",
      )?;
  
@@ -212,10 +211,23 @@ diff --git a/crates/ersatztv-channel/src/dynamic.rs b/crates/ersatztv-channel/sr
      let policy = RetryPolicy::new(*timeout_us, *retry_budget_ms, *retry_backoff_ms);
      let body = with_retry(&policy, |timeout| {
          get_text(client, &expanded_uri, &header_map, timeout)
+diff --git a/crates/ersatztv-playout-generator/src/generate.rs b/crates/ersatztv-playout-generator/src/generate.rs
+index ddfbfac..d7e6a35 100644
+--- a/crates/ersatztv-playout-generator/src/generate.rs
++++ b/crates/ersatztv-playout-generator/src/generate.rs
+@@ -221,6 +221,7 @@ async fn build_items(
+                                     dv_profile: v.dv_profile,
+                                     has_hdr10_metadata: Some(v.color_params.has_hdr10_metadata),
+                                     rotation: v.rotation,
++                                    source_frame_cut: None,
+                                 })
+                             } else {
+                                 None
 diff --git a/crates/ersatztv-playout/src/playout.rs b/crates/ersatztv-playout/src/playout.rs
+index f59def2..ac6528a 100644
 --- a/crates/ersatztv-playout/src/playout.rs
 +++ b/crates/ersatztv-playout/src/playout.rs
-@@ -362,6 +362,17 @@
+@@ -362,6 +362,17 @@ pub struct VideoHint {
      pub has_hdr10_metadata: Option<bool>,
      #[serde(skip_serializing_if = "Option::is_none")]
      pub rotation: Option<i32>,
@@ -233,21 +245,11 @@ diff --git a/crates/ersatztv-playout/src/playout.rs b/crates/ersatztv-playout/sr
  }
  
  impl VideoHint {
-diff --git a/crates/ersatztv-playout-generator/src/generate.rs b/crates/ersatztv-playout-generator/src/generate.rs
---- a/crates/ersatztv-playout-generator/src/generate.rs
-+++ b/crates/ersatztv-playout-generator/src/generate.rs
-@@ -221,6 +221,7 @@
-                                     dv_profile: v.dv_profile,
-                                     has_hdr10_metadata: Some(v.color_params.has_hdr10_metadata),
-                                     rotation: v.rotation,
-+                                    source_frame_cut: None,
-                                 })
-                             } else {
-                                 None
 diff --git a/crates/ffpipeline/src/error.rs b/crates/ffpipeline/src/error.rs
+index 248ba58..8a0804c 100644
 --- a/crates/ffpipeline/src/error.rs
 +++ b/crates/ffpipeline/src/error.rs
-@@ -2,6 +2,8 @@
+@@ -2,6 +2,8 @@ use thiserror::Error;
  
  #[derive(Error, Debug)]
  pub enum FFPipelineError {
@@ -257,9 +259,10 @@ diff --git a/crates/ffpipeline/src/error.rs b/crates/ffpipeline/src/error.rs
      GraphicsStreamNotFound(usize),
      #[error("error detecting ffmpeg capabilities: {0}")]
 diff --git a/crates/ffpipeline/src/input.rs b/crates/ffpipeline/src/input.rs
+index 6c887ed..1d3a419 100644
 --- a/crates/ffpipeline/src/input.rs
 +++ b/crates/ffpipeline/src/input.rs
-@@ -28,6 +28,43 @@
+@@ -28,6 +28,43 @@ pub struct InputSettings {
      pub video_copy_seek: Option<CopySeek>,
      /// Blockers that need a dry run, so only the caller can find them
      pub video_copy_blockers: Vec<CopyBlocker>,
@@ -304,9 +307,10 @@ diff --git a/crates/ffpipeline/src/input.rs b/crates/ffpipeline/src/input.rs
  
  impl InputSettings {
 diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.rs
+index 0699e87..9c6f34d 100644
 --- a/crates/ffpipeline/src/pipeline.rs
 +++ b/crates/ffpipeline/src/pipeline.rs
-@@ -22,7 +22,7 @@
+@@ -22,7 +22,7 @@ use crate::global_option::{GlobalOption, LogLevel};
  use crate::hw_accel::{HardwareAccel, HwAccel};
  use crate::input::{
      CanvasLayout, FfmpegInputArgs, FfmpegInputRequestContext, GraphicsInput, GraphicsKind,
@@ -315,7 +319,7 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
  };
  use crate::output_format::gop_frames;
  use crate::output_option::OutputOption;
-@@ -39,8 +39,8 @@
+@@ -39,8 +39,8 @@ use crate::video_filter::{
      ClipFilter, ColorChannelMixerFilter, CropFilter, DeinterlaceFilter, Dv5WorkaroundFilter,
      EnsureAlphaFilter, FadeFilter, FormatFilter, FpsFilter, LoopFilter, NormalizeChromaFilter,
      PadFilter, ScaleFilter, SetSarFilter, SoftwareDeinterlaceFilter, SoftwareDeinterlaceOptions,
@@ -326,7 +330,7 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
  };
  
  pub const KEYFRAME_INTERVAL_SECONDS: u32 = 2;
-@@ -643,6 +643,9 @@
+@@ -643,6 +643,9 @@ impl Pipeline {
          mut input_settings: InputSettings,
          output_settings: OutputSettings,
      ) -> Result<Pipeline, FFPipelineError> {
@@ -336,11 +340,10 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
          let mut final_output_settings = output_settings;
  
          // A live RTSP reader cannot work ahead to fill the default ten-second
-@@ -733,6 +736,18 @@
-                 )
+@@ -731,6 +734,18 @@ impl Pipeline {
              }
          };
-+
+ 
 +        let source_frame_cut = validate_source_frame_cut(
 +            &input_settings,
 +            &final_output_settings,
@@ -352,14 +355,14 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
 +                && duration
 +                    == input_settings.video_input.out_point - input_settings.video_input.in_point
 +        });
- 
++
          let mut pts_offset = final_output_settings.pts_offset;
          let mut video_seek = input_settings.video_input.in_point;
-@@ -843,6 +858,16 @@
-             PipelineFilter::Audio(AudioFilter::Resample),
+         let mut copy_output_options = Vec::new();
+@@ -841,6 +856,16 @@ impl Pipeline {
              PipelineFilter::Audio(AudioFilter::Pad),
          ];
-+
+ 
 +        if let Some(cut) = source_frame_cut {
 +            filters.push(PipelineFilter::Video(
 +                SourceFrameCutFilter {
@@ -369,10 +372,11 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
 +                .into(),
 +            ));
 +        }
- 
++
          filters.extend([
              PipelineFilter::Video(
-@@ -1399,8 +1424,10 @@
+                 LoopFilter {
+@@ -1396,8 +1421,10 @@ impl Pipeline {
                  OutputOption::VideoBuffer(final_output_settings.video.transcode.buffer),
                  OutputOption::DoNotMapMetadata,
                  OutputOption::Duration(duration),
@@ -385,12 +389,10 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
                  OutputOption::TsOffset(pts_offset),
                  OutputOption::VideoTrackTimeScale(90_000),
                  OutputOption::FrameRate(output_frame_rate),
-@@ -1955,6 +1982,26 @@
-     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-         write!(f, "args: {}", self.args().join(" "))
+@@ -1954,6 +1981,26 @@ impl std::fmt::Display for Pipeline {
      }
-+}
-+
+ }
+ 
 +fn validate_source_frame_cut(
 +    input: &InputSettings,
 +    output: &OutputSettings,
@@ -409,10 +411,12 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
 +        return Err(FFPipelineError::InvalidSourceFrameCut);
 +    }
 +    Ok(Some(cut))
- }
- 
++}
++
  // PGS is 1080p. With no size, ffmpeg uses the video size (e.g. 4K) and scales that canvas on
-@@ -2089,6 +2136,135 @@
+ // every frame until the first subtitle.
+ fn unknown_pgs_canvas_size(stream: &ProbeResultVideoStream) -> Option<FrameSize> {
+@@ -2086,6 +2133,135 @@ fn own_input_keeps_sync(format_name: Option<&str>) -> bool {
  mod tests {
      use super::*;
  
@@ -548,7 +552,7 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
      #[test]
      fn video_format_parses_ffmpeg_codec_names() {
          for (codec, format) in [
-@@ -2171,6 +2347,7 @@
+@@ -2168,6 +2344,7 @@ mod tests {
              channel_number: None,
              video_copy_seek: None,
              video_copy_blockers: Vec::new(),
@@ -556,19 +560,19 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
          }
      }
  
-
 diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video_filter.rs
+index 6ecbf2f..90b41d4 100644
 --- a/crates/ffpipeline/src/video_filter.rs
 +++ b/crates/ffpipeline/src/video_filter.rs
-@@ -52,6 +52,7 @@
+@@ -52,6 +52,7 @@ pub enum VideoFilter {
      Loop(LoopFilter),
      StillImageBoundary(StillImageBoundaryFilter),
      Fps(FpsFilter),
 +    SourceFrameCut(SourceFrameCutFilter),
      Format(FormatFilter),
+     LimitedRange(LimitedRangeFilter),
      NormalizeChroma(NormalizeChromaFilter),
-     ToneMap(ToneMapFilter),
-@@ -104,6 +105,42 @@
+@@ -105,6 +106,42 @@ pub enum VideoFilter {
  
  // --- Software filter structs ---
  
@@ -611,7 +615,7 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
  #[derive(Debug, Clone)]
  pub struct HwUploadFilter {
      pub target_surface: FrameSurface,
-@@ -1094,6 +1131,26 @@
+@@ -1116,6 +1153,26 @@ mod tests {
      use time::{Date, Month, Time, UtcOffset};
  
      use super::*;
@@ -638,7 +642,7 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
      #[test]
      fn text_subtitle_seek_borrows_and_restores_the_same_rounded_tick_offset() {
          for (seek, expected) in [
-@@ -1186,8 +1243,6 @@
+@@ -1208,8 +1265,6 @@ mod tests {
          }
      }
  
@@ -647,11 +651,11 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
      #[test]
      fn subtitles_filter_selects_stream_after_the_first() {
          let filter = |subtitle_index| SubtitlesFilter {
-
 diff --git a/crates/ffpipeline/tests/common/mod.rs b/crates/ffpipeline/tests/common/mod.rs
+index c8d66d1..1c31d1a 100644
 --- a/crates/ffpipeline/tests/common/mod.rs
 +++ b/crates/ffpipeline/tests/common/mod.rs
-@@ -1332,6 +1332,7 @@
+@@ -1332,6 +1332,7 @@ pub fn build_input(
          channel_number: None,
          video_copy_seek: None,
          video_copy_blockers: Vec::new(),

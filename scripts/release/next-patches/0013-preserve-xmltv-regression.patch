@@ -1,0 +1,29 @@
+diff --git a/crates/ersatztv-playout-generator/src/xmltv.rs b/crates/ersatztv-playout-generator/src/xmltv.rs
+index 959c3d0..3c78564 100644
+--- a/crates/ersatztv-playout-generator/src/xmltv.rs
++++ b/crates/ersatztv-playout-generator/src/xmltv.rs
+@@ -201,4 +201,24 @@ mod tests {
+         assert_eq!(out[0].stop, datetime!(2026-06-30 16:00 -6));
+         assert_eq!(out[0].title, "Mister Rogers' Neighborhood &amp; Friends");
+     }
++
++    #[test]
++    fn security_upgrade_retains_xmltv_titles_and_time_fences() {
++        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
++<tv>
++<programme start="20261117000000 +0000" stop="20261117010000 +0000"><title>Expired</title></programme>
++<programme start="20261117010000 +0000" stop="20261117020000 +0000"><title>News &amp; العربية 日本語 &#39;fixture&#39;</title></programme>
++<programme start="20261117020000 +0000" stop="20261117030000 +0000"><title>Replaced</title></programme>
++</tv>"#;
++        let programmes = read_existing_programmes(
++            xml.as_bytes(),
++            datetime!(2026-11-17 01:00 UTC),
++            Some(datetime!(2026-11-17 02:00 UTC)),
++        )
++        .unwrap();
++        assert_eq!(programmes.len(), 1);
++        assert_eq!(programmes[0].start, datetime!(2026-11-17 01:00 UTC));
++        assert_eq!(programmes[0].stop, datetime!(2026-11-17 02:00 UTC));
++        assert_eq!(programmes[0].title, "News & العربية 日本語 'fixture'");
++    }
+ }
