@@ -5,10 +5,10 @@
   "source_archive_sha256": "695b7c755e6e9c9b6306e65c1f13422a2921f6ae85a1189fa1de309b70511e9b",
   "source_lock_sha256": "9a305a1647ab4de0b1eda48f34e7ca18297011b885d505b9315676b4e5359751",
   "patched_lock_sha256": "591e3546f111f2a6ff8134ca260b5124aaabb349a71c6dfcc60bf976c75664aa",
-  "distribution_version": "0.2.7-aa0aedb5-ersatzrs.candidate.1",
+  "distribution_version": "0.2.7-aa0aedb5-ersatzrs.1",
   "rust_toolchain": "1.99.0",
   "adr": "0130;0131;0135",
-  "status": "Source candidate for CI qualification",
+  "status": "Publication candidate for CI qualification",
   "patches": [
     {
       "file": "0001-bound-live-rtsp-shortest-buffer.patch",
