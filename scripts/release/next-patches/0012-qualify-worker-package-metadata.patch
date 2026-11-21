@@ -1,17 +1,16 @@
-Qualify upstream private workspace package metadata for the retained dependency policy. Preserve the exact repository MIT license; inherit it explicitly in each package and pin internal path dependencies to their existing 0.2.5 version. No dependency resolution, feature or Rust implementation change. Root LICENSE SHA256: 63e3fc4abdd9da3cb50217660ef8331984ac034330ef48ae6f1cf768dd210a55.
-
 diff --git a/Cargo.toml b/Cargo.toml
+index db24373..5151484 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -22,6 +22,7 @@
+@@ -22,6 +22,7 @@ resolver = "3"
  # set by .github/scripts/prep-release.sh
- version = "0.2.5"
+ version = "0.2.7"
  publish = false
 +license = "MIT"
  
  [workspace.dependencies]
  axum = "0.8"
-@@ -30,24 +31,24 @@
+@@ -30,24 +31,24 @@ derive_more = { version = "2.1.1", features = ["display"] }
  dyn-clone = "1.0"
  enum_dispatch = "0.3.13"
  env_logger = "0.11"
@@ -19,10 +18,10 @@ diff --git a/Cargo.toml b/Cargo.toml
 -ersatztv-core = { path = "crates/ersatztv-core" }
 -ersatztv-playout = { path = "crates/ersatztv-playout" }
 -ffpipeline = { path = "crates/ffpipeline" }
-+ersatztv = { path = "crates/ersatztv", version = "=0.2.5" }
-+ersatztv-core = { path = "crates/ersatztv-core", version = "=0.2.5" }
-+ersatztv-playout = { path = "crates/ersatztv-playout", version = "=0.2.5" }
-+ffpipeline = { path = "crates/ffpipeline", version = "=0.2.5" }
++ersatztv = { path = "crates/ersatztv", version = "=0.2.7" }
++ersatztv-core = { path = "crates/ersatztv-core", version = "=0.2.7" }
++ersatztv-playout = { path = "crates/ersatztv-playout", version = "=0.2.7" }
++ffpipeline = { path = "crates/ffpipeline", version = "=0.2.7" }
  filetime = "0.2"
  futures-core = "0.3.32"
  futures-util = "0.3.32"
@@ -37,30 +36,20 @@ diff --git a/Cargo.toml b/Cargo.toml
 -libvpl-sys = { path = "crates/libvpl-sys" }
 -libvt-sys = { path = "crates/libvt-sys" }
 -libvulkan-sys = { path = "crates/libvulkan-sys" }
-+libamf-sys = { path = "crates/libamf-sys", version = "=0.2.5" }
-+libcl-sys = { path = "crates/libcl-sys", version = "=0.2.5" }
-+libd3d11-sys = { path = "crates/libd3d11-sys", version = "=0.2.5" }
-+libmpp-sys = { path = "crates/libmpp-sys", version = "=0.2.5" }
-+libnvidia-sys = { path = "crates/libnvidia-sys", version = "=0.2.5" }
-+libva-sys = { path = "crates/libva-sys", version = "=0.2.5" }
-+libvpl-sys = { path = "crates/libvpl-sys", version = "=0.2.5" }
-+libvt-sys = { path = "crates/libvt-sys", version = "=0.2.5" }
-+libvulkan-sys = { path = "crates/libvulkan-sys", version = "=0.2.5" }
++libamf-sys = { path = "crates/libamf-sys", version = "=0.2.7" }
++libcl-sys = { path = "crates/libcl-sys", version = "=0.2.7" }
++libd3d11-sys = { path = "crates/libd3d11-sys", version = "=0.2.7" }
++libmpp-sys = { path = "crates/libmpp-sys", version = "=0.2.7" }
++libnvidia-sys = { path = "crates/libnvidia-sys", version = "=0.2.7" }
++libva-sys = { path = "crates/libva-sys", version = "=0.2.7" }
++libvpl-sys = { path = "crates/libvpl-sys", version = "=0.2.7" }
++libvt-sys = { path = "crates/libvt-sys", version = "=0.2.7" }
++libvulkan-sys = { path = "crates/libvulkan-sys", version = "=0.2.7" }
  log = "0.4"
- quick-xml = "0.40.0"
+ quick-xml = "0.42"
  rand = { version = "0.10", features = ["thread_rng"] }
-diff --git a/crates/ersatztv/Cargo.toml b/crates/ersatztv/Cargo.toml
---- a/crates/ersatztv/Cargo.toml
-+++ b/crates/ersatztv/Cargo.toml
-@@ -2,6 +2,7 @@
- name = "ersatztv"
- version.workspace = true
- publish.workspace = true
-+license.workspace = true
- edition = "2024"
- 
- [dependencies]
 diff --git a/crates/ersatztv-channel/Cargo.toml b/crates/ersatztv-channel/Cargo.toml
+index 1a42a1c..aeb5e84 100644
 --- a/crates/ersatztv-channel/Cargo.toml
 +++ b/crates/ersatztv-channel/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -72,6 +61,7 @@ diff --git a/crates/ersatztv-channel/Cargo.toml b/crates/ersatztv-channel/Cargo.
  
  [dependencies]
 diff --git a/crates/ersatztv-core/Cargo.toml b/crates/ersatztv-core/Cargo.toml
+index c9233e9..7c45b17 100644
 --- a/crates/ersatztv-core/Cargo.toml
 +++ b/crates/ersatztv-core/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -82,18 +72,8 @@ diff --git a/crates/ersatztv-core/Cargo.toml b/crates/ersatztv-core/Cargo.toml
  edition = "2024"
  
  [dependencies]
-diff --git a/crates/ersatztv-playout/Cargo.toml b/crates/ersatztv-playout/Cargo.toml
---- a/crates/ersatztv-playout/Cargo.toml
-+++ b/crates/ersatztv-playout/Cargo.toml
-@@ -2,6 +2,7 @@
- name = "ersatztv-playout"
- version.workspace = true
- publish.workspace = true
-+license.workspace = true
- edition = "2024"
- 
- [dependencies]
 diff --git a/crates/ersatztv-playout-generator/Cargo.toml b/crates/ersatztv-playout-generator/Cargo.toml
+index a740823..8742826 100644
 --- a/crates/ersatztv-playout-generator/Cargo.toml
 +++ b/crates/ersatztv-playout-generator/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -104,7 +84,32 @@ diff --git a/crates/ersatztv-playout-generator/Cargo.toml b/crates/ersatztv-play
  edition = "2024"
  
  [dependencies]
+diff --git a/crates/ersatztv-playout/Cargo.toml b/crates/ersatztv-playout/Cargo.toml
+index 7b14de3..9fb61e5 100644
+--- a/crates/ersatztv-playout/Cargo.toml
++++ b/crates/ersatztv-playout/Cargo.toml
+@@ -2,6 +2,7 @@
+ name = "ersatztv-playout"
+ version.workspace = true
+ publish.workspace = true
++license.workspace = true
+ edition = "2024"
+ 
+ [dependencies]
+diff --git a/crates/ersatztv/Cargo.toml b/crates/ersatztv/Cargo.toml
+index 1464d7f..5335630 100644
+--- a/crates/ersatztv/Cargo.toml
++++ b/crates/ersatztv/Cargo.toml
+@@ -2,6 +2,7 @@
+ name = "ersatztv"
+ version.workspace = true
+ publish.workspace = true
++license.workspace = true
+ edition = "2024"
+ 
+ [dependencies]
 diff --git a/crates/ffpipeline/Cargo.toml b/crates/ffpipeline/Cargo.toml
+index d6a2832..5bcb3ea 100644
 --- a/crates/ffpipeline/Cargo.toml
 +++ b/crates/ffpipeline/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -116,6 +121,7 @@ diff --git a/crates/ffpipeline/Cargo.toml b/crates/ffpipeline/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libamf-sys/Cargo.toml b/crates/libamf-sys/Cargo.toml
+index 9a7db6e..a592f76 100644
 --- a/crates/libamf-sys/Cargo.toml
 +++ b/crates/libamf-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -127,6 +133,7 @@ diff --git a/crates/libamf-sys/Cargo.toml b/crates/libamf-sys/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libcl-sys/Cargo.toml b/crates/libcl-sys/Cargo.toml
+index a8fbf1e..68cbfd3 100644
 --- a/crates/libcl-sys/Cargo.toml
 +++ b/crates/libcl-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -138,6 +145,7 @@ diff --git a/crates/libcl-sys/Cargo.toml b/crates/libcl-sys/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libd3d11-sys/Cargo.toml b/crates/libd3d11-sys/Cargo.toml
+index c45b165..b48def9 100644
 --- a/crates/libd3d11-sys/Cargo.toml
 +++ b/crates/libd3d11-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -149,6 +157,7 @@ diff --git a/crates/libd3d11-sys/Cargo.toml b/crates/libd3d11-sys/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libmpp-sys/Cargo.toml b/crates/libmpp-sys/Cargo.toml
+index fc03fe2..b6f3b31 100644
 --- a/crates/libmpp-sys/Cargo.toml
 +++ b/crates/libmpp-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -160,6 +169,7 @@ diff --git a/crates/libmpp-sys/Cargo.toml b/crates/libmpp-sys/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libnvidia-sys/Cargo.toml b/crates/libnvidia-sys/Cargo.toml
+index a9b26af..a1b75f0 100644
 --- a/crates/libnvidia-sys/Cargo.toml
 +++ b/crates/libnvidia-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -171,6 +181,7 @@ diff --git a/crates/libnvidia-sys/Cargo.toml b/crates/libnvidia-sys/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libva-sys/Cargo.toml b/crates/libva-sys/Cargo.toml
+index 5b5d817..c7acb0c 100644
 --- a/crates/libva-sys/Cargo.toml
 +++ b/crates/libva-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -182,6 +193,7 @@ diff --git a/crates/libva-sys/Cargo.toml b/crates/libva-sys/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libvpl-sys/Cargo.toml b/crates/libvpl-sys/Cargo.toml
+index b373d19..21f1b3b 100644
 --- a/crates/libvpl-sys/Cargo.toml
 +++ b/crates/libvpl-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -193,6 +205,7 @@ diff --git a/crates/libvpl-sys/Cargo.toml b/crates/libvpl-sys/Cargo.toml
  
  [dependencies]
 diff --git a/crates/libvt-sys/Cargo.toml b/crates/libvt-sys/Cargo.toml
+index 70832e0..24fc6e7 100644
 --- a/crates/libvt-sys/Cargo.toml
 +++ b/crates/libvt-sys/Cargo.toml
 @@ -2,6 +2,7 @@
@@ -204,6 +217,7 @@ diff --git a/crates/libvt-sys/Cargo.toml b/crates/libvt-sys/Cargo.toml
  
  [target.'cfg(target_os = "macos")'.dependencies]
 diff --git a/crates/libvulkan-sys/Cargo.toml b/crates/libvulkan-sys/Cargo.toml
+index 08e8ac7..9263084 100644
 --- a/crates/libvulkan-sys/Cargo.toml
 +++ b/crates/libvulkan-sys/Cargo.toml
 @@ -2,6 +2,7 @@

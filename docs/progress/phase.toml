@@ -268,9 +268,6 @@ Bucket B:
   representative Dolby Vision source/output/client fixture capability. Close with the retained
   source/codec/container/output/client passthrough matrix and independent playback/signalling
   evidence; preserve refusal until proven.
-- ucu14-windows-advisory-applicability (parity/upstream-baseline-catch-up.toml): Missing
-  authoritative advisory and fixing revision. Resume when upstream supplies them; close after source
-  applicability assessment and affected regression/runtime proof, or evidenced non-applicability.
 - ucu-next-rtsp-patch-retirement (parity/upstream-baseline-catch-up.toml): Await an upstream Next
   candidate correcting RTSP. Close after unpatched startup/source-clock/EOF/handoff controls pass
   and patch0001 is removed with regressions retained.

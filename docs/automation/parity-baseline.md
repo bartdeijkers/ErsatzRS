@@ -11,9 +11,9 @@ prompt](gap-prompt-rules.md) MUST honor it.
 | Field | Value |
 | --- | --- |
 | **Upstream repo** | `https://github.com/ErsatzTV/legacy` |
-| **Pinned commit** | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` |
-| **Commit subject** | `chore: update next (#3146)` |
-| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/9c6b3deaca1feb0639134b880e8dd5eed225ee6d |
+| **Pinned commit** | `50ba609df3a2c139a7fb4ca8761d52ecdce42463` |
+| **Commit subject** | `prep for release v26.13.0` |
+| **Commit URL** | https://github.com/ErsatzTV/legacy/commit/50ba609df3a2c139a7fb4ca8761d52ecdce42463 |
 | **Status** | Active baseline ("for now" — advance deliberately, see below) |
 
 ## Rules
@@ -123,6 +123,17 @@ four required private application packages. Source PR165 landed as24c1fe6e.
 Milestone `ucu-16-continuation` owns exact full CI, ordered review, runtime
 acquisition and original failures. Native ARM and other platform deferrals
 retain their approved scopes.
+
+The UCU-16 v26.13.0 window processes rows297–309 through upstream release
+v26.13.0 (tag target verified on 2026-11-21). The ledger has **309 processed and
+zero pending in-scope rows**. The maintainer approved advancing the Pin table on
+2026-11-21. The row305/307/308 Next worker (upstream Next v0.2.7, aa0aedb5,
+all twelve ErsatzRS patches) qualified on all four required targets in the PR189
+CI and is published unchanged as release next-0.2.7-aa0aedb5-ersatzrs.1.
+Managed playback adopts it under ADR 0135 in the same delivery as this pin.
+Row271's Windows advisory is closed as not applicable by maintainer decision
+(2026-11-21). Native ARM, macOS and unavailable hardware retain their approved
+deferrals.
 
 At each start, print the pin, last processed ledger row (initial pin when no
 rows are processed), and upstream HEAD. Stop on disagreement; do not

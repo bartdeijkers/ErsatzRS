@@ -86,11 +86,14 @@ release section when tagging a release.
   `docs/progress/parity-debt-archive.toml`, nine verified or duplicate items
   were closed, the yt-dlp thumbnail item moved to the add-ons repository, and
   ARCHITECTURE.md now names `ersatzrs-core` as owner of the scheduling engines.
-- The Next source candidate now builds from upstream Next v0.2.7 instead of
-  9133cd28. It keeps all twelve ErsatzRS patches and adds the upstream
-  libplacebo shader cache and GPU driver cache folders, which shorten channel
-  startup with tone mapping and CUDA. Production keeps its current worker
-  until the candidate is qualified.
+- Managed playback now uses the published Next 0.2.7 worker
+  (`0.2.7-aa0aedb5-ersatzrs.1`) on the four required targets, with exact
+  archive and payload checksums. It is built from upstream Next v0.2.7 with
+  the twelve ErsatzRS patches and adds the upstream libplacebo shader cache
+  and GPU driver cache folders, which shorten channel startup with tone
+  mapping and CUDA. The ErsatzTV parity baseline now points at upstream
+  release v26.13.0, so all upstream changes through that release are
+  reviewed. Native remains selectable.
 - CONTRIBUTING.md lists the available labels and when to apply them; only
   `heavy-checks` starts CI.
 
