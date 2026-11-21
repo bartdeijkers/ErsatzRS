@@ -23,6 +23,8 @@ runtime publication sequence. Verification, exact assets, all other required
 acceptance and application/operator authorization boundaries remain unchanged.
 The owning record is `ucu14-windows-advisory-applicability` in the baseline
 catch-up parity file; no advisory fix or non-applicability is accepted.
+On 2026-11-21 the maintainer closed that debt as not applicable to ErsatzRS;
+the resolved record is in `docs/progress/parity-debt-archive.toml`.
 
 Application delivery amendment, 2026-11-07: the maintainer authorizes application
 checkpoint commits and integration of current remote/main including PR124.

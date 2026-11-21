@@ -27,7 +27,7 @@ of non-applicability. Earlier accepted UCU windows and Phase9 stay closed.
 | Window | Ordered rows | Fixed terminal revision | Current state |
 | --- | --- | --- | --- |
 | UCU-13 | 255–259 | v26.11.5 / `d5482b7f06b06de3f117bfb5010f4e27e37209a2` | Complete |
-| UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Complete; advisory debt remains unverified |
+| UCU-14 | 260–271 | v26.11.6 / `d3a653346fc5f3080f54c93e6b2c6dfbf22a812e` | Complete; advisory closed as not applicable (2026-11-21) |
 | UCU-15 | 272–285 | v26.12.0 / `53b3b42a02533ad8e72af09565b494f2b19e40fc` | Complete; Native retained |
 | UCU-16 | 286–289 | `c41969b3bba66f14bf1d0be9e041b52218f65871` | Complete; Native retained |
 | UCU-16 continuation | 290–296 | `9c6b3deaca1feb0639134b880e8dd5eed225ee6d` | Complete |
@@ -358,8 +358,8 @@ absence of a public advisory is not evidence of non-applicability. Keep an exact
 external blocker if necessary. Maintainer amendment2026-11-07 explicitly defers
 row271 as unverified later work under parity debt
 `ucu14-windows-advisory-applicability`; it no longer blocks this catch-up or
-the approved runtime publication. Retain the applicability/fix obligation and
-resume it when upstream details become available; do not claim a security fix.
+the approved runtime publication. On 2026-11-21 the maintainer closed it as not
+applicable to ErsatzRS (a .NET Windows build concern); no security fix is claimed.
 Audit the terminal Next and FFmpeg changes as
 behavior, not a reason to adopt ErsatzTV's FFmpeg8 or remove working features.
 Retain FFmpeg9, drawvg and current verified packages unless a demonstrated gap
@@ -7054,7 +7054,7 @@ Schema rows and the random-start cluster retain the original plan's cautions.
 | 268 | `0378f80c` | fix: dont pass jwt when disabled (#3120) | Port | JWT-safe conditional IPTV URLs | `21419be2` | ucu-14; bare-token validation rejects URL/control metacharacters and disabled JWT emits no token. This tested behavior is not attributed to the unpublished advisory. |
 | 269 | `507002dd` | build: bump next and ffmpeg (#3121) | Adapt (ADR 0130) | Fixed runtime and hardware-safety corrections | `3bcf60f1; 21419be2` | ucu-14; consolidate applicable AMF/QSV/runtime source corrections in FFmpeg9/Next025 with independent source/software proof. Unsupported native hardware remains approved unverified debt, not inferred success. |
 | 270 | `d314d147` | build: next v0.2.4 and ffmpeg 8.1.2-7 (#3122) | Adapt (ADR 0130) | Stable checksum-pinned first-party runtimes | `3bcf60f1; 21419be2` | ucu-14; released FFmpeg2.0.10 and Next025 replace intermediate upstream pins. All37 anonymous assets and four package sets match qualified checksums; AMF-specific physical behavior remains unverified. |
-| 271 | `d3a65334` | prep for release v26.11.6 | Deferred (maintainer approval) | Unverified Windows advisory applicability | `21419be2; bac9e119` | ucu-14; explicit2026-11-07 amendment permits closure while retaining ucu14-windows-advisory-applicability. Source and official-package audits do not identify an authoritative fix. GHSA-qrh2-626h-76m2 is neither fixed nor inapplicable by this disposition; resume when authoritative details appear. |
+| 271 | `d3a65334` | prep for release v26.11.6 | N/A (maintainer decision 2026-11-21) | Windows advisory not applicable to ErsatzRS | `21419be2; bac9e119` | ucu-14; explicit2026-11-07 amendment permits closure while retaining ucu14-windows-advisory-applicability. Source and official-package audits do not identify an authoritative fix. On 2026-11-21 the maintainer closed GHSA-qrh2-626h-76m2 as not applicable to ErsatzRS (a .NET Windows build concern); no ErsatzRS fix is claimed. |
 | 272 | `4e17aad3` | feat!: remove legacy engine (#3123) | Adapt (maintainer decision) | Native and Next remain supported | `21419be2` | ucu-15; decline upstream Native removal and bulk migration. Stored engine/profile choices, Native routes, controls, tracks and teletext remain supported beside the managed Next default. Current both-engine playback and UI proof pass. |
 | 273 | `244c6a15` | build: bump next and ffmpeg (#3124) | Adapt (ADR 0130) | Separate-input buffering and runtime safety | `3bcf60f1; 21419be2` | ucu-15; qualified FFmpeg9/Next025 retain applicable queue/surface and clock corrections. Existing unchanged buffering/caption regressions and four-target software playback pass; unavailable QSV hardware is unverified. |
 | 274 | `4df5b69e` | build: bump next (#3125) | Adapt (ADR 0130) | Low-frame-rate Native NVENC and OpenCL safety | `21419be2` | ucu-15; numeric B-frame/GOP limits, vendor loader behavior and software fallback are reconciled.71 focused cases and four actual Windows FFmpeg210 H264/HEVC1fps outputs preserve frames, timestamps and keyframes; Next retains its fixed source. |

@@ -131,8 +131,8 @@ zero pending in-scope rows**. The maintainer approved advancing the Pin table on
 all twelve ErsatzRS patches) qualified on all four required targets in the PR189
 CI and is published unchanged as release next-0.2.7-aa0aedb5-ersatzrs.1.
 Managed playback adopts it under ADR 0135 in the same delivery as this pin.
-Row271 keeps its Deferred/unverified Windows advisory
-disposition. Native ARM, macOS and unavailable hardware retain their approved
+Row271's Windows advisory is closed as not applicable by maintainer decision
+(2026-11-21). Native ARM, macOS and unavailable hardware retain their approved
 deferrals.
 
 At each start, print the pin, last processed ledger row (initial pin when no

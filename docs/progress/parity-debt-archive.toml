@@ -5429,3 +5429,11 @@ execution keeps its existing hardware prerequisite.
 '''
 adr         = '0135'
 resolved    = true
+
+[[debt]]
+feature     = 'upstream-baseline-catch-up'
+id          = 'ucu14-windows-advisory-applicability'
+description = "Identify the vulnerable Windows behavior and fixing revision for GHSA-qrh2-626h-76m2, assess ErsatzRS and correct/prove any affected behavior."
+discovered  = '2026-11-07'
+evidence    = "Maintainer explicitly approves logging this as later work and resuming UCU13-15 on2026-11-07. Applicability remains unverified; no security acceptance or non-applicability claim. UCU14 owns source/package comparison and the distinct UCU13 Unix-mutex follow-up in tmp/ucu14/security-source-audit/qualification.json. Resume when authoritative upstream advisory/fix details become available; then perform source applicability and affected regression/runtime checks. This debt does not defer any other required gate or authorize unrelated publication. Resolved on 2026-11-21 by maintainer decision: not applicable to ErsatzRS. The maintainer assesses the advisory as specific to the ErsatzTV .NET Windows build, which ErsatzRS does not ship. No ErsatzRS source fix or regression is claimed."
+resolved    = true

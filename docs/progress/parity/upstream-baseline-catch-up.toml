@@ -15,9 +15,8 @@ PR125/10ffff4e delivery, original negatives and scoped evidence reuse.
 Milestone ucu-15 also owns retained evidence paths.
 
 The feature remains In progress for retained debt and upstream patch-retirement
-obligations. Completed UCU-16 does not close them. Row271 is Deferred under
-ucu14-windows-advisory-applicability, not fixed, covered or inapplicable.
-Resume when authoritative advisory/fix details appear. Native ARM, macOS and
+obligations. Completed UCU-16 does not close them. Row271's Windows advisory
+was closed as not applicable by maintainer decision on 2026-11-21. Native ARM, macOS and
 approved unavailable hardware remain unverified; QEMU is emulation. Temporary
 Next/FFmpeg corrections retain their regression-led upstream removal conditions.
 The published runtime pair is FFmpeg2.0.10/Next0.2.5. Application release,
@@ -62,13 +61,6 @@ Classic/Plex continuity and NVIDIA overlay evidence. AMD live/hardware and
 approved ARM/macOS application acceptance remain unverified. See milestones for exact per-row counts,
 source/runtime identities, failed history and acceptance receipts.
 """
-
-[[debt]]
-id = 'ucu14-windows-advisory-applicability'
-description = 'Identify the vulnerable Windows behavior and fixing revision for GHSA-qrh2-626h-76m2, assess ErsatzRS and correct/prove any affected behavior.'
-discovered = '2026-11-07'
-evidence = 'Maintainer explicitly approves logging this as later work and resuming UCU13-15 on2026-11-07. Applicability remains unverified; no security acceptance or non-applicability claim. UCU14 owns source/package comparison and the distinct UCU13 Unix-mutex follow-up in tmp/ucu14/security-source-audit/qualification.json. Resume when authoritative upstream advisory/fix details become available; then perform source applicability and affected regression/runtime checks. This debt does not defer any other required gate or authorize unrelated publication.'
-resolved = false
 
 [[debt]]
 id = 'ucu-next-rtsp-patch-retirement'
