@@ -31,7 +31,7 @@ function stored(database: DatabaseSync, title: string): { status: string; messag
 async function visibleStatus(row: Locator, status: string): Promise<void> {
   await expect(row).toHaveCount(1);
   await expect(row).toBeVisible();
-  await expect(row.locator('span[aria-label]').first()).toHaveAttribute('aria-label', status);
+  await expect(row.getByRole('cell', { name: status, exact: true })).toBeVisible();
 }
 
 // HealthPage -> resolved SSR snapshot -> HealthIsland -> RefreshHealthSnapshot;

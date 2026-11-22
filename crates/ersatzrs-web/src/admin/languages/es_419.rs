@@ -3094,6 +3094,10 @@ TextKey::NonPlayableItems => "Elementos no reproducibles",
         TextKey::HealthNoPersistedRun => {
             "No hay comprobaciones de estado aplicables en este momento."
         }
+        TextKey::MainNavigation => "Navegación principal",
+        TextKey::SkipToMainContent => "Saltar al contenido principal",
+        TextKey::HealthAutoRefresh => "Actualizar automáticamente después de un escaneo de medios",
+        TextKey::HealthCheckResults => "Resultados de las comprobaciones",
         TextKey::HealthPersistedRunHelp => {
             "Los resultados se guardan durante cinco minutos. Actualiza para comprobar de nuevo ahora. Esta página también se actualiza cuando los análisis multimedia cambian el estado de los elementos."
         }

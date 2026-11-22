@@ -3085,6 +3085,10 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::FfmpegRuntimeUpdated => "Tempo di esecuzione FFmpeg aggiornato",
         TextKey::FfmpegRuntimeVersion => "Versione",
         TextKey::HealthNoPersistedRun => "Al momento non sono applicabili controlli di stato.",
+        TextKey::MainNavigation => "Navigazione principale",
+        TextKey::SkipToMainContent => "Vai al contenuto principale",
+        TextKey::HealthAutoRefresh => "Aggiorna automaticamente dopo una scansione dei media",
+        TextKey::HealthCheckResults => "Risultati dei controlli",
         TextKey::HealthPersistedRunHelp => {
             "I risultati vengono conservati per cinque minuti. Aggiorna per ripetere subito i controlli. La pagina si aggiorna anche quando le scansioni dei media cambiano lo stato degli elementi."
         }

@@ -73,7 +73,7 @@ async function assertRow(row: Locator, message: string, status: string): Promise
   await expect(row).toHaveCount(1);
   await expect(row).toBeVisible();
   await expect(row.locator('td').nth(1)).toHaveText(message);
-  await expect(row.locator('span[aria-label]').first()).toHaveAttribute('aria-label', status);
+  await expect(row.getByRole('cell', { name: status, exact: true })).toBeVisible();
   await expect(row).not.toContainText('synthetic-private-policy');
 }
 

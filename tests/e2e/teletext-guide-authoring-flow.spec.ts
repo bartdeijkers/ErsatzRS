@@ -1184,7 +1184,7 @@ test('production TV-guide retains last good on source failure and recovers befor
       await expect(page.getByRole('button', { name: localized('Refresh'), exact: true })).toBeEnabled();
       const row = page.getByRole('row').filter({ has: page.getByText(localized('TeletextGuideMaintenanceTitle'), { exact: true }) });
       await expect(row).toHaveCount(1);
-      await expect(row.locator('span[aria-label]').first()).toHaveAttribute('aria-label', localized(stale ? 'Warning' : 'Pass'));
+      await expect(row.getByRole('cell', { name: localized(stale ? 'Warning' : 'Pass'), exact: true })).toBeVisible();
       const stored = (JSON.parse(fixture.setting('health.results')!) as { title: string; status: string; message: string }[])
         .find(result => result.title === 'Teletext guide maintenance');
       expect(stored?.status).toBe(stale ? 'Warning' : 'Pass');
@@ -2240,7 +2240,7 @@ test('production TV-guide actual command timeout retains last-good output and re
     await page.getByRole('button', { name: text('Refresh'), exact: true }).click(); expect((await refreshed).status()).toBe(200);
     await expect(page.getByRole('button', { name: text('Refresh'), exact: true })).toBeEnabled();
     const row = page.getByRole('row').filter({ has: page.getByText(text('TeletextGuideMaintenanceTitle'), { exact: true }) });
-    await expect(row.locator('span[aria-label]').first()).toHaveAttribute('aria-label', text('Warning'));
+    await expect(row.getByRole('cell', { name: text('Warning'), exact: true })).toBeVisible();
     const health = (JSON.parse(fixture.setting('health.results')!) as { title: string; status: string; message: string }[])
       .find(value => value.title === 'Teletext guide maintenance');
     expect(health?.status).toBe('Warning'); expect(health?.message).toContain('fresh=0, stale=1, unavailable=0, revoked=0');

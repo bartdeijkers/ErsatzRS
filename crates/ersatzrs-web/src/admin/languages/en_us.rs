@@ -3020,6 +3020,10 @@ TextKey::NonPlayableItems => "Non-playable items",
         TextKey::FfmpegRuntimeUpdated => "FFmpeg runtime updated",
         TextKey::FfmpegRuntimeVersion => "Version",
         TextKey::HealthNoPersistedRun => "No health checks are applicable right now.",
+        TextKey::MainNavigation => "Main navigation",
+        TextKey::SkipToMainContent => "Skip to main content",
+        TextKey::HealthAutoRefresh => "Update automatically after a media scan",
+        TextKey::HealthCheckResults => "Check results",
         TextKey::HealthPersistedRunHelp => {
             "Results are cached for five minutes. Refresh to check again now. This page also refreshes when media scans update item state."
         }

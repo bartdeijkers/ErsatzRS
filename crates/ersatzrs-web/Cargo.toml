@@ -67,6 +67,7 @@ futures-util = "0.3"
 serde_yaml = { package = "yaml_serde", version = "0.10.7" }
 pulldown-cmark = "0.13.6"
 ammonia = "4.2.5"
+lol_html = "3.0.3"
 zip = { version = "9", default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

@@ -5,7 +5,7 @@ use crate::admin::layout::nav::NavDrawer;
 use crate::admin::server_fns::layout::{
     load_ffmpeg_runtime_notification, AdminFfmpegRuntimeNotification,
 };
-use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::icon::{Icon, IconName};
 use crate::admin::ui::primitives::resource_state::AdminErrorState;
 use crate::admin::ui::primitives::toast::{use_toast, ToastContainer, ToastSeverity};
 
@@ -35,12 +35,13 @@ pub fn AppShell(children: Children) -> impl IntoView {
             class=style::shell
             data-theme=theme
         >
+            <a class=style::skip_link href="#admin-main">{tr(TextKey::SkipToMainContent)}</a>
             <TopBar/>
             <div class=style::body>
                 <NavDrawer/>
                 <NavGroupsStateScript/>
                 <div class=style::content_col>
-                    <main class=style::main>
+                    <main id="admin-main" tabindex="-1" class=style::main>
                         {theme_error.map(|error| view! { <AdminErrorState error/> })}
                         {legacy_streaming_key.then(|| view! { <p role="status" class=style::warning>{tr(TextKey::HdhrDisabledByJwt)}</p> })}
                         {children()}
@@ -304,23 +305,7 @@ pub fn NavStateHeadScript() -> impl IntoView {
 })();
 "#;
 
-    const STYLE: &str = r#"
-@media (min-width: 768px) {
-  html[data-nav-drawer-open="false"] [data-nav-drawer] {
-    display: none;
-  }
-}
-@media (max-width: 767px) {
-  html[data-nav-drawer-open="true"] [data-nav-drawer] {
-    transform: translateX(0);
-  }
-}
-"#;
-
-    view! {
-        <script inner_html=SCRIPT></script>
-        <style inner_html=STYLE></style>
-    }
+    view! { <script inner_html=SCRIPT></script> }
 }
 
 #[component]
@@ -342,7 +327,7 @@ fn TopBar() -> impl IntoView {
                 aria-controls="admin-navigation-drawer"
                 data-nav-drawer-toggle
             >
-                <span style=icon_style(IconName::Menu, "1.25rem") aria-hidden="true"></span>
+                <Icon name=IconName::Menu/>
             </button>
 
             <div class=style::flex_1/>
@@ -351,11 +336,7 @@ fn TopBar() -> impl IntoView {
             // /search?query=... with no hydration cost. Mirrors ErsatzTV's
             // MainLayout search-bar (Search.razor reads ?query= on load).
             <form method="get" action="/search" class=style::search_form role="search">
-                <span
-                    class=style::search_icon
-                    style=icon_style(IconName::Search, "1rem")
-                    aria-hidden="true"
-                ></span>
+                <Icon name=IconName::Search class=style::search_icon/>
                 <input
                     type="search"
                     name="query"
@@ -366,7 +347,7 @@ fn TopBar() -> impl IntoView {
                 />
             </form>
 
-            <nav class=style::topbar_nav>
+            <nav class=style::topbar_nav aria-label="IPTV">
                 <a href="/iptv/channels.m3u" class=style::topbar_link target="_blank">{tr(TextKey::M3u)}</a>
                 <a href="/iptv/xmltv.xml" class=style::topbar_link target="_blank">{tr(TextKey::Xmltv)}</a>
             </nav>
@@ -464,6 +445,13 @@ fn NavStateScript() -> impl IntoView {
 
     toggle.addEventListener("click", () => {
       setOpen(!open, { restoreFocus: open });
+    });
+
+    drawer.addEventListener("focusout", (event) => {
+      if (mobile.matches && open && event.relatedTarget && !drawer.contains(event.relatedTarget)
+          && event.relatedTarget !== toggle) {
+        setOpen(false);
+      }
     });
 
     drawer.addEventListener("click", (event) => {

@@ -54,15 +54,52 @@ for (const javaScriptEnabled of [true, false]) {
         expect((await page.request.post('/admin-api/system/health/refresh',{maxRedirects:0})).status()).toBe(303);
         await page.goto('/system/health');
         if (javaScriptEnabled) await hydrated(page);
-        const row = page.getByRole('row').filter({ hasText: title });
+        const inlineStyles = page.locator('[style], style');
+        await expect(inlineStyles).toHaveCount(0);
+        const searchIcon = page.locator('form[role="search"] svg');
+        await expect(searchIcon).toBeVisible();
+        await expect.poll(() => searchIcon.locator('use').evaluate(use => (use as SVGGraphicsElement).getBBox().width)).toBeGreaterThan(0);
+        const table = page.getByRole('table', { name: language === 'nl' ? 'Resultaten per controle' : 'Check results' });
+        const row = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: title, exact: true }) });
+        await expect(row.getByRole('cell', { name: language === 'nl' ? 'Waarschuwing' : 'Warning', exact: true })).toBeVisible();
         await expect(row).toContainText(warning);
         await expect(row).toContainText('.charset');
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth+2)).toBe(true);
-        await row.screenshot({path:testInfo.outputPath(`subtitle-encoding-${language}.png`)});
+        for (const width of [1440, 320]) {
+          await page.setViewportSize({ width, height: 800 });
+          await expect(table.getByRole('columnheader')).toHaveCount(3);
+          await expect(row.getByRole('rowheader')).toHaveCount(1);
+          const layout = await table.evaluate(element => {
+            const statusCells = element.querySelectorAll('tr > :nth-child(2)');
+            const singleLineStatus = Array.from(statusCells).every(cell => {
+              const range = document.createRange();
+              range.selectNodeContents(cell);
+              return range.getClientRects().length === 1
+                && range.getBoundingClientRect().top - cell.getBoundingClientRect().top
+                  < parseFloat(getComputedStyle(cell).paddingTop) + range.getBoundingClientRect().height * 0.7;
+            });
+            const bounds = element.getBoundingClientRect();
+            const checkWidth = element.querySelector('th')!.getBoundingClientRect().width;
+            return {
+              singleLineStatus,
+              fits: bounds.left >= 0 && bounds.right <= document.documentElement.clientWidth
+                && Array.from(element.querySelectorAll('th, td')).every(cell => cell.scrollWidth <= cell.clientWidth + 1),
+              checkShare: checkWidth / bounds.width,
+              messageShare: element.querySelector('tbody tr > :last-child')!.getBoundingClientRect().width / bounds.width,
+            };
+          });
+          expect(layout.singleLineStatus).toBe(true);
+          expect(layout.fits).toBe(true);
+          if (width === 1440) expect(layout.checkShare).toBeGreaterThan(0.20);
+          else expect(layout.messageShare).toBeGreaterThan(0.95);
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2)).toBe(true);
+        }
+        await row.screenshot({path:testInfo.outputPath(`subtitle-encoding-${language}.png`), caret:'initial'});
         writeFileSync(`${source}.charset`,'windows-1252\n');
         const refreshed = page.waitForResponse(response => response.request().method()==='POST' && response.url().includes(javaScriptEnabled?'/admin-api/refresh_health_snapshot':'/admin-api/system/health/refresh'));
         await page.getByRole('button',{ name:refresh,exact:true }).click();
         expect((await refreshed).status()).toBe(javaScriptEnabled?200:303);
+        await expect(row.getByRole('cell', { name: language === 'nl' ? 'Geslaagd' : 'Pass', exact: true })).toBeVisible();
+        await expect(inlineStyles).toHaveCount(0);
         await expect(row).not.toContainText(warning);
         const snapshot = db.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key"=\'health.results\'').get() as { Value:string };
         expect((JSON.parse(snapshot.Value) as { title:string;status:string }[]).find(result=>result.title==='Subtitle Encoding')?.status).toBe('Pass');
@@ -169,14 +206,23 @@ test.describe('shared health results', () => {
         const baseline = await page.request.post('/admin-api/system/health/refresh', { maxRedirects: 0 });
         expect(baseline.status()).toBe(303);
         await page.goto('/system/health');
+        await expect(page).toHaveTitle('Health Checks | ErsatzRS');
+        await page.keyboard.press('Tab');
+        await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
+        await page.keyboard.press('Enter');
+        await expect(page.getByRole('main')).toBeFocused();
+        const automatic = page.getByRole('checkbox', { name: 'Update automatically after a media scan' });
         const row = page.getByRole('row').filter({ has: page.getByText('File Not Found', { exact: true }) });
         await expect(row).toBeVisible();
         await expect(row).not.toContainText(`MediaItem ${id}`);
         if (javaScriptEnabled) {
           await hydrated(page);
           expect(errors).toEqual([]);
-          // Establish the revision baseline before changing the synthetic item.
+          // Establish the revision baseline before pausing automatic updates.
           await page.waitForResponse(response => response.url().includes('/admin-api/media_state_revision') && response.ok());
+          await automatic.uncheck();
+        } else {
+          await expect(automatic).toHaveCount(0);
         }
         database.prepare('UPDATE "MediaItem" SET "State" = 1 WHERE "Id" = ?').run(id);
         if (!javaScriptEnabled) {
@@ -194,6 +240,8 @@ test.describe('shared health results', () => {
         const stored = database.prepare('SELECT "Value" FROM "ConfigElement" WHERE "Key" = ?').get('health.results') as { Value: string };
         expect(stored.Value).toContain(`MediaItem ${id}`);
         if (javaScriptEnabled) {
+          await expect(automatic).not.toBeChecked();
+          await automatic.check();
           // Let the poll observe the missing state before simulating recovery;
           // a 0 -> 1 -> 0 change between polls has no different revision token.
           await page.waitForResponse(response => response.url().includes('/admin-api/media_state_revision') && response.ok());

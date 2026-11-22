@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use leptos::prelude::*;
 
 use crate::admin::i18n::{tr, TextKey};
-use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::icon::{Icon, IconName};
 
 stylance::import_crate_style!(style, "src/admin/ui/primitives/toast.module.css");
 
@@ -488,7 +488,7 @@ pub fn ToastContainer() -> impl IntoView {
                             on:pointercancel=move |_| store.set_paused(id, false)
                         >
                             <span class=style::toast_icon aria-hidden="true">
-                                <span style=icon_style(severity_icon(severity), "22px")></span>
+                                <Icon name=severity_icon(severity)/>
                             </span>
                             <span class=style::toast_text>
                                 {toast.message.clone()}
@@ -504,10 +504,7 @@ pub fn ToastContainer() -> impl IntoView {
                                 aria-label=tr(TextKey::Close)
                                 on:click=move |_| store.remove(id)
                             >
-                                <span
-                                    style=icon_style(IconName::Close, "22px")
-                                    aria-hidden="true"
-                                ></span>
+                                <Icon name=IconName::Close/>
                             </button>
                         </div>
                     }

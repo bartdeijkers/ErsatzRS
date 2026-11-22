@@ -1,5 +1,9 @@
+use leptos::prelude::*;
+
+stylance::import_crate_style!(style, "src/admin/ui/primitives/icon.module.css");
+
 /// A curated set of SVG icons (subset of Material / Lucide).
-/// Usage: `<span style=icon_style(IconName::Add, "1rem") aria-hidden="true"></span>`.
+/// Decorative glyphs inherit their surrounding text color.
 #[allow(dead_code)] // Variants are reserved for upcoming page components.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum IconName {
@@ -45,70 +49,66 @@ pub enum IconName {
     OpenInNew,
 }
 
-/// Returns inline style for a static icon span.
-#[must_use]
-pub fn icon_style(name: IconName, size: &'static str) -> String {
-    let mask = icon_mask_url(icon_path(name));
-    format!(
-        "display:inline-block;width:{size};height:{size};flex-shrink:0;background-color:currentColor;vertical-align:middle;mask:{mask} center / contain no-repeat;-webkit-mask:{mask} center / contain no-repeat"
-    )
-}
-
-fn icon_path(name: IconName) -> &'static str {
-    match name {
-        IconName::Add => "M12 5v14M5 12h14",
-        IconName::Edit => "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
-        IconName::Delete => "M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6",
-        IconName::Save => "M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2zM17 21v-8H7v8M7 3v5h8",
-        IconName::Menu => "M3 12h18M3 6h18M3 18h18",
-        IconName::Close => "M18 6L6 18M6 6l12 12",
-        IconName::Warning => "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
-        IconName::Error => "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z",
-        IconName::Check => "M20 6L9 17l-5-5",
-        IconName::AlertSuccess => "M20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4C12.76,4 13.5,4.11 14.2,4.31L15.77,2.74C14.61,2.26 13.34,2 12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12M7.91,10.08L6.5,11.5L11,16L21,6L19.59,4.58L11,13.17L7.91,10.08Z",
-        IconName::Info => "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z",
-        IconName::Play => "M5 3l14 9-14 9V3z",
-        IconName::Stop => "M6 6h12v12H6z",
-        IconName::Search => "M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z",
-        IconName::FilterList => "M4 6h16M7 12h10M10 18h4",
-        IconName::Settings => "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z",
-        IconName::ChevronRight => "M9 18l6-6-6-6",
-        IconName::ChevronDown => "M6 9l6 6 6-6",
-        IconName::ChevronLeft => "M15 18l-6-6 6-6",
-        IconName::Copy => "M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-4-4h-6M14 2v4h4M8 12h8M8 16h5",
-        IconName::Refresh => "M23 4v6h-6M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
-        IconName::Visibility => "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
-        IconName::VisibilityOff => "M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22",
-        IconName::Upload => "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
-        IconName::Download => "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
-        IconName::Folder => "M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z",
-        IconName::MoreVert => "M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
-        IconName::Tune => "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
-        // FindReplace: magnifying-glass with a circular refresh inside, matching MudBlazor's
-        // FindReplace icon used by ErsatzTV for the "Deep Scan" library action.
-        IconName::FindReplace => "M11 6a5 5 0 1 0 3.54 8.54M21 21l-5.5-5.5M14 4l2 2-2 2M16 6h-3a3 3 0 0 0-3 3",
-        IconName::ArrowUp => "M12 19V5M5 12l7-7 7 7",
-        IconName::ArrowDown => "M12 5v14M19 12l-7 7-7-7",
-        IconName::Calendar => "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
-        IconName::Clock => "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2",
-        IconName::RefreshOff => "M1 1l22 22M20.5 9A9 9 0 0 0 6.6 4.7M3.5 15A9 9 0 0 0 17.4 19.3M23 4v6h-6M1 20v-6h6",
-        IconName::Film => "M4 3h16v18H4zM4 8h16M4 16h16M8 3v5M16 3v5M8 16v5M16 16v5",
-        IconName::Tv => "M4 7h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM8 3l4 4 4-4",
-        IconName::MusicNote => "M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6",
-        IconName::Image => "M3 5h18v14H3zM8.5 11a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM3 17l5-5 4 4 2-2 7 5",
-        IconName::Radio => "M5 6h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 3l8-2M8 14a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 10h2M16 14h2",
-        IconName::OpenInNew => "M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",
+#[component]
+pub fn Icon(name: IconName, #[prop(optional)] class: &'static str) -> impl IntoView {
+    let href = format!("{}#glyph", icon_url(name));
+    view! {
+        <svg class=format!("{} {class}", style::icon) viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <use href=href></use>
+        </svg>
     }
 }
 
-fn icon_mask_url(path: &str) -> String {
-    let fill = if path == icon_path(IconName::AlertSuccess) {
-        r#"fill="black""#
-    } else {
-        r#"fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round""#
-    };
-    let svg = format!(
-        r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="{path}" {fill}/></svg>"#
-    );
-    format!("url(\"data:image/svg+xml,{}\")", urlencoding::encode(&svg))
+/// Mask styling for existing callers that supply an explicit size.
+#[must_use]
+pub fn icon_style(name: IconName, size: &'static str) -> String {
+    let url = icon_url(name);
+    format!(
+        "display:inline-block;width:{size};height:{size};flex-shrink:0;background-color:currentColor;vertical-align:middle;mask-image:url({url});mask-position:center;mask-size:contain;mask-repeat:no-repeat"
+    )
+}
+
+fn icon_url(name: IconName) -> &'static str {
+    match name {
+        IconName::Add => "/public/images/icons/add.svg",
+        IconName::Edit => "/public/images/icons/edit.svg",
+        IconName::Delete => "/public/images/icons/delete.svg",
+        IconName::Save => "/public/images/icons/save.svg",
+        IconName::Menu => "/public/images/icons/menu.svg",
+        IconName::Close => "/public/images/icons/close.svg",
+        IconName::Warning => "/public/images/icons/warning.svg",
+        IconName::Error => "/public/images/icons/error.svg",
+        IconName::Check => "/public/images/icons/check.svg",
+        IconName::AlertSuccess => "/public/images/icons/alert-success.svg",
+        IconName::Info => "/public/images/icons/info.svg",
+        IconName::Play => "/public/images/icons/play.svg",
+        IconName::Stop => "/public/images/icons/stop.svg",
+        IconName::Search => "/public/images/icons/search.svg",
+        IconName::FilterList => "/public/images/icons/filter-list.svg",
+        IconName::Settings => "/public/images/icons/settings.svg",
+        IconName::ChevronRight => "/public/images/icons/chevron-right.svg",
+        IconName::ChevronDown => "/public/images/icons/chevron-down.svg",
+        IconName::ChevronLeft => "/public/images/icons/chevron-left.svg",
+        IconName::Copy => "/public/images/icons/copy.svg",
+        IconName::Refresh => "/public/images/icons/refresh.svg",
+        IconName::Visibility => "/public/images/icons/visibility.svg",
+        IconName::VisibilityOff => "/public/images/icons/visibility-off.svg",
+        IconName::Upload => "/public/images/icons/upload.svg",
+        IconName::Download => "/public/images/icons/download.svg",
+        IconName::Folder => "/public/images/icons/folder.svg",
+        IconName::MoreVert => "/public/images/icons/more-vert.svg",
+        IconName::Tune => "/public/images/icons/tune.svg",
+        IconName::FindReplace => "/public/images/icons/find-replace.svg",
+        IconName::ArrowUp => "/public/images/icons/arrow-up.svg",
+        IconName::ArrowDown => "/public/images/icons/arrow-down.svg",
+        IconName::Calendar => "/public/images/icons/calendar.svg",
+        IconName::Clock => "/public/images/icons/clock.svg",
+        IconName::RefreshOff => "/public/images/icons/refresh-off.svg",
+        IconName::Film => "/public/images/icons/film.svg",
+        IconName::Tv => "/public/images/icons/tv.svg",
+        IconName::MusicNote => "/public/images/icons/music-note.svg",
+        IconName::Image => "/public/images/icons/image.svg",
+        IconName::Radio => "/public/images/icons/radio.svg",
+        IconName::OpenInNew => "/public/images/icons/open-in-new.svg",
+    }
 }

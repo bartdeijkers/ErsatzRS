@@ -28,13 +28,13 @@
     cursor: pointer;
     transition: background-color 150ms;
     border: none;
-    background-color: var(--color-secondary);
+    background-color: var(--color-secondary-action);
     color: var(--color-on-primary);
 }
 .btn-secondary:focus { outline: none; }
 .btn-secondary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-secondary:hover:not(:disabled) { background-color: var(--color-secondary-h); }
+.btn-secondary:hover:not(:disabled) { background-color: var(--color-secondary-action-hover); }
 
 .btn-text {
     display: inline-flex;

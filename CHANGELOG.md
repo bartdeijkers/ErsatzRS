@@ -355,6 +355,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Health checks keep each status on one line and give long messages the full row
+  on narrow screens. Automatic updates can be paused. The health page serves
+  valid HTML5 with external stylesheets. Admin navigation has a skip link and
+  higher contrast.
+
 - Packaged builds started outside their build checkout listen on the documented
   `0.0.0.0:8409` again instead of Leptos' `127.0.0.1:3000` default, so the
   Windows tray package serves the admin UI and IPTV streams without extra

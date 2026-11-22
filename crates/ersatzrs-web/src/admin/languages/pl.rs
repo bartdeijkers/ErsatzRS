@@ -3790,6 +3790,10 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::FfmpegRuntimeUpdated => "Zaktualizowano runtime FFmpeg",
         TextKey::FfmpegRuntimeVersion => "Wersja",
         TextKey::HealthNoPersistedRun => "Brak obecnie odpowiednich kontroli diagnostycznych.",
+        TextKey::MainNavigation => "Nawigacja główna",
+        TextKey::SkipToMainContent => "Przejdź do głównej treści",
+        TextKey::HealthAutoRefresh => "Aktualizuj automatycznie po skanowaniu multimediów",
+        TextKey::HealthCheckResults => "Wyniki kontroli",
         TextKey::HealthPersistedRunHelp => {
             "Wyniki są przechowywane przez pięć minut. Wybierz Odśwież, aby sprawdzić ponownie teraz. Strona odświeża się również, gdy skanowanie mediów zmienia stan elementów."
         }
