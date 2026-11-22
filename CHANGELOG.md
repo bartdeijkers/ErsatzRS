@@ -15,6 +15,9 @@ release section when tagging a release.
 
 ### Security
 
+- Update `url` to 2.5.9 (RUSTSEC-2026-0592): `Url::origin()` on deeply nested
+  `blob:` URLs could overflow the stack and abort the process.
+
 - Update the local Next source candidate to quick-xml 0.41.0 and
   webpki-root-certs 1.0.10, resolving its XML-parser and bundled-certificate
   advisories before runtime qualification.
