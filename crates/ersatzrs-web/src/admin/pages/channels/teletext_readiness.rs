@@ -126,7 +126,7 @@ fn capacity(channel_id: i64, readiness: &TeletextReadinessData) -> AnyView {
         }
     });
     view! {
-        <div data-testid="teletext-capacity" data-authoring=states[0] data-output=states[1]>
+        <div id="teletext-capacity" data-testid="teletext-capacity" data-authoring=states[0] data-output=states[1]>
             {summary}
             <form method="post" action="/admin-api/teletext/capacity/apply"
                 class=style::binding_form data-testid="teletext-capacity-form">

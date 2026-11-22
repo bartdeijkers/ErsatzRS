@@ -21,6 +21,9 @@ use crate::{admin::server_fns::teletext::TeletextInstallationData, host::state::
 
 /// Includes URL-encoding overhead for the existing bounded complete override bag.
 pub const MAX_TELETEXT_FORM_BYTES: usize = 512 * 1024;
+mod guide;
+pub use guide::setup_guide;
+
 type Fields = BTreeMap<String, String>;
 type Pairs = Vec<(String, String)>;
 type ControlResult<T> = Result<T, &'static str>;
@@ -303,7 +306,6 @@ fn capacity_command(pairs: Pairs) -> ControlResult<(i64, String, bool)> {
 /// Validate selected static producers and save a new original draft. Publication
 /// is never part of this action, including when a subsequent preview fails.
 pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
-    use crate::host::teletext_authoring::prepare_teletext_design;
     let channel = redirect_channel(&pairs);
     // Establish the original budget before parsing or reading host policy.
     let deadline = std::time::Instant::now()
@@ -316,7 +318,19 @@ pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pai
     let Some(deadline) = deadline else {
         return respond(channel, "draft", Err("expired"));
     };
-    match prepare_teletext_design(&state, request, deadline).await {
+    prepare_response(&state, request, owner, deadline, false).await
+}
+
+async fn prepare_response(
+    state: &AppState,
+    request: crate::host::teletext_authoring::TeletextAuthoringPrepare,
+    owner: Option<ersatzrs_domain::TeletextPageAddress>,
+    deadline: std::time::Instant,
+    guided: bool,
+) -> Response {
+    use crate::host::teletext_authoring::prepare_teletext_design;
+    let channel = request.channel_id;
+    match prepare_teletext_design(state, request, deadline).await {
         Ok(saved) => {
             let identity = saved.identity;
             let mut query = format!(
@@ -325,6 +339,9 @@ pub async fn prepare_design(State(state): State<AppState>, Form(pairs): Form<Pai
                 identity.revision,
                 preview_destination(owner),
             );
+            if guided {
+                query.push_str("&guide_setup=1");
+            }
             if let Err(error) = &saved.preview {
                 query.push_str(&authoring_error_query(error));
             }
@@ -353,10 +370,16 @@ pub async fn publish_design(State(state): State<AppState>, Form(pairs): Form<Pai
     publication_action(&state, pairs, PublicationAction::Publish).await
 }
 
+/// One explicit confirmation of the exact guide revision shown in the preview.
+pub async fn publish_guide(State(state): State<AppState>, Form(pairs): Form<Pairs>) -> Response {
+    publication_action(&state, pairs, PublicationAction::RequestAndPublish).await
+}
+
 #[derive(Clone, Copy)]
 enum PublicationAction {
     Request,
     Publish,
+    RequestAndPublish,
 }
 
 struct PublicationCommand {
@@ -380,20 +403,39 @@ async fn publication_action(state: &AppState, pairs: Pairs, action: PublicationA
         return respond(channel, "publication", Err("expired"));
     };
     let identity = command.target.identity;
+    let mut target = command.target;
     let result = match action {
-        PublicationAction::Request => request_teletext_publication(state, command.target, deadline)
+        PublicationAction::Request => request_teletext_publication(state, target, deadline)
             .await
             .map(|_| "publication-requested"),
         PublicationAction::Publish => publish_teletext_generation(
             state,
             TeletextAuthoringPublishTarget {
-                publication: command.target,
+                publication: target,
                 expected_generation_id: command.expected_generation_id,
             },
             deadline,
         )
         .await
         .map(|_| "publication-selected"),
+        PublicationAction::RequestAndPublish => {
+            match request_teletext_publication(state, target.clone(), deadline).await {
+                Ok(pending) => {
+                    target.expected_request_id = Some(pending.request_id);
+                    publish_teletext_generation(
+                        state,
+                        TeletextAuthoringPublishTarget {
+                            publication: target,
+                            expected_generation_id: command.expected_generation_id,
+                        },
+                        deadline,
+                    )
+                    .await
+                    .map(|_| "publication-selected")
+                }
+                Err(error) => Err(error),
+            }
+        }
     };
     let mut query = format!(
         "design_id={}&revision={}{}",
@@ -401,6 +443,9 @@ async fn publication_action(state: &AppState, pairs: Pairs, action: PublicationA
         identity.revision,
         preview_destination(command.owner),
     );
+    if matches!(action, PublicationAction::RequestAndPublish) {
+        query.push_str("&guide_setup=1");
+    }
     match result {
         Ok(code) => {
             query.push_str("&saved=");
@@ -440,7 +485,7 @@ fn publication_command(
     let expected_request_id = optional_positive(&take(&mut fields, "expected_request_id")?)?;
     let expected_generation_id = match action {
         PublicationAction::Request => None,
-        PublicationAction::Publish => {
+        PublicationAction::Publish | PublicationAction::RequestAndPublish => {
             optional_positive(&take(&mut fields, "expected_generation_id")?)?
         }
     };

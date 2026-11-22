@@ -155,7 +155,7 @@ export class TeletextChannelFixture {
   private readonly playbackDurationSeconds: number;
   private scripted = false;
 
-  constructor(private readonly databasePath: string, options: { authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; clientControls?: boolean; playback?: { ffmpeg: string; durationSeconds?: number; captionSource?: { path: string; sha256: string } } } = {}) {
+  constructor(private readonly databasePath: string, options: { retainPublication?: boolean; authoredPages?: boolean; editorPages?: boolean; editorOperand?: boolean; standaloneLevel15?: boolean; clientControls?: boolean; playback?: { ffmpeg: string; durationSeconds?: number; captionSource?: { path: string; sha256: string } } } = {}) {
     this.authoredPages = options.authoredPages === true;
     this.clientControls = options.clientControls === true;
     if (this.clientControls && (!options.standaloneLevel15 || !options.playback)) throw new Error('Client controls require standalone base pages and the owned playback fixture.');
@@ -167,7 +167,7 @@ export class TeletextChannelFixture {
     if (this.playback && !this.authoredPages) throw new Error('Synthetic playback requires the authored producer.');
     // Retained immutable histories/files belong to the wrapper DB's temporary
     // directory; it is disposed only after the host has stopped.
-    this.root = mkdtempSync(join(this.playback ? dirname(databasePath) : tmpdir(), 'ersatzrs-e2e-teletext-'));
+    this.root = mkdtempSync(join(this.playback || options.retainPublication ? dirname(databasePath) : tmpdir(), 'ersatzrs-e2e-teletext-'));
     if (options.playback) {
       try {
         if (options.playback.captionSource) {
@@ -591,7 +591,7 @@ export class TeletextChannelFixture {
     for (const design of this.designs()) {
       this.database.prepare('UPDATE "TeletextDesign" SET "IsDeleted"=1 WHERE "Id"=?').run(design.Id);
     }
-    const retained = this.scripted || this.playback && (this.database.prepare(
+    const retained = this.scripted || (this.database.prepare(
       'SELECT COUNT(*) AS count FROM "TeletextPublicationRequest" WHERE "ChannelId" IN (?,?)')
       .get(...this.channels) as { count: number }).count > 0;
     if (retained) {

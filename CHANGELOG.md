@@ -34,6 +34,10 @@ release section when tagging a release.
 
 ### Added
 
+- Set up or repair a channel’s teletext programme guide, preview its pages,
+  then publish it on that channel. Shared profiles and the full page editor
+  remain available under advanced settings.
+
 - A "Heavy checks" workflow runs the full CI scope (all suites, Chromium and
   Firefox) on demand: by hand, with the `heavy-checks` pull request label, or
   automatically for changes to the HDR/4K colour filters and hardware probing.

@@ -24,6 +24,7 @@ use crate::admin::ui::primitives::teletext::{
 
 stylance::import_crate_style!(pub(super) style, "src/admin/pages/channels/teletext.module.css");
 
+mod guided;
 #[path = "teletext_readiness.rs"]
 mod readiness;
 
@@ -61,7 +62,7 @@ pub fn ChannelTeletextPage() -> impl IntoView {
                     |data| match data {
                         Some((data, preview, current)) => channel_page(
                             &data, &error, &saved, preview, current,
-                            query.with(|values| values.get("design_id").is_some()),
+                            query.with(|values| values.get("design_id").map(|_| values.get("guide_setup").as_deref() == Some("1"))),
                             query.with(super::teletext_drafts::redirected_error_location),
                         ),
                         None => view! { <p role="alert">{tr(TextKey::NotFound)}</p> }.into_any(),
@@ -115,7 +116,7 @@ fn channel_page(
     saved: &str,
     preview: Option<Result<TeletextDraftPreviewResult, ServerFnError>>,
     current: Option<Result<TeletextCurrentGuidePreviewData, ServerFnError>>,
-    requested: bool,
+    preview_mode: Option<bool>,
     redirected: Option<TeletextDraftErrorLocation>,
 ) -> AnyView {
     let language = use_i18n();
@@ -192,6 +193,7 @@ fn channel_page(
         .map(|readiness| readiness::view(channel_id, readiness, &data.addons, custom_on));
     let guide_available = data.current_guide_available == Some(true);
     let guide_unreadable = data.current_guide_available.is_none();
+    let current_requested = current.is_some();
     let current_guide = (guide_available || current.is_some() || guide_unreadable).then(|| {
         super::teletext_current_guide::view(
             channel_id,
@@ -208,7 +210,50 @@ fn channel_page(
         .collect_view();
     let no_sources = !data.addons.iter().any(source_visible);
     let custom_pages = super::teletext_custom_pages::custom_pages_island(data);
-    let publish = publish_island(data, preview, requested, redirected, current_guide);
+    let guided_preview = preview_mode == Some(true);
+    let guide = guided::section(
+        data,
+        if guided_preview {
+            preview.as_ref()
+        } else {
+            None
+        },
+    );
+    let publish = publish_island(
+        data,
+        preview,
+        preview_mode.is_some(),
+        redirected,
+        current_guide,
+        current_requested,
+    );
+    let full_editor = view! {
+        {page_set}
+        <div hidden=!no_sources class=style::empty data-testid="teletext-no-sources">
+            <p><strong>{tr(TextKey::TeletextChannelEmpty)}</strong></p>
+            <a class=style::manage href="/settings/addons">{tr(TextKey::TeletextSourceFixAddon)}</a>
+        </div>
+        {sources}
+        {custom_pages}
+        {publish}
+    };
+    let open_editor = !guided_preview
+        && (current_requested || preview_mode.is_some() || !saved.is_empty() || !error.is_empty());
+    let has_guide = guide.is_some();
+    let hide_feedback = message.is_empty() || (guided_preview && error.is_empty());
+    let controls = if let Some(guide) = guide {
+        view! {
+            {guide}
+            <details class=style::advanced data-testid="teletext-full-editor"
+                open=open_editor>
+                <summary>{tr(TextKey::TeletextGuideAdvanced)}</summary>
+                {full_editor}
+            </details>
+        }
+        .into_any()
+    } else {
+        full_editor.into_any()
+    };
     view! {
         <div class=style::page data-testid="channel-teletext-page" data-channel-id=channel_id>
             <header class=style::header>
@@ -216,10 +261,10 @@ fn channel_page(
                 <h1>{tr(TextKey::TeletextChannelTitle)}</h1>
                 <p>{data.channel_number.clone()}" · "{data.channel_name.clone()}</p>
             </header>
-            <p class=style::help>{tr(TextKey::TeletextChannelBaseHelp)}</p>
+            {(!has_guide).then(|| view! { <p class=style::help>{tr(TextKey::TeletextChannelBaseHelp)}</p> })}
             <p role="alert" hidden=data.catalog_available>{tr(TextKey::TeletextAdminUnavailable)}</p>
             <p class=style::feedback role=role data-testid="teletext-feedback"
-                data-code=code.to_owned() hidden=message.is_empty()>{message}</p>
+                data-code=code.to_owned() hidden=hide_feedback>{message}</p>
             {status.map(|status| view! {
                 <div class=style::status data-testid="teletext-status">
                     {status}
@@ -229,14 +274,7 @@ fn channel_page(
                     </details>
                 </div>
             })}
-            {page_set}
-            <div hidden=!no_sources class=style::empty data-testid="teletext-no-sources">
-                <p><strong>{tr(TextKey::TeletextChannelEmpty)}</strong></p>
-                <a class=style::manage href="/settings/addons">{tr(TextKey::TeletextSourceFixAddon)}</a>
-            </div>
-            {sources}
-            {custom_pages}
-            {publish}
+            {controls}
         </div>
     }
     .into_any()
@@ -277,29 +315,7 @@ fn island_anchor(addon: &TeletextAddonData) -> String {
     format!("teletext-source-{id}")
 }
 
-/// The effective value of the first listed setting key for the channel's
-/// selected profile: profile override, then installation value, then default.
-pub(super) fn effective_setting(addon: &TeletextAddonData, keys: &[&str]) -> Option<String> {
-    let profile = addon.binding.as_ref().and_then(|binding| {
-        addon
-            .profiles
-            .iter()
-            .find(|profile| profile.id == binding.profile_id)
-    });
-    keys.iter().find_map(|key| {
-        let setting = addon
-            .settings
-            .iter()
-            .find(|setting| setting.definition.key == *key)?;
-        profile
-            .and_then(|profile| profile.settings.iter().find(|value| value.key == *key))
-            .or(setting.inherited.as_ref())
-            .filter(|value| value.mode == "literal" && !value.redacted)
-            .map(|value| value.value.clone())
-            .or_else(|| setting.definition.default.clone())
-            .filter(|value| !value.trim().is_empty())
-    })
-}
+pub(super) use crate::admin::server_fns::teletext::effective_setting;
 
 /// The saved guide source channels, restricted to channels that still exist.
 pub(super) fn effective_guide_selection(data: &ChannelTeletextData) -> Vec<i64> {
@@ -482,6 +498,7 @@ fn publish_island(
     requested: bool,
     redirected: Option<TeletextDraftErrorLocation>,
     current_guide: Option<AnyView>,
+    current_requested: bool,
 ) -> AnyView {
     let checked = matches!(&preview, Some(Ok(result)) if result.preview.is_some());
     let selected = matches!(&preview, Some(Ok(result)) if result.preview.as_ref().and_then(|preview| preview.publication.as_ref()).is_some_and(|publication| matches!(publication.state, crate::admin::server_fns::teletext_drafts::TeletextDraftPublicationState::Selected)));
@@ -529,7 +546,7 @@ fn publish_island(
         {super::teletext_drafts::authoring_controls(data)}
         {scripted}
         <super::teletext_drafts::TeletextDraftPreview preview=preview requested=requested redirected=redirected/>
-        <details class=style::advanced data-testid="teletext-publish-advanced">
+        <details class=style::advanced data-testid="teletext-publish-advanced" open=current_requested>
             <summary>{tr(TextKey::TeletextPublishAdvanced)}</summary>
             {super::teletext_drafts::effective_authoring_controls(data)}
             {current_guide}
@@ -1131,7 +1148,7 @@ mod tests {
                 "",
                 None,
                 None,
-                false,
+                None,
                 None,
             )
             .to_html()

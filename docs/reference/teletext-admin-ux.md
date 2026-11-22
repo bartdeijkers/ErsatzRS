@@ -60,6 +60,16 @@ sentence that says what it does.
 
 A badge always carries a word; colour is never the only signal.
 
+## Programme guide
+
+The production guide add-on has a channel-level setup and repair action.
+It uses the channel itself unless other guide sources were saved, respects
+the configured index page, and previews the complete base draft. Repair uses
+the updated add-on defaults in a separate profile. The previous profile
+remains available. Publishing requires a separate confirmation from the
+preview. The full editor retains custom pages, shared profiles, scripted
+scopes and the separate publication-request workflow.
+
 ## Publication
 
 Every page that changes teletext uses the same step bar:

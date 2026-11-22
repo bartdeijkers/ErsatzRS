@@ -105,3 +105,5 @@
     background: var(--color-warning-20);
 }
 .notice p { margin: 0; }
+
+.guide_raster { display: block; width: min(100%, 40rem); height: auto; margin-block: 1rem; }

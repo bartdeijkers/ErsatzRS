@@ -720,7 +720,7 @@ fn publication_controls(data: &TeletextDraftPreviewData) -> AnyView {
     }.into_any()
 }
 
-fn publication_fields(
+pub(super) fn publication_fields(
     data: &TeletextDraftPreviewData,
     observation: &TeletextDraftPublicationObservation,
 ) -> AnyView {
