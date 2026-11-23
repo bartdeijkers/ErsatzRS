@@ -349,11 +349,13 @@ CPU or slowing I/O, then requires hydration within the existing 15-second
 bound and exercises real settings validation. It must run on Chromium and
 Firefox. A second scenario holds the WASM request behind a controllable barrier
 and verifies that document load is distinct from hydration readiness. A third
-follows a link while a local server stalls the real WASM body after its first
-bytes, and requires no page error: Firefox reports that cancelled download as
-`AbortError`, which the bootstrap records as phase `aborted` instead of
-throwing. Do not stall that request inside `page.route`; Firefox then reports a
-`NetworkError` instead, which stays a real startup failure. The
+follows a link while a local server stalls the real WASM request, once before
+its response headers and once after its first bytes, and requires no page
+error. Firefox reports the first cancellation as `TypeError: NetworkError` and
+the second as `AbortError`; the bootstrap records either as phase `aborted`
+instead of throwing, a `TypeError` only once `beforeunload` has fired. Do not
+stall that request inside `page.route`; Firefox then reports a `NetworkError`
+while the page stays, which remains a real startup failure. The
 affected add-on specs share `tests/e2e/hydration.ts`, which reports
 document readiness, visibility, bootstrap phase and package-resource timings
 on failure without cookies, request bodies or full resource URLs.

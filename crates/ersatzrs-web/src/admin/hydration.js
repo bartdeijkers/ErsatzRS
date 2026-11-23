@@ -59,6 +59,11 @@ async function hydrateTree(node, module) {
     }
 }
 
+// Leaving the page cancels its pending downloads. beforeunload fires before
+// that cancellation, so a load failure seen afterwards belongs to navigation.
+let leaving = false;
+window.addEventListener("beforeunload", () => { leaving = true; });
+
 // A module script runs after HTML parsing. Import and WASM initialization
 // remain asynchronous; there is no optional idle gate before either starts.
 window.__ersatzrs_hydration_phase = "loading-module";
@@ -74,12 +79,17 @@ try {
 } catch (error) {
     // Following a link or stopping the page while the module or WASM is still
     // downloading makes the browser cancel this document's pending fetches;
-    // Firefox rejects them with AbortError before the old page unloads. This
-    // bootstrap never aborts its own loads, so an AbortError during loading is
-    // not a startup defect and must not surface as an uncaught page error.
-    // Every other failure, and any abort after WASM started, stays fatal.
+    // Firefox rejects them before the old page unloads. Once the response has
+    // started it reports AbortError; before the response headers arrive it
+    // reports "TypeError: NetworkError", which is indistinguishable from a real
+    // network failure except that the page is already being left. This
+    // bootstrap never aborts its own loads, so either cancellation during
+    // loading is not a startup defect and must not surface as an uncaught
+    // page error. Every other failure, a TypeError while the page stays, and
+    // any abort after WASM started, stays fatal.
     const phase = window.__ersatzrs_hydration_phase;
-    if (error?.name === "AbortError" && (phase === "loading-module" || phase === "initializing-wasm")) {
+    const cancelled = error?.name === "AbortError" || (leaving && error?.name === "TypeError");
+    if (cancelled && (phase === "loading-module" || phase === "initializing-wasm")) {
         window.__ersatzrs_hydration_phase = "aborted";
         console.warn(`ErsatzRS hydration stopped: the browser cancelled the download during ${phase}.`);
     } else {
