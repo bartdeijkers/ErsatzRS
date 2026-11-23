@@ -1420,6 +1420,16 @@ startup failure still throws. The new hydration-startup.spec.ts case stalls the
 real WASM body from a local server, follows a link and requires no page error;
 against the stub page it failed on Firefox before the fix and passed after it,
 on both browsers. The full-app run is the PR's CI result.
+Follow-up 2026-11-23: scheduled Full verification run 45137873291 (and PR #193
+dispatch run 44965408381) failed that regression on Firefox with
+"TypeError: NetworkError when attempting to fetch resource." The trace shows
+the error 12 ms after the link click and the WASM request NS_BINDING_ABORTED:
+the stall server was still buffering the full WASM from upstream, so the
+cancellation hit before the response headers. A stub-page reproduction on
+Firefox 153 confirmed AbortError after the headers, TypeError before them, and
+beforeunload firing before either rejection. The bootstrap now also records a
+TypeError during loading as `aborted` once beforeunload fired; the regression
+covers both stall points.
 '''
 resolved    = true
 
