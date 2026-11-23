@@ -117,9 +117,11 @@ test('localized source-caption choice persists through native forms and rejects 
           for (const width of [320, 1920]) {
             await page.setViewportSize({ width, height: 900 });
             if (width === 320) {
+              // With JavaScript the closed drawer slides off-screen; without it
+              // the navigation stays in the page flow so it remains reachable.
               await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(
-                element => element.getBoundingClientRect().right,
-              )).toBeLessThanOrEqual(1);
+                element => js ? element.getBoundingClientRect().right : getComputedStyle(element).position,
+              )).toBe(js ? 0 : 'static');
             }
             await field.scrollIntoViewIfNeeded();
             const fieldGeometry = await assertViewportFit(field);

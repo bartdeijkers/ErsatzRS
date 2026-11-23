@@ -339,10 +339,18 @@ for (const javaScriptEnabled of [true, false]) for (const dark of [false, true])
           await boundaries.screenshot({ path: testInfo.outputPath(`${module}-${theme}-boundaries.png`) });
           if (index === 0) {
             await page.setViewportSize({ width: 320, height: 900 });
-            await expect.poll(async () => {
-              const drawer = await page.locator('[data-nav-drawer]').boundingBox();
-              return drawer ? drawer.x + drawer.width : 0;
-            }).toBeLessThanOrEqual(1);
+            // With JavaScript the closed drawer slides off-screen; without it
+            // the navigation stays in the page flow so it remains reachable.
+            if (javaScriptEnabled) {
+              await expect.poll(async () => {
+                const drawer = await page.locator('[data-nav-drawer]').boundingBox();
+                return drawer ? drawer.x + drawer.width : 0;
+              }).toBeLessThanOrEqual(1);
+            } else {
+              await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(
+                element => getComputedStyle(element).position,
+              )).toBe('static');
+            }
             await boundaries.scrollIntoViewIfNeeded();
             await expect.poll(() => boundaries.evaluate(element => {
               const bounds = element.getBoundingClientRect();
