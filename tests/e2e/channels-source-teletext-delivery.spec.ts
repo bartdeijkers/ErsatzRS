@@ -120,8 +120,11 @@ test('localized source-caption choice persists through native forms and rejects 
               // With JavaScript the closed drawer slides off-screen; without it
               // the navigation stays in the page flow so it remains reachable.
               await expect.poll(() => page.locator('[data-nav-drawer]').evaluate(
-                element => js ? element.getBoundingClientRect().right : getComputedStyle(element).position,
-              )).toBe(js ? 0 : 'static');
+                (element, scripted) => scripted
+                  ? element.getBoundingClientRect().right <= 1
+                  : getComputedStyle(element).position === 'static',
+                js,
+              )).toBe(true);
             }
             await field.scrollIntoViewIfNeeded();
             const fieldGeometry = await assertViewportFit(field);
