@@ -13,6 +13,8 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-24
+
 ### Security
 
 - Update `url` to 2.5.9 (RUSTSEC-2026-0592): `Url::origin()` on deeply
@@ -88,6 +90,12 @@ release section when tagging a release.
   requests and successful Release runs are kept.
 
 ### Changed
+
+- Upgrade the official add-on repository to v0.11.13 before upgrading the host
+  to 1.3.0. It includes TV-guide teletext 0.1.3 and yt-dlp 0.11.13 with host
+  ranges up to `<1.4.0`; earlier add-on versions are capped below 1.3 and are
+  rejected explicitly. Package installation and activation remain separate
+  operator actions.
 
 - Progress records keep only open parity debt: 453 resolved entries moved to
   `docs/progress/parity-debt-archive.toml`, nine verified or duplicate items
@@ -6529,7 +6537,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...v1.1.0
 [1.0.37-beta]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.35-beta...v1.0.37-beta

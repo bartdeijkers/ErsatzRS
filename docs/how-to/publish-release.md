@@ -36,6 +36,11 @@ one-shot: it builds Leptos assets and starts `ersatzrs-web`. It does not create 
 
 ## Prepare the release commit
 
+For v1.3.0, publish the official add-on repository v0.11.13 first (TV-guide
+teletext 0.1.3 and yt-dlp 0.11.13, host ranges `<1.4.0`); v0.11.12 caps both
+add-ons below 1.3. Keep the adopted Next 0.2.7 worker
+(`next-0.2.7-aa0aedb5-ersatzrs.1`) unchanged.
+
 For v1.2.0, prepare and verify the combined official add-on repository v0.11.12
 (TV-guide 0.1.2 and yt-dlp 0.11.12). Both older manifests cap host compatibility
 below 1.2. Preserve their lower bounds and verify the new `<1.3.0` upper bounds.
