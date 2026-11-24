@@ -8,7 +8,7 @@ pub(super) fn PlayoutWarningBadge() -> impl IntoView {
         Ok(warnings) => (warnings, None),
         Err(error) => (0, Some(error)),
     };
-    let display = if warnings > 0 { "inline-flex" } else { "none" };
+    let no_warnings = warnings == 0;
     let text = warnings.to_string();
     let state = if load_error.is_some() {
         "error"
@@ -17,14 +17,13 @@ pub(super) fn PlayoutWarningBadge() -> impl IntoView {
     };
 
     view! {
-        <span style="display:contents" data-state=state title=load_error>
-            <span
-                class=style::nav_badge_warning
-                data-playout-warning-badge
-                style:display=display
-            >
-                {text}
-            </span>
+        <span
+            data-state=state title=load_error
+            class=style::nav_badge_warning
+            data-playout-warning-badge
+            hidden=no_warnings
+        >
+            {text}
         </span>
     }
 }
@@ -35,12 +34,8 @@ pub(super) fn HealthBadge() -> impl IntoView {
         Ok((errors, warnings)) => (errors, warnings, None),
         Err(error) => (0, 0, Some(error)),
     };
-    let error_display = if errors > 0 { "inline-flex" } else { "none" };
-    let warning_display = if errors == 0 && warnings > 0 {
-        "inline-flex"
-    } else {
-        "none"
-    };
+    let hide_errors = errors == 0;
+    let hide_warnings = errors > 0 || warnings == 0;
     let error_text = errors.to_string();
     let warning_text = warnings.to_string();
     let state = if load_error.is_some() {
@@ -50,18 +45,18 @@ pub(super) fn HealthBadge() -> impl IntoView {
     };
 
     view! {
-        <span style="display:contents" data-health-badges data-state=state title=load_error>
+        <span class=style::nav_badges data-health-badges data-state=state title=load_error>
             <span
                 class=style::nav_badge_error
                 data-health-error-badge
-                style:display=error_display
+                hidden=hide_errors
             >
                 {error_text}
             </span>
             <span
                 class=style::nav_badge_warning
                 data-health-warning-badge
-                style:display=warning_display
+                hidden=hide_warnings
             >
                 {warning_text}
             </span>

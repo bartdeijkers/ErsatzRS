@@ -73,14 +73,14 @@
     overflow-x: auto;
 }
 
-table {
+:where(.table-wrap) table {
     width: 100%;
     border-collapse: collapse;
     color: var(--color-text-primary);
     font-size: 0.875rem;
 }
 
-th {
+:where(.table-wrap) th {
     height: 2.375rem;
     padding: 0.375rem 1rem;
     border-bottom: 1px solid var(--color-table-line);
@@ -90,12 +90,12 @@ th {
     white-space: nowrap;
 }
 
-th:last-child,
-td:last-child {
+:where(.table-wrap) th:last-child,
+:where(.table-wrap) td:last-child {
     width: 120px;
 }
 
-td {
+:where(.table-wrap) td {
     height: 2.375rem;
     padding: 0.25rem 1rem;
     border-bottom: 1px solid var(--color-table-line);
@@ -103,11 +103,11 @@ td {
     vertical-align: middle;
 }
 
-tbody tr {
+:where(.table-wrap) tbody tr {
     transition: background-color 150ms;
 }
 
-tbody tr:hover {
+:where(.table-wrap) tbody tr:hover {
     background-color: var(--color-table-hover);
 }
 

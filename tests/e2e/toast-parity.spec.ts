@@ -104,7 +104,7 @@ test.describe('MudBlazor 8.15 toast parity', () => {
       const toastStyle = window.getComputedStyle(element);
       const stack = element.closest('[data-toast-stack]');
       const stackStyle = stack ? window.getComputedStyle(stack) : null;
-      const icon = element.querySelector('[aria-hidden="true"] > span') as HTMLElement | null;
+      const icon = element.querySelector('[aria-hidden="true"] > svg') as SVGElement | null;
       const rect = element.getBoundingClientRect();
       return {
         background: toastStyle.backgroundColor,
@@ -120,7 +120,7 @@ test.describe('MudBlazor 8.15 toast parity', () => {
         stackTop: stackStyle?.top,
         stackRight: stackStyle?.right,
         iconWidth: icon ? window.getComputedStyle(icon).width : null,
-        iconMask: icon ? window.getComputedStyle(icon).maskImage : null,
+        iconGlyph: icon?.querySelector('use')?.getAttribute('href') ?? null,
         contained:
           rect.left >= 0 &&
           rect.right <= window.innerWidth &&
@@ -144,7 +144,7 @@ test.describe('MudBlazor 8.15 toast parity', () => {
       contained: true,
     });
     expect(presentation.shadow).toContain('rgba(0, 0, 0, 0.2)');
-    expect(presentation.iconMask).not.toBe('none');
+    expect(presentation.iconGlyph).toBe('/public/images/icons/alert-success.svg#glyph');
 
     await toast.hover();
     await expect(toast).toHaveAttribute('data-toast-paused', 'true');

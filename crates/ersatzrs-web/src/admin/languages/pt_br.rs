@@ -3807,6 +3807,10 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
         TextKey::FfmpegRuntimeUpdated => "Runtime FFmpeg atualizado",
         TextKey::FfmpegRuntimeVersion => "Versão",
         TextKey::HealthNoPersistedRun => "Nenhuma verificação de integridade se aplica agora.",
+        TextKey::MainNavigation => "Navegação principal",
+        TextKey::SkipToMainContent => "Pular para o conteúdo principal",
+        TextKey::HealthAutoRefresh => "Atualizar automaticamente após uma verificação de mídia",
+        TextKey::HealthCheckResults => "Resultados das verificações",
         TextKey::HealthPersistedRunHelp => {
             "Os resultados são armazenados por cinco minutos. Atualize para verificar novamente agora. Esta página também é atualizada quando as varreduras de mídia alteram o estado dos itens."
         }

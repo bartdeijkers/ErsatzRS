@@ -39,6 +39,21 @@ pub fn shell(options: LeptosOptions, app_state: AppState) -> impl IntoView {
     let hydration_assets_available = resolve_hydration_pkg_dir(&options).is_some();
     let language = crate::admin::i18n::load_language_initial_for_state(&app_state);
 
+    let title = if use_context::<axum::http::request::Parts>()
+        .is_some_and(|parts| parts.uri.path() == "/system/health")
+    {
+        format!(
+            "{} | ErsatzRS",
+            crate::admin::i18n::text(language, crate::admin::i18n::TextKey::HealthChecks)
+        )
+    } else {
+        "ErsatzRS".to_owned()
+    };
+
+    // The streaming renderer appends a marker to dynamic text. In a title
+    // that marker would be visible, so emit escaped RCDATA directly.
+    let title = title.replace('&', "&amp;").replace('<', "&lt;");
+
     view! {
         <!DOCTYPE html>
         <html lang=language.code()>
@@ -46,7 +61,7 @@ pub fn shell(options: LeptosOptions, app_state: AppState) -> impl IntoView {
                 <meta charset="UTF-8"/>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
                 <meta name="color-scheme" content="dark light"/>
-                <title>"ErsatzRS"</title>
+                <title inner_html=title></title>
                 <NavStateHeadScript/>
                 <link rel="stylesheet" href="/public/bundle.css"/>
                 <script type="module" src="/public/channel-preview.js"></script>

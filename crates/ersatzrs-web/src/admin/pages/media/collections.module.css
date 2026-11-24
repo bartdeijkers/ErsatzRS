@@ -116,14 +116,14 @@
     background-color: var(--color-surface);
 }
 
-table {
+:where(.table-wrap) table {
     width: 100%;
     border-collapse: collapse;
     color: var(--color-text-primary);
     font-size: 0.875rem;
 }
 
-th {
+:where(.table-wrap) th {
     text-align: left;
     height: 2.375rem;
     padding: 0.375rem 1rem;
@@ -133,7 +133,7 @@ th {
     white-space: nowrap;
 }
 
-td {
+:where(.table-wrap) td {
     height: 2.375rem;
     padding: 0.25rem 1rem;
     border-bottom: 1px solid var(--color-table-line);
@@ -141,7 +141,7 @@ td {
     vertical-align: middle;
 }
 
-td:last-child {
+:where(.table-wrap) td:last-child {
     width: 120px;
 }
 
@@ -149,11 +149,11 @@ td:last-child {
     width: 180px;
 }
 
-tbody tr {
+:where(.table-wrap) tbody tr {
     transition: background-color 150ms;
 }
 
-tbody tr:hover {
+:where(.table-wrap) tbody tr:hover {
     background-color: var(--color-table-hover);
 }
 

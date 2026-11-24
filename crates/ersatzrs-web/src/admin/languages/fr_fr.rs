@@ -3089,6 +3089,10 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
         TextKey::HealthNoPersistedRun => {
             "Aucune vérification d'état n'est applicable pour le moment."
         }
+        TextKey::MainNavigation => "Navigation principale",
+        TextKey::SkipToMainContent => "Aller au contenu principal",
+        TextKey::HealthAutoRefresh => "Actualiser automatiquement après une analyse des médias",
+        TextKey::HealthCheckResults => "Résultats des vérifications",
         TextKey::HealthPersistedRunHelp => {
             "Les résultats sont conservés pendant cinq minutes. Actualisez pour relancer les vérifications. Cette page s’actualise aussi lorsque les analyses de médias modifient l’état des éléments."
         }

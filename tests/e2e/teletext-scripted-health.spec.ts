@@ -119,7 +119,7 @@ async function localizedViews(page: Page, fixture: TeletextChannelFixture, js: b
     await expect(page.locator('[data-theme]').first()).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
     const row = page.getByRole('row').filter({ has: page.getByText(text('ScriptedPlayoutState'), { exact: true }) });
     await expect(row).toHaveCount(1);
-    await expect(row.locator('span[aria-label]').first()).toHaveAttribute('aria-label', text(pass ? 'Pass' : 'Fail'));
+    await expect(row.getByRole('cell', { name: text(pass ? 'Pass' : 'Fail'), exact: true })).toBeVisible();
     for (const [key, channel] of messages) await expect(row).toContainText(text(key).replace('{channel}', String(channel)));
     await expect(row).not.toContainText('Scripted teletext interval for channel');
     await expect(row).not.toContainText('scoped native generation');

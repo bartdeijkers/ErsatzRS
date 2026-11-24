@@ -15,12 +15,15 @@ The drawer contains the primary admin navigation. It is persistent beside the
 main region at desktop widths and becomes an off-canvas disclosure below 768
 CSS pixels. The top-bar control is a native button with `aria-controls` and an
 `aria-expanded` state. The drawer retains its navigation landmark and localized
-groups at both widths.
+groups at both widths. The first keyboard stop in the shell skips to the main
+region. On narrow screens the search form and IPTV links share a second
+top-bar row. With JavaScript disabled the navigation appears in normal
+document flow and the disclosure button is hidden.
 
 The closed mobile drawer is `inert` and `aria-hidden`, so translated-off-canvas
 links cannot receive keyboard or assistive-technology focus. Opening it focuses
-the first available navigation control. Selecting a link or pressing Escape
-closes it; Escape and an explicit close restore focus to the disclosure button.
+the first available navigation control. Selecting a link, moving focus beyond the drawer, or pressing Escape closes
+it. Escape and an explicit close restore focus to the disclosure button.
 Viewport changes synchronize the desktop and mobile defaults. Session storage
 retains user state when available but is not required for the interaction.
 

@@ -6,6 +6,7 @@ pub mod bootstrap;
 pub mod channels;
 pub mod config;
 pub mod health;
+mod health_document;
 pub(crate) mod listeners;
 pub mod media_sources;
 pub mod preparation_worker;

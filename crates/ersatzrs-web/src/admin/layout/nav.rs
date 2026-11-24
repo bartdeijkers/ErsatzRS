@@ -3,7 +3,7 @@ use leptos_router::hooks::use_location;
 
 use crate::admin::i18n::{tr, TextKey};
 use crate::admin::layout::badges::{HealthBadge, PlayoutWarningBadge};
-use crate::admin::ui::primitives::icon::{icon_style, IconName};
+use crate::admin::ui::primitives::icon::{Icon, IconName};
 
 use super::style;
 
@@ -11,7 +11,7 @@ use super::style;
 pub(super) fn NavDrawer() -> impl IntoView {
     view! {
         <aside id="admin-navigation-drawer" class=style::drawer data-nav-drawer>
-            <nav class=style::drawer_nav>
+            <nav class=style::drawer_nav aria-label=tr(TextKey::MainNavigation)>
                 <NavLink href="/channels" label=tr(TextKey::Channels) icon=IconName::Play/>
                 <NavLink href="/epg" label=tr(TextKey::EpgPreview) icon=IconName::Calendar/>
                 <NavLink href="/ffmpeg" label=tr(TextKey::FfmpegProfiles) icon=IconName::Tune/>
@@ -100,13 +100,11 @@ fn SchedulingNavGroup(children: ChildrenFn) -> impl IntoView {
     view! {
         <details class=style::nav_group data-nav-group="scheduling">
             <summary class=style::nav_group_header>
-                <div class=style::nav_group_header_left>
+                <span class=style::nav_group_header_left>
                     <span>{tr(TextKey::Scheduling)}</span>
                     <PlayoutWarningBadge/>
-                </div>
-                <span class=style::nav_group_chevron>
-                    <span style=icon_style(IconName::ChevronDown, "0.75rem") aria-hidden="true"></span>
                 </span>
+                <Icon name=IconName::ChevronDown class=style::nav_group_chevron/>
             </summary>
             <div class=style::nav_group_children>
                 {children()}
@@ -121,9 +119,7 @@ fn NavGroup(storage_key: &'static str, label: &'static str, children: ChildrenFn
         <details class=style::nav_group data-nav-group=storage_key>
             <summary class=style::nav_group_header>
                 <span>{label}</span>
-                <span class=style::nav_group_chevron>
-                    <span style=icon_style(IconName::ChevronDown, "0.75rem") aria-hidden="true"></span>
-                </span>
+                <Icon name=IconName::ChevronDown class=style::nav_group_chevron/>
             </summary>
             <div class=style::nav_group_children>
                 {children()}
@@ -156,7 +152,7 @@ fn NavLink(
 
     view! {
         <a href=href class=cls>
-            <span style=icon_style(icon, "1rem") aria-hidden="true"></span>
+            <Icon name=icon/>
             <span class=style::nav_link_text>{label}</span>
             {children.map(|children| view! {
                 <span class=style::nav_link_trailing>{children()}</span>

@@ -61,6 +61,11 @@
     background-color: rgb(var(--toast-error));
 }
 
+.toast-icon,
+.toast-close {
+    font-size: 22px;
+}
+
 .toast-icon {
     display: flex;
     padding: 7px 0;

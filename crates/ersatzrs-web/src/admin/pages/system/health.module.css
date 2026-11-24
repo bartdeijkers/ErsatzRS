@@ -1,0 +1,168 @@
+.page {
+    max-width: 64rem;
+    margin-inline: auto;
+    padding-block: 2rem;
+}
+
+.report {
+    container-type: inline-size;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    margin-block-end: 2rem;
+    font-size: 0.875rem;
+}
+
+.report > header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.report h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.report p {
+    margin: 0;
+    color: var(--color-text-secondary);
+}
+
+.runtime {
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    border-radius: 0.375rem;
+}
+
+.runtime h2,
+.checks caption {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    font-weight: 700;
+    text-align: start;
+}
+
+.runtime dl {
+    display: grid;
+    grid-template-columns: fit-content(45%) minmax(0, 1fr);
+    gap: 0.5rem 1rem;
+    margin: 0;
+}
+
+.runtime dt {
+    color: var(--color-text-secondary);
+}
+
+.runtime dd {
+    overflow-wrap: anywhere;
+    margin: 0;
+}
+
+.checks {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.checks th,
+.checks td {
+    padding: 0.5rem clamp(0.25rem, 1vw, 0.75rem);
+    border-bottom: 1px solid var(--color-table-line);
+    text-align: start;
+    vertical-align: top;
+}
+
+.checks th {
+    white-space: normal;
+    font-weight: 600;
+}
+
+.checks thead th:first-child {
+    width: 26%;
+}
+
+.checks th[scope="row"],
+.checks td:last-child {
+    overflow-wrap: anywhere;
+}
+
+/* Reserve one unbroken line for the longest localized status and its dot. */
+.checks thead th:nth-child(2) {
+    width: 1%;
+}
+
+.checks thead th:nth-child(2),
+.checks td:first-of-type {
+    white-space: nowrap;
+}
+
+.checks thead th {
+    border-color: var(--color-border);
+}
+
+.checks a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+.checks [data-status="Pass"] { --status-color: var(--color-success); }
+.checks [data-status="Fail"] { --status-color: var(--color-error); }
+.checks [data-status="Warning"] { --status-color: var(--color-warning); }
+.checks [data-status="Info"] { --status-color: var(--color-primary); }
+
+.checks td:first-of-type::before {
+    content: "";
+    display: inline-block;
+    width: 0.6em;
+    height: 0.6em;
+    margin-inline-end: 0.4em;
+    border-radius: 50%;
+    background: var(--status-color, var(--color-muted));
+}
+
+.auto-refresh:not([hidden]) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 1.5rem;
+    justify-self: start;
+}
+
+/* Give diagnostics the full row when three columns would crowd the labels. */
+@container (max-width: 34rem) {
+    .checks,
+    .checks caption,
+    .checks tbody {
+        display: block;
+    }
+
+    .checks { position: relative; }
+
+    .checks thead {
+        position: absolute;
+        inline-size: 100%;
+        clip-path: inset(50%);
+    }
+
+    .checks tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: baseline;
+        gap: 0.25rem 0.75rem;
+        padding-block: 0.625rem;
+        border-block-end: 1px solid var(--color-table-line);
+    }
+
+    .checks tbody :is(th, td) {
+        width: auto;
+        height: auto;
+        padding: 0;
+        border: 0;
+    }
+
+    .checks tbody td:last-child {
+        grid-column: 1 / -1;
+    }
+}

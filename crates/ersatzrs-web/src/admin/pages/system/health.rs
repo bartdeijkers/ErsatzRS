@@ -1,6 +1,8 @@
 use leptos::prelude::*;
 
-use crate::admin::i18n::{health_check_message, health_check_title, health_summary, tr, TextKey};
+use crate::admin::i18n::{
+    health_check_message, health_check_title, health_summary, tr, use_i18n, TextKey, UiLanguage,
+};
 use crate::admin::release_notes::ReleaseNotesCard;
 #[cfg(target_arch = "wasm32")]
 use crate::admin::server_fns::layout::media_state_revision;
@@ -8,12 +10,13 @@ use crate::admin::server_fns::layout::{
     load_health_snapshot, AdminFfmpegRuntimeStatus, AdminHealthRow, AdminHealthSnapshot,
     RefreshHealthSnapshot,
 };
+use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
 use crate::admin::ui::primitives::resource_state::admin_result_view;
 use crate::admin::ui::primitives::system_navigation::SystemPageLayout;
 use crate::admin::ui::primitives::toast::use_toast;
 use crate::admin::ui::primitives::toast::ToastSeverity;
 
-use crate::admin::ui::primitives::button::{btn_class, ButtonVariant};
+stylance::import_crate_style!(style, "src/admin/pages/system/health.module.css");
 
 #[component]
 pub fn HealthPage() -> impl IntoView {
@@ -26,8 +29,8 @@ pub fn HealthPage() -> impl IntoView {
     });
     view! {
         <SystemPageLayout>
-            {content}
-            <div style="max-width:64rem;margin:0 auto;padding:0 0 2rem">
+            <div class=style::page>
+                {content}
                 <ReleaseNotesCard/>
             </div>
         </SystemPageLayout>
@@ -39,6 +42,9 @@ fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
     // Hydrated islands must restore the page language before rendering updates.
     crate::admin::i18n::provide_i18n_context();
     let snapshot = RwSignal::new(initial_snapshot);
+    let auto_refresh = RwSignal::new(true);
+    let interactive = RwSignal::new(false);
+    Effect::new(move |_| interactive.set(true));
     let refresh = ServerAction::<RefreshHealthSnapshot>::new();
     let load_toast = use_toast();
     Effect::new(move |_| {
@@ -68,9 +74,16 @@ fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
                 let mut previous_revision = None;
                 let mut revision_load_failed = false;
                 while running.load(Ordering::Relaxed) {
+                    if !auto_refresh.get_untracked() {
+                        gloo_timers::future::TimeoutFuture::new(1_500).await;
+                        continue;
+                    }
                     let result = media_state_revision().await;
                     if !running.load(Ordering::Relaxed) {
                         break;
+                    }
+                    if !auto_refresh.get_untracked() {
+                        continue;
                     }
                     match result {
                         Ok(next) => {
@@ -101,9 +114,9 @@ fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
     }
 
     view! {
-        <div style="max-width:64rem;margin:0 auto;padding:2rem 0;display:flex;flex-direction:column;gap:1.5rem">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
-                <h1 style="font-size:1.5rem;font-weight:700;color:var(--color-gray-100);margin:0">
+        <div class=style::report>
+            <header>
+                <h1>
                     {tr(TextKey::HealthChecks)}
                 </h1>
                 <form method="post" action="/admin-api/system/health/refresh"
@@ -117,10 +130,21 @@ fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
                         aria-busy=move || refresh.pending().get().to_string()
                     >{tr(TextKey::Refresh)}</button>
                 </form>
-            </div>
-            <p style="font-size:0.875rem;color:var(--color-muted);margin:0">
+            </header>
+            <p>
                 {tr(TextKey::HealthPersistedRunHelp)}
             </p>
+            <label class=style::auto_refresh hidden=move || !interactive.get()>
+                <input type="checkbox" checked on:change=move |event| auto_refresh.set(event_target_checked(&event))/>
+                {tr(TextKey::HealthAutoRefresh)}
+            </label>
+            <p role="status">{move || snapshot.with(|report| {
+                if report.rows.is_empty() {
+                    tr(TextKey::HealthNoPersistedRun).to_owned()
+                } else {
+                    health_summary(report.errors, report.warnings)
+                }
+            })}</p>
             {move || render_snapshot(snapshot.get())}
         </div>
     }
@@ -128,26 +152,20 @@ fn HealthIsland(initial_snapshot: AdminHealthSnapshot) -> impl IntoView {
 
 fn render_snapshot(mut snapshot: AdminHealthSnapshot) -> AnyView {
     if snapshot.rows.is_empty() {
-        return view! {
-            <p style="font-size:0.875rem;color:var(--color-muted)">
-                {tr(TextKey::HealthNoPersistedRun)}
-            </p>
-        }
-        .into_any();
+        return ().into_any();
     }
-
-    let summary = health_summary(snapshot.errors, snapshot.warnings);
 
     let runtime = snapshot.ffmpeg_runtime.take();
     let rows = std::mem::take(&mut snapshot.rows);
     view! {
-        <p style="font-size:0.875rem;color:var(--color-gray-300);margin:0">{summary}</p>
         {runtime.map(render_ffmpeg_runtime)}
-        <table style="width:100%;border-collapse:collapse;font-size:0.875rem">
+        <table class=style::checks>
+            <caption>{tr(TextKey::HealthCheckResults)}</caption>
             <thead>
-                <tr style="border-bottom:1px solid var(--color-border);color:var(--color-gray-300);text-align:left">
-                    <th style="padding:0.5rem 0.75rem;font-weight:600">{tr(TextKey::Check)}</th>
-                    <th style="padding:0.5rem 0.75rem;font-weight:600">{tr(TextKey::Message)}</th>
+                <tr>
+                    <th scope="col">{tr(TextKey::Check)}</th>
+                    <th scope="col">{tr(TextKey::Status)}</th>
+                    <th scope="col">{tr(TextKey::Message)}</th>
                 </tr>
             </thead>
             <tbody>
@@ -180,23 +198,23 @@ fn render_ffmpeg_runtime(runtime: AdminFfmpegRuntimeStatus) -> AnyView {
         tr(TextKey::FfmpegRuntimeUpToDate).to_owned()
     };
     view! {
-        <section style="border:1px solid var(--color-border);border-radius:6px;padding:1rem">
-            <h2 style="font-size:1rem;font-weight:700;color:var(--color-gray-100);margin:0 0 0.75rem 0">
+        <section class=style::runtime>
+            <h2>
                 {tr(TextKey::FfmpegRuntime)}
             </h2>
-            <dl style="display:grid;gap:0.5rem 1rem;grid-template-columns:max-content minmax(0,1fr);margin:0;font-size:0.875rem">
-                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeSource)}</dt>
-                <dd style="color:var(--color-gray-100);margin:0">{source}</dd>
-                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeVersion)}</dt>
-                <dd style="color:var(--color-gray-100);margin:0">
+            <dl>
+                <dt>{tr(TextKey::FfmpegRuntimeSource)}</dt>
+                <dd>{source}</dd>
+                <dt>{tr(TextKey::FfmpegRuntimeVersion)}</dt>
+                <dd>
                     {format!("ffmpeg {}, ffprobe {}", runtime.ffmpeg_version, runtime.ffprobe_version)}
                 </dd>
-                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeRelease)}</dt>
-                <dd style="color:var(--color-gray-100);margin:0">{installed}</dd>
-                <dt style="color:var(--color-gray-300)">{tr(TextKey::FfmpegRuntimeLatestRelease)}</dt>
-                <dd style="color:var(--color-gray-100);margin:0">{latest}</dd>
-                <dt style="color:var(--color-gray-300)">{tr(TextKey::Message)}</dt>
-                <dd style="color:var(--color-gray-100);margin:0">{update}</dd>
+                <dt>{tr(TextKey::FfmpegRuntimeRelease)}</dt>
+                <dd>{installed}</dd>
+                <dt>{tr(TextKey::FfmpegRuntimeLatestRelease)}</dt>
+                <dd>{latest}</dd>
+                <dt>{tr(TextKey::Message)}</dt>
+                <dd>{update}</dd>
             </dl>
         </section>
     }
@@ -221,31 +239,29 @@ fn render_row(row: AdminHealthRow) -> AnyView {
         brief_message,
         link,
     } = row;
-    let color = status_color(persisted_status.as_str());
     let status = status_label(persisted_status.as_str());
     let title = health_check_title(&persisted_title);
     let message = health_check_message(&persisted_title, &persisted_message, &brief_message);
 
+    // Persisted check names and diagnostic fallbacks originate in English.
+    let localized = use_i18n() != UiLanguage::English;
+    let title_lang = (localized && title == persisted_title).then_some("en");
+    let message_lang = (localized
+        && !message.is_empty()
+        && (message == persisted_message || message == brief_message))
+        .then_some("en");
     view! {
-        <tr style="border-bottom:1px solid var(--color-border-subtle)">
-            <td style="padding:0.5rem 0.75rem;vertical-align:top;color:var(--color-gray-100)">
-                <div style="align-items:center;display:flex;gap:0.5rem">
-                    <span
-                        aria-label=status
-                        title=status
-                        style=format!("background:{color};border-radius:999px;display:inline-block;flex:0 0 auto;height:0.65rem;width:0.65rem")
-                    ></span>
-                    <span>{title}</span>
-                </div>
-            </td>
-            <td style="padding:0.5rem 0.75rem;vertical-align:top;color:var(--color-gray-300)">
+        <tr data-status=persisted_status>
+            <th scope="row" lang=title_lang>{title}</th>
+            <td>{status}</td>
+            <td lang=message_lang>
                 {match link {
                     Some(href) => view! {
-                        <a href=href.clone() target=link_target(&href) rel="noopener" style="color:inherit;text-decoration:underline">
+                        <a href=href.clone() target=link_target(&href) rel="noopener">
                             {message}
                         </a>
                     }.into_any(),
-                    None => view! { <span>{message}</span> }.into_any(),
+                    None => message.into_any(),
                 }}
             </td>
         </tr>
@@ -260,16 +276,6 @@ fn status_label(status: &str) -> &'static str {
         "Info" => tr(TextKey::Info),
         "Pass" => tr(TextKey::Pass),
         _ => tr(TextKey::Unavailable),
-    }
-}
-
-fn status_color(status: &str) -> &'static str {
-    match status {
-        "Fail" => "var(--color-error, #f44336)",
-        "Warning" => "var(--color-warning, #ff9800)",
-        "Info" => "var(--color-primary, #00c0c0)",
-        "Pass" => "var(--color-success, #4caf50)",
-        _ => "var(--color-muted)",
     }
 }
 

@@ -3791,6 +3791,10 @@ TextKey::NonPlayableItems => "Niet-afspeelbare items",
         TextKey::FfmpegRuntimeUpdated => "FFmpeg-runtime bijgewerkt",
         TextKey::FfmpegRuntimeVersion => "Versie",
         TextKey::HealthNoPersistedRun => "Er zijn nu geen toepasselijke gezondheidscontroles.",
+        TextKey::MainNavigation => "Hoofdnavigatie",
+        TextKey::SkipToMainContent => "Ga naar de hoofdinhoud",
+        TextKey::HealthAutoRefresh => "Automatisch bijwerken na een mediascan",
+        TextKey::HealthCheckResults => "Resultaten per controle",
         TextKey::HealthPersistedRunHelp => {
             "Resultaten worden vijf minuten bewaard. Kies Vernieuwen om direct opnieuw te controleren. Deze pagina wordt ook vernieuwd wanneer mediascans de itemstatus bijwerken."
         }

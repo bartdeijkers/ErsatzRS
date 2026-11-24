@@ -26,7 +26,7 @@ pub fn ReleaseNotesCard() -> impl IntoView {
             <Suspense fallback=|| ()>
                 {move || notes.get().map(|result| {
                     let html = result.unwrap_or_default();
-                    view! { <div class=style::body inner_html=html></div> }
+                    view! { <div class=style::body lang="en" inner_html=html></div> }
                 })}
             </Suspense>
         </section>

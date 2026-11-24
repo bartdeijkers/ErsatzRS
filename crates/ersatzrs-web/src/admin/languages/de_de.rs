@@ -3099,6 +3099,10 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::FfmpegRuntimeUpdated => "FFmpeg-Laufzeitumgebung aktualisiert",
         TextKey::FfmpegRuntimeVersion => "Version",
         TextKey::HealthNoPersistedRun => "Derzeit sind keine Systemprüfungen anwendbar.",
+        TextKey::MainNavigation => "Hauptnavigation",
+        TextKey::SkipToMainContent => "Zum Hauptinhalt springen",
+        TextKey::HealthAutoRefresh => "Nach einem Medienscan automatisch aktualisieren",
+        TextKey::HealthCheckResults => "Prüfergebnisse",
         TextKey::HealthPersistedRunHelp => {
             "Ergebnisse werden fünf Minuten zwischengespeichert. Mit Aktualisieren können Sie sofort erneut prüfen. Diese Seite wird auch aktualisiert, wenn Medienscans den Elementstatus ändern."
         }

@@ -26,7 +26,8 @@
 
 .header a,
 .body a {
-    color: var(--color-secondary);
+    color: var(--color-text-primary);
+    text-decoration: underline;
 }
 
 .body {
