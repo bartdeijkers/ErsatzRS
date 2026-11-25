@@ -1,6 +1,7 @@
 //! Exact-address native preview from a complete compiler-owned service.
 //! This is neither a base fallback view nor browser/client/output admission.
 
+use crate::admin::server_fns::teletext_atlas::AtlasHitMap;
 use std::fmt;
 
 use ersatzrs_domain::{TeletextColourPixelOptions, TeletextNavigationLink, TeletextPageAddress};
@@ -25,6 +26,7 @@ pub struct TeletextPreviewBudget {
 /// RGB4, video, receiver header and unresolved pixels remain distinct raster roles.
 pub struct TeletextNativePreview<'a> {
     raster: TeletextRaster,
+    pub(crate) hits: AtlasHitMap,
     navigation: &'a [TeletextNavigationLink],
 }
 impl<'a> TeletextNativePreview<'a> {
@@ -133,7 +135,84 @@ pub fn project_teletext_preview(
     Ok(TeletextNativePreview {
         raster,
         navigation: &page.navigation,
+        hits: hit_map(composition, page),
     })
+}
+
+fn hit_map(
+    composition: &TeletextMainComposition,
+    page: &ersatzrs_domain::TeletextPageDraft,
+) -> AtlasHitMap {
+    use ersatzrs_domain::{TeletextNavigationRole as Role, TeletextRunContent};
+    let display = composition.display_resolution();
+    let left = composition.display_geometry().left_width();
+    let mut hits = AtlasHitMap {
+        columns: display.width(),
+        ..Default::default()
+    };
+    // Native field boundaries, including imported TTI spacing attributes. Do not
+    // send concealed characters to the browser as labels or navigation targets.
+    for row in 0..25 {
+        let mut start = None;
+        for col in 0..=display.width() {
+            let concealed = display.cell(row, col).is_some_and(|c| {
+                c.attributes().conceal().value() == Some(true)
+                    && c.fragment() != ersatzrs_domain::TeletextDisplayFragment::BackgroundOnly
+            });
+            let blank = col
+                .checked_sub(left)
+                .and_then(|c| composition.base_display().cell(row, c))
+                .is_some_and(|c| c.code() == b' ');
+            if concealed && !blank {
+                start.get_or_insert(col);
+            } else if let Some(begin) = start.take() {
+                hits.concealed.push((row, begin, col - begin));
+            }
+        }
+    }
+    // Read the actual footer positions, including coloured runs imported from TTI.
+    for col in 0..40 {
+        let Some(cell) = composition.base_display().cell(24, col) else {
+            continue;
+        };
+        if cell.code() <= b' ' || cell.attributes().conceal() {
+            continue;
+        }
+        let role = match cell.attributes().raw_foreground() {
+            1 => Role::Red,
+            2 => Role::Green,
+            3 => Role::Yellow,
+            4 | 6 => Role::Cyan,
+            _ => continue,
+        };
+        let x = left + col;
+        if let Some((start, width, last)) = hits.shortcuts.last_mut() {
+            if *last == role && *start + *width == x {
+                *width += 1;
+                continue;
+            }
+        }
+        hits.shortcuts.push((x, 1, role));
+    }
+    for row in &page.rows {
+        for run in &row.runs {
+            if run.style.conceal {
+                continue;
+            }
+            let TeletextRunContent::Text { text } = &run.content else {
+                continue;
+            };
+            let Some((prefix, _)) = text.split_once(' ') else {
+                continue;
+            };
+            if prefix.len() == 3 && prefix.bytes().all(|c| c.is_ascii_digit()) {
+                if let Ok(number) = prefix.parse::<u16>() {
+                    hits.entries.push((row.row, left + run.column, number));
+                }
+            }
+        }
+    }
+    hits
 }
 
 fn limit(

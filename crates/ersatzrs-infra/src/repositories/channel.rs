@@ -38,8 +38,8 @@ static CHANNEL_UPSERT_SQL: std::sync::LazyLock<String> = std::sync::LazyLock::ne
                 "PreferredSubtitleLanguageCode", "SubtitleMode",
                 "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
                 "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
-                "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg", "TeletextEnabled"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         &[&["Id"], &["Number"]],
     )
 });
@@ -67,6 +67,14 @@ impl ChannelRepository for SqliteChannelRepository {
         )
         .await?;
         Ok(channel)
+    }
+
+    async fn teletext_enabled(&self, id: EntityId) -> Result<bool> {
+        sqlx::query_scalar(r#"SELECT "TeletextEnabled" FROM "Channel" WHERE "Id" = ?"#)
+            .bind(id)
+            .fetch_one(&self.0)
+            .await
+            .map_err(|error| not_found("channel", id, error))
     }
 
     async fn get_by_number(&self, number: &str) -> Result<Channel> {
@@ -139,6 +147,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(encode_enum(channel.idle_behavior))
             .bind(channel.is_enabled)
             .bind(channel.show_in_epg)
+            .bind(channel.teletext_enabled)
             .execute(&mut *tx)
             .await
             .repository()?;
@@ -248,8 +257,8 @@ impl ChannelRepository for SqliteChannelRepository {
                     "PreferredSubtitleLanguageCode", "SubtitleMode",
                     "MusicVideoCreditsMode", "MusicVideoCreditsTemplate",
                     "SongVideoMode", "PlayoutSource", "PlayoutMode", "MirrorSourceChannelId",
-                    "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg"
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                    "PlayoutOffset", "TranscodeMode", "IdleBehavior", "IsEnabled", "ShowInEpg", "TeletextEnabled"
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
             )
             .bind(uuid.to_string())
             .bind(&normalized.number)
@@ -281,6 +290,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(normalized.idle_behavior)
             .bind(normalized.is_enabled)
             .bind(show_in_epg)
+            .bind(normalized.teletext_enabled.unwrap_or(false))
             .execute(&mut *tx)
             .await.repository()?;
             crate::db::last_insert_id(result)
@@ -297,7 +307,7 @@ impl ChannelRepository for SqliteChannelRepository {
                     "SongVideoMode" = ?, "PlayoutSource" = ?, "PlayoutMode" = ?,
                     "MirrorSourceChannelId" = ?, "PlayoutOffset" = ?,
                     "TranscodeMode" = ?, "IdleBehavior" = ?,
-                    "IsEnabled" = ?, "ShowInEpg" = ?
+                    "IsEnabled" = ?, "ShowInEpg" = ?, "TeletextEnabled" = COALESCE(?, "TeletextEnabled")
                    WHERE "Id" = ?"#,
             )
             .bind(&normalized.number)
@@ -329,6 +339,7 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(normalized.idle_behavior)
             .bind(normalized.is_enabled)
             .bind(show_in_epg)
+            .bind(normalized.teletext_enabled)
             .bind(normalized.id)
             .execute(&mut *tx)
             .await
@@ -389,7 +400,7 @@ impl ChannelRepository for SqliteChannelRepository {
         let offset = i64::from(page) * i64::from(page_size);
         let rows = sqlx::query(
             r#"SELECT c."Id", c."Number", c."Name", c."PreferredAudioLanguageCode",
-                      c."IsEnabled", c."ShowInEpg", c."StreamingMode",
+                      c."IsEnabled", c."ShowInEpg", c."TeletextEnabled", c."StreamingMode",
                       COALESCE(p."Name", '') AS "ProfileName",
                       ((SELECT COUNT(*) FROM "Playout" pl WHERE pl."ChannelId" = c."Id") +
                        CASE WHEN c."PlayoutSource" = 1 THEN
@@ -422,6 +433,7 @@ impl ChannelRepository for SqliteChannelRepository {
                         .try_get("PreferredAudioLanguageCode")
                         .repository()?,
                     is_enabled: decode_bool_column(row, "IsEnabled")?,
+                    teletext_enabled: decode_bool_column(row, "TeletextEnabled")?,
                     show_in_epg: decode_bool_column(row, "ShowInEpg")?,
                     streaming_mode: row.try_get("StreamingMode").repository()?,
                     ffmpeg_profile_name: row.try_get("ProfileName").repository()?,
@@ -1189,6 +1201,7 @@ async fn load_editor_form(
             transcode_mode: row.try_get("TranscodeMode").repository()?,
             idle_behavior: row.try_get("IdleBehavior").repository()?,
             is_enabled: decode_bool_column(&row, "IsEnabled")?,
+            teletext_enabled: Some(decode_bool_column(&row, "TeletextEnabled")?),
             show_in_epg: decode_bool_column(&row, "ShowInEpg")?,
         },
         playout_count,
@@ -1773,6 +1786,7 @@ fn map_channel(row: &DbRow) -> Result<Channel> {
         transcode_mode: decode_enum_column("channel transcode_mode", row, "TranscodeMode")?,
         idle_behavior: decode_enum_column("channel idle_behavior", row, "IdleBehavior")?,
         is_enabled: decode_bool_column(row, "IsEnabled")?,
+        teletext_enabled: decode_bool_column(row, "TeletextEnabled")?,
         show_in_epg: decode_bool_column(row, "ShowInEpg")?,
     })
 }

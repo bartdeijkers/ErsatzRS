@@ -119,6 +119,7 @@ async fn original_bytes(
         .await
         .unwrap();
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: "published",
         locale: "en-us",
         supported_locales: &["en-us"],

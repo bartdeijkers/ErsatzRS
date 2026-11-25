@@ -23,6 +23,12 @@ test.describe('channel streaming engine', () => {
           form: { is_dark_mode: 'true', language: 'en-us' }, maxRedirects: 0,
         });
         await page.goto('/channels/add');
+        const teletext = page.locator('input[name="teletext_enabled"]');
+        const fieldOrder = await page.locator('input').evaluateAll(inputs =>
+          inputs.map(input => input.name).filter(name =>
+            ['number', 'is_enabled', 'teletext_enabled', 'show_in_epg', 'name'].includes(name)));
+        expect(fieldOrder).toEqual(['number', 'is_enabled', 'teletext_enabled', 'show_in_epg', 'name']);
+        await expect(teletext).not.toBeChecked();
         const engine = page.locator('select[name="streaming_engine"]');
         const mode = page.locator('select[name="streaming_mode"]');
         await expect(engine).toHaveValue('1');
@@ -36,12 +42,26 @@ test.describe('channel streaming engine', () => {
         const id = sqlite(`SELECT "Id" FROM "Channel" WHERE "Name" = '${name}';`);
         expect(id).toMatch(/^\d+$/);
         expect(sqlite(`SELECT "StreamingEngine", "StreamingMode" FROM "Channel" WHERE "Id" = ${id};`)).toBe('1|5');
+        const actions = page.locator('[data-row-actions]').filter({ has: page.locator(`a[href="/channels/${id}"]`) });
+        const atlas = actions.getByRole('link', { name: 'Channel teletext' });
+        await expect(atlas).toBeDisabled();
+        await expect(atlas).not.toHaveAttribute('href', /.*/);
+        await expect(actions.locator(`a[href="/channels/${id}"] + a + a`)).toHaveAttribute('aria-label', 'Troubleshoot channel');
         await page.goto(`/channels/${id}`);
         await expect(engine).toHaveValue('1');
+        await teletext.check();
         await engine.selectOption('0');
         await page.getByRole('button', { name: 'Save Channel' }).click();
         await expect(page).toHaveURL(/\/channels$/);
         await page.goto(`/channels/${id}`);
+        await expect(teletext).toBeChecked();
+        await page.goto('/channels/');
+        await expect(page).toHaveURL(/\/channels$/);
+        await expect(atlas).toHaveAttribute('href', `/channels/${id}/teletext`);
+        await atlas.click();
+        await expect(page.getByTestId('channel-teletext-page')).toBeVisible();
+        await page.goto(`/channels/${id}`);
+        await teletext.uncheck();
         await expect(engine).toHaveValue('0');
         await expect(slug).toBeVisible();
         await slug.selectOption('2');
@@ -62,6 +82,8 @@ test.describe('channel streaming engine', () => {
         await page.locator('input[name="name"]').fill(name);
         await page.getByRole('button', { name: 'Save Channel' }).click();
         await expect(page).toHaveURL(/\/channels$/);
+        await expect(atlas).toBeDisabled();
+        await expect(atlas).not.toHaveAttribute('href', /.*/);
         expect(sqlite(`SELECT "StreamingEngine", "StreamingMode" FROM "Channel" WHERE "Id" = ${id};`)).toBe('1|4');
         await page.goto(`/channels/${id}`);
         await expect(engine).toHaveValue('1');

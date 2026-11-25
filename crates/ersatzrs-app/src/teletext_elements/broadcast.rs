@@ -104,6 +104,103 @@ fn hides_text_under_double_height(rows: &[[u8; 40]]) -> bool {
     })
 }
 
+fn fasttext_links(
+    instance: Option<&ersatzrs_domain::TeletextElementInstance>,
+) -> Vec<ersatzrs_domain::TeletextNavigationLink> {
+    instance
+        .iter()
+        .flat_map(|i| {
+            i.links
+                .iter()
+                .filter(|(key, _)| !i.inactive_keys.contains(key))
+        })
+        .filter_map(|(key, number)| {
+            use ersatzrs_domain::{
+                TeletextNavigationLink, TeletextNavigationRole as R, TeletextNavigationTarget,
+            };
+            let role = match key.as_str() {
+                "red" => R::Red,
+                "green" => R::Green,
+                "yellow" => R::Yellow,
+                "blue" => R::Cyan,
+                _ => return None,
+            };
+            Some(TeletextNavigationLink {
+                role,
+                target: TeletextNavigationTarget {
+                    page: (*number)?,
+                    subcode: None,
+                },
+            })
+        })
+        .collect()
+}
+
+fn apply_instance(
+    element: &mut TeletextElement,
+    page: &mut ElementPage,
+    options: &ersatzrs_domain::TeletextElementInstance,
+) -> Result<(), TeletextElementError> {
+    use ersatzrs_domain::{TeletextElementBindingSource, TeletextInstanceSheet};
+    if let Some(interval) = options.interval {
+        if !(1..=600).contains(&interval) {
+            return Err(TeletextElementError::InvalidCycle);
+        }
+        element.cycle_seconds = interval;
+    }
+    let inherited;
+    let sheets = if options.subpages.is_empty() {
+        inherited = (1..=page.subpages.len())
+            .map(|part| TeletextInstanceSheet {
+                part: u16::try_from(part).unwrap_or(u16::MAX),
+                ..Default::default()
+            })
+            .collect::<Vec<_>>();
+        &inherited
+    } else {
+        &options.subpages
+    };
+    if sheets.len() > 64 {
+        return Err(TeletextElementError::InvalidBindings);
+    }
+    let mut selected = Vec::new();
+    let mut bindings = Vec::new();
+    for (ordinal, sheet) in sheets.iter().enumerate() {
+        let source = sheet
+            .part
+            .checked_sub(1)
+            .ok_or(TeletextElementError::InvalidBindings)?;
+        selected.push(
+            page.subpages
+                .get(usize::from(source))
+                .ok_or(TeletextElementError::InvalidBindings)?
+                .clone(),
+        );
+        for original in element.bindings.iter().filter(|b| b.subpage == source) {
+            let mut binding = original.clone();
+            binding.subpage =
+                u16::try_from(ordinal).map_err(|_| TeletextElementError::InvalidBindings)?;
+            if let Some(text) = sheet
+                .fields
+                .get(&binding.field)
+                .or_else(|| options.fields.get(&binding.field))
+            {
+                if text.chars().count() > usize::from(binding.length)
+                    || text.chars().any(char::is_control)
+                {
+                    return Err(TeletextElementError::InvalidBindings);
+                }
+                binding.source = TeletextElementBindingSource::Static;
+                binding.static_text.clone_from(text);
+            }
+            bindings.push(binding);
+        }
+    }
+    page.subpages = selected;
+    element.bindings = bindings;
+    Ok(())
+}
+
 /// True when a field marker has no data source, or a binding is left unset,
 /// so marker text would be broadcast.
 fn has_unset_field(page: &ElementPage, element: &TeletextElement) -> bool {
@@ -139,6 +236,28 @@ fn dynamic_fields(
 }
 
 /// Declared page ranges of the enabled add-ons in a selection.
+fn apply_guide_reservations(
+    ranges: &mut Vec<(String, u16, u16)>,
+    guide_layout: Option<&str>,
+) -> Result<(), TeletextElementError> {
+    const GUIDE: &str = "org.ersatzrs.addon.tvguide-teletext";
+    if let Some(layout) = guide_layout {
+        #[derive(serde::Deserialize)]
+        struct Assignment {
+            page: ersatzrs_domain::TeletextPageNumber,
+        }
+        let assignments: Vec<Assignment> =
+            serde_json::from_str(layout).map_err(|_| TeletextElementError::InvalidBindings)?;
+        ranges.retain(|(addon, _, _)| addon != GUIDE);
+        ranges.extend(
+            assignments
+                .into_iter()
+                .map(|entry| (GUIDE.to_owned(), entry.page.get(), entry.page.get())),
+        );
+    }
+    Ok(())
+}
+
 fn addon_ranges<'a>(
     bindings: impl Iterator<Item = (&'a str, &'a [ersatzrs_domain::TeletextProfileSetting])>,
 ) -> Vec<(String, u16, u16)> {
@@ -232,7 +351,7 @@ impl ApplicationServices {
         channel_id: EntityId,
         now: DateTime<Utc>,
     ) -> Result<CustomPagesPlan, TeletextElementError> {
-        self.plan_teletext_custom_pages_in_selection(channel_id, now, None)
+        self.plan_teletext_custom_pages_in_selection(channel_id, now, None, None)
             .await
     }
 
@@ -259,11 +378,24 @@ impl ApplicationServices {
         }
     }
 
+    /// Check the channel library against the exact set of guide page assignments.
+    /// Other installed producers keep their own range reservations.
+    pub async fn plan_teletext_custom_pages_with_layout(
+        &self,
+        channel_id: EntityId,
+        now: DateTime<Utc>,
+        guide_layout: Option<&str>,
+    ) -> Result<CustomPagesPlan, TeletextElementError> {
+        self.plan_teletext_custom_pages_in_selection(channel_id, now, None, guide_layout)
+            .await
+    }
+
     async fn plan_teletext_custom_pages_in_selection(
         &self,
         channel_id: EntityId,
         now: DateTime<Utc>,
         effective: Option<&ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+        guide_layout: Option<&str>,
     ) -> Result<CustomPagesPlan, TeletextElementError> {
         let links: Vec<_> = self
             .channel_teletext_elements(channel_id)
@@ -271,6 +403,44 @@ impl ApplicationServices {
             .into_iter()
             .filter(|link| link.enabled)
             .collect();
+        self.plan_links(channel_id, now, effective, links, guide_layout)
+            .await
+    }
+
+    /// Render a proposed set with the same field resolution as the channel producer.
+    /// Preview holds no membership or publication authority.
+    pub async fn preview_teletext_instances(
+        &self,
+        channel_id: EntityId,
+        proposed: &[ersatzrs_domain::TeletextAtlasElement],
+        guide_layout: Option<&str>,
+        now: DateTime<Utc>,
+    ) -> Result<CustomPagesPlan, TeletextElementError> {
+        let links = proposed
+            .iter()
+            .map(|p| ersatzrs_domain::ChannelTeletextElement {
+                id: 0,
+                channel_id,
+                element_id: p.element_id,
+                element_name: String::new(),
+                page_number: Some(p.page),
+                effective_page_number: p.page,
+                enabled: true,
+                instance: Some(p.instance.clone()),
+            })
+            .collect();
+        self.plan_links(channel_id, now, None, links, guide_layout)
+            .await
+    }
+
+    async fn plan_links(
+        &self,
+        channel_id: EntityId,
+        now: DateTime<Utc>,
+        effective: Option<&ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+        links: Vec<ersatzrs_domain::ChannelTeletextElement>,
+        guide_layout: Option<&str>,
+    ) -> Result<CustomPagesPlan, TeletextElementError> {
         if links.is_empty() {
             return Ok(CustomPagesPlan::default());
         }
@@ -278,9 +448,10 @@ impl ApplicationServices {
             .teletext_element_field_values(channel_id, now)
             .await?
             .ok_or(TeletextElementError::NotFound)?;
-        let ranges = self
+        let mut ranges = self
             .teletext_custom_page_ranges(channel_id, effective)
             .await;
+        apply_guide_reservations(&mut ranges, guide_layout)?;
         let mut uses: BTreeMap<u16, usize> = BTreeMap::new();
         for link in &links {
             *uses.entry(link.effective_page_number).or_default() += 1;
@@ -312,7 +483,7 @@ impl ApplicationServices {
                 }));
                 continue;
             }
-            let element = match self.get_teletext_element(link.element_id).await {
+            let mut element = match self.get_teletext_element(link.element_id).await {
                 Ok(Some(element)) => element,
                 Ok(None) | Err(TeletextElementError::Storage) => {
                     plan.issues.push(issue(CustomPageIssueKind::Unreadable));
@@ -320,10 +491,13 @@ impl ApplicationServices {
                 }
                 Err(error) => return Err(error),
             };
-            let Ok(page) = teletext_element_page(&element) else {
+            let Ok(mut page) = teletext_element_page(&element) else {
                 plan.issues.push(issue(CustomPageIssueKind::Unreadable));
                 continue;
             };
+            if let Some(options) = &link.instance {
+                apply_instance(&mut element, &mut page, options)?;
+            }
             if has_unset_field(&page, &element) {
                 plan.issues.push(issue(CustomPageIssueKind::UnsetField));
                 continue;
@@ -340,6 +514,7 @@ impl ApplicationServices {
             let count = filled.subpages.len();
             for (index, subpage) in filled.subpages.iter().enumerate() {
                 plan.pages.push(TeletextCustomPageWire {
+                    channel_links: fasttext_links(link.instance.as_ref()),
                     element_id: element.id,
                     element_revision: element.revision,
                     page: page_number,
@@ -366,6 +541,7 @@ impl ApplicationServices {
         input: &[u8],
         deadline: Instant,
         effective: Option<&ersatzrs_domain::TeletextEffectiveChannelSelectionSnapshot>,
+        guide_layout: Option<&str>,
     ) -> Result<TeletextProfileRuntimeReceipt, TeletextProfileRuntimeError> {
         if !is_teletext_custom_pages_producer(&selection.addon_id) {
             return Err(TeletextProfileRuntimeError::Unsupported);
@@ -383,6 +559,7 @@ impl ApplicationServices {
                 selection.channel_id,
                 request.captured_at,
                 effective,
+                guide_layout,
             )
             .await
             .map_err(|_| TeletextProfileRuntimeError::IoFailed)?;

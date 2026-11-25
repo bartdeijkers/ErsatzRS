@@ -982,6 +982,7 @@ mod tests {
             design_id: 8,
             revision: 3,
             owner: Some(owner(200, 0x10)),
+            hits: crate::admin::server_fns::teletext_atlas::AtlasHitMap::default(),
             image_url: Some("data:image/svg+xml;base64,PHN2Zy8+".to_owned()),
             effective: false,
             valid_until: None,

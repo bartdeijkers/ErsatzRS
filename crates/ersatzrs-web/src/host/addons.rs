@@ -650,7 +650,7 @@ impl AddonRuntime for NativeAddonRuntime {
     }
 }
 
-fn runtime_context() -> AddonRuntimeContext {
+pub(super) fn runtime_context() -> AddonRuntimeContext {
     AddonRuntimeContext {
         ffmpeg_path: Some(ersatzrs_ffmpeg::ffmpeg_path()),
         ffprobe_path: Some(ersatzrs_ffmpeg::ffprobe_path()),

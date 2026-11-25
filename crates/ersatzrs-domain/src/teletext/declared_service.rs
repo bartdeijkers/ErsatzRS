@@ -172,6 +172,11 @@ impl TeletextDeclaredDefaultReservation {
 /// Owned checked correspondence, without a mutable/public authoring capability.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TeletextDeclaredService {
+    subpage_cycles: Vec<crate::TeletextSubpageCycle>,
+    channel_links: Vec<(
+        crate::TeletextPageAddress,
+        Vec<crate::TeletextNavigationLink>,
+    )>,
     semantic: TeletextSemanticService,
     mots: Vec<TeletextMotLevel25Declaration>,
     selections: Vec<TeletextDisplayMotSelection>,
@@ -182,6 +187,89 @@ pub struct TeletextDeclaredService {
 }
 
 impl TeletextDeclaredService {
+    #[must_use]
+    pub fn channel_links(
+        &self,
+    ) -> &[(
+        crate::TeletextPageAddress,
+        Vec<crate::TeletextNavigationLink>,
+    )] {
+        &self.channel_links
+    }
+
+    /// Stage only owner-local links. Composition validates their channel destinations.
+    pub fn stage_channel_links(
+        &mut self,
+        owner: crate::TeletextPageAddress,
+        links: Vec<crate::TeletextNavigationLink>,
+    ) -> bool {
+        if links.len() > 4
+            || !self
+                .semantic
+                .base()
+                .pages
+                .iter()
+                .any(|p| p.address == owner)
+        {
+            return false;
+        }
+        self.channel_links.push((owner, links));
+        true
+    }
+
+    /// Resolve the source-owned links after channel composition.
+    /// # Errors
+    /// Rejects unknown destinations or structural limits.
+    pub fn resolve_channel_links(
+        &mut self,
+        links: Vec<(
+            crate::TeletextPageAddress,
+            Vec<crate::TeletextNavigationLink>,
+        )>,
+        budget: super::TeletextServiceBudget,
+    ) -> Result<(), super::TeletextServiceError> {
+        self.semantic.resolve_channel_links(links, budget)
+    }
+    /// Page timing declared by this producer, associated before composition.
+    #[must_use]
+    pub fn subpage_cycles(&self) -> &[crate::TeletextSubpageCycle] {
+        &self.subpage_cycles
+    }
+
+    /// Attach checked timing to the original owner's display pages.
+    /// # Errors
+    /// Rejects repeated and unknown logical pages.
+    pub fn with_subpage_cycles(
+        mut self,
+        mut cycles: Vec<crate::TeletextSubpageCycle>,
+    ) -> Result<Self, crate::TeletextSubpageCycleError> {
+        use crate::TeletextSubpageCycleError as Error;
+        if cycles.len() > self.semantic.base().pages.len() {
+            return Err(Error::Count);
+        }
+        cycles.sort_by_key(crate::TeletextSubpageCycle::page);
+        for (index, cycle) in cycles.iter().enumerate() {
+            if index > 0 && cycles[index - 1].page() == cycle.page() {
+                return Err(Error::Duplicate {
+                    page: cycle.page().get(),
+                });
+            }
+            if !self
+                .semantic
+                .base()
+                .pages
+                .iter()
+                .any(|p| p.address.page == cycle.page())
+            {
+                return Err(Error::MissingPage {
+                    page: cycle.page().get(),
+                });
+            }
+        }
+        self.subpage_cycles = cycles;
+        Ok(self)
+    }
+
     /// Authenticate the supplied resolved service against the actual declarations.
     /// No semantic input is cloned during validation. All raw counts and derived
     /// storage arithmetic are fenced before allocating indexes or outputs.
@@ -221,6 +309,8 @@ impl TeletextDeclaredService {
         }
         apply_fallbacks(&mut semantic, &resolutions)?;
         Ok(Self {
+            subpage_cycles: Vec::new(),
+            channel_links: Vec::new(),
             semantic,
             mots,
             selections,

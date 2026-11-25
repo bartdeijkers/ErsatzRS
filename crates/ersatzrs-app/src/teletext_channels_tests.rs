@@ -205,6 +205,7 @@ impl TeletextProfileRepository for Repository {
 
 fn context() -> SuppliedTeletextGuideContext<'static> {
     SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: GENERATION,
         locale: "nl",
         supported_locales: &["nl"],

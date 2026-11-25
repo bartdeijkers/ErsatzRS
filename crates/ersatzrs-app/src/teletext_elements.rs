@@ -353,6 +353,60 @@ impl ApplicationServices {
     /// A channel's custom pages, for the channel teletext page and page set.
     /// # Errors
     /// Storage failures.
+    pub async fn teletext_atlas_state(
+        &self,
+        channel: EntityId,
+    ) -> Result<Option<ersatzrs_domain::TeletextAtlasState>, TeletextElementError> {
+        self.teletext_element_store()?
+            .atlas_state(channel)
+            .await
+            .map_err(storage)
+    }
+
+    pub async fn register_teletext_atlas_candidate(
+        &self,
+        channel: EntityId,
+        revision: i64,
+        key: &str,
+        design: i64,
+        design_revision: i64,
+    ) -> Result<bool, TeletextElementError> {
+        self.teletext_element_store()?
+            .register_atlas_candidate(channel, revision, key, design, design_revision)
+            .await
+            .map_err(storage)
+    }
+
+    pub async fn finish_teletext_atlas_off(
+        &self,
+        channel: EntityId,
+        revision: i64,
+        generation: Option<i64>,
+        pending: Option<i64>,
+    ) -> Result<bool, TeletextElementError> {
+        self.teletext_element_store()?
+            .finish_atlas_off(channel, revision, generation, pending)
+            .await
+            .map_err(storage)
+    }
+
+    pub async fn save_teletext_atlas(
+        &self,
+        channel: EntityId,
+        expected: i64,
+        guide_pages: &str,
+        pages: &[ersatzrs_domain::TeletextAtlasElement],
+        binding: Option<&ersatzrs_core::repositories::ChannelTeletextBindingSave>,
+    ) -> Result<i64, TeletextElementError> {
+        if expected < 0 || pages.len() > 800 || guide_pages.len() > 16384 {
+            return Err(TeletextElementError::InvalidBindings);
+        }
+        self.teletext_element_store()?
+            .save_atlas(channel, expected, guide_pages, pages, binding)
+            .await
+            .map_err(storage)
+    }
+
     pub async fn channel_teletext_elements(
         &self,
         channel_id: EntityId,
@@ -375,6 +429,21 @@ impl ApplicationServices {
         page_number: Option<u16>,
         enabled: bool,
     ) -> Result<EntityId, TeletextElementError> {
+        self.save_channel_instance(channel_id, element_id, None, page_number, enabled)
+            .await
+    }
+
+    /// Save a specific channel instance or the default library link.
+    /// # Errors
+    /// Rejects stale link identities and occupied page numbers.
+    pub async fn save_channel_instance(
+        &self,
+        channel_id: EntityId,
+        element_id: EntityId,
+        link_id: Option<EntityId>,
+        page_number: Option<u16>,
+        enabled: bool,
+    ) -> Result<EntityId, TeletextElementError> {
         let store = self.teletext_element_store()?;
         if page_number.is_some_and(|page| !(0x100..=0x8ff).contains(&page)) {
             return Err(TeletextElementError::InvalidPageNumber);
@@ -389,11 +458,19 @@ impl ApplicationServices {
             .list_channel_elements(channel_id)
             .await
             .map_err(storage)?;
-        if existing
-            .iter()
-            .any(|link| link.element_id != element_id && link.effective_page_number == effective)
-        {
+        if existing.iter().any(|link| {
+            link_id.map_or(link.element_id != element_id, |id| link.id != id)
+                && link.effective_page_number == effective
+        }) {
             return Err(TeletextElementError::PageInUse);
+        }
+        if let Some(id) = link_id {
+            return store
+                .update_channel_instance(channel_id, id, element_id, page_number, enabled)
+                .await
+                .map_err(storage)?
+                .then_some(id)
+                .ok_or(TeletextElementError::NotFound);
         }
         store
             .save_channel_element(channel_id, element_id, page_number, enabled)

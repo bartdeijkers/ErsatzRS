@@ -61,6 +61,9 @@ pub struct TeletextPagesRequest {
     pub captured_at: DateTime<Utc>,
     pub window: TeletextGuideWindowWire,
     pub channels: Vec<TeletextGuideChannelWire>,
+    /// Optional producer-owned page assignments on v3 requests; absent for existing profiles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page_layout: Option<String>,
 }
 
 impl TeletextPagesRequest {
@@ -146,6 +149,11 @@ impl TeletextPagesRequest {
 
     fn validate_wire_bounds(&self, expected_schema: u32) -> Result<(), TeletextPagesRequestError> {
         validate_expected_schema(expected_schema)?;
+        if self.page_layout.as_ref().is_some_and(|layout| {
+            expected_schema != 3 || layout.is_empty() || layout.len() > 16 * 1024
+        }) {
+            return Err(TeletextPagesRequestError::InvalidJson);
+        }
         if self.schema_version != expected_schema {
             return Err(TeletextPagesRequestError::UnsupportedSchema);
         }

@@ -147,6 +147,7 @@ fn requests(
     contracts: impl IntoIterator<Item = TeletextPageContract>,
 ) -> TeletextChannelRequestTemplates {
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: GENERATION,
         locale: "nl",
         supported_locales: &["nl"],
@@ -645,6 +646,7 @@ fn effective_guide_fence_requests_and_lifecycle_survive_without_live_authority()
         programmes: &[],
     }];
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: GENERATION,
         locale: "nl",
         supported_locales: &["nl"],
@@ -752,6 +754,7 @@ fn effective_original_roundtrip_retains_host_source_beside_scripted_and_off_memb
         schema: ersatzrs_domain::TELETEXT_CUSTOM_PAGES_SCHEMA.to_owned(),
         generation: GENERATION.to_owned(),
         pages: vec![ersatzrs_domain::TeletextCustomPageWire {
+            channel_links: Vec::new(),
             element_id: 7,
             element_revision: 4,
             page: 150,

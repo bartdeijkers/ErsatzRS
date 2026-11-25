@@ -336,10 +336,13 @@ pub async fn save_channel_link(
             None => return Redirect::to(&with_query(&target, "error=custom-page-page-number")),
         },
     };
+    let Ok(link) = fields.get("link_id").map(|s| s.parse::<i64>()).transpose() else {
+        return Redirect::to(&with_query(&target, "error=custom-page-element"));
+    };
     let enabled = fields.get("enabled").is_none_or(|value| value != "0");
     match state
         .application
-        .save_channel_teletext_element(channel_id, element_id, page, enabled)
+        .save_channel_instance(channel_id, element_id, link, page, enabled)
         .await
     {
         Ok(_) => Redirect::to(&with_query(&target, "saved=custom-page")),

@@ -257,6 +257,7 @@ fn link_row(
             <form method="post" action=save class=custom_style::link_form>
                 <input type="hidden" name="return" value=return_path(channel_id)/>
                 <input type="hidden" name="element_id" value=link.element_id.to_string()/>
+                <input type="hidden" name="link_id" value=link.link_id.to_string()/>
                 <label>
                     <span>{tr(TextKey::TeletextElementChannelPage)}</span>
                     <input type="text" name="page_number" inputmode="numeric" pattern="[1-8][0-9]{2}"

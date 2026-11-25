@@ -67,6 +67,8 @@ pub fn shell(options: LeptosOptions, app_state: AppState) -> impl IntoView {
                 <script type="module" src="/public/channel-preview.js"></script>
                 <script type="module" src="/public/troubleshooting-preview.js"></script>
                 <script type="module" src="/public/pagination-auto-apply.js"></script>
+                <script type="module" src="/public/teletext-atlas.js"></script>
+                <script type="module" src="/public/teletext-guide-theme.js"></script>
                 {hydration_assets_available.then(|| {
                     view! { <AdminHydrationScripts options=options.clone()/> }
                 })}

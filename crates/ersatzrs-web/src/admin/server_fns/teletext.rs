@@ -43,6 +43,8 @@ pub struct TeletextCustomPagesData {
 /// One teletext element linked to this channel.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextCustomPageData {
+    #[serde(default)]
+    pub instance: Option<ersatzrs_domain::TeletextElementInstance>,
     pub link_id: i64,
     pub element_id: i64,
     pub name: String,
@@ -66,6 +68,14 @@ pub struct TeletextCustomPageData {
 /// A library element that can be linked to a channel.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextElementOptionData {
+    #[serde(default)]
+    pub cycle_seconds: u16,
+    #[serde(default)]
+    pub fields: Vec<String>,
+    #[serde(default)]
+    pub subpages: u16,
+    #[serde(default)]
+    pub revision: i64,
     pub id: i64,
     pub name: String,
     pub page: String,
@@ -327,6 +337,14 @@ pub async fn load_channel_teletext_for_application(
         };
     let current_guide_available = current_guide_available(application).await;
     let readiness = Some(readiness(application, &channel.form, channel_id).await);
+    let explicit_pages = addons.iter().any(|addon| {
+        addon.addon_id == GUIDE_ADDON
+            && addon
+                .settings
+                .iter()
+                .any(|setting| setting.definition.key == "PAGE_MAP")
+    });
+    let custom_pages = load_custom_pages(application, channel_id, explicit_pages).await?;
     Ok(Some(ChannelTeletextData {
         channel_id,
         channel_number: channel.form.number,
@@ -341,7 +359,7 @@ pub async fn load_channel_teletext_for_application(
         current_guide_available,
         addons,
         readiness,
-        custom_pages: Some(load_custom_pages(application, channel_id).await?),
+        custom_pages: Some(custom_pages),
     }))
 }
 
@@ -349,6 +367,7 @@ pub async fn load_channel_teletext_for_application(
 async fn load_custom_pages(
     application: &ersatzrs_app::ApplicationServices,
     channel_id: i64,
+    explicit_pages: bool,
 ) -> Result<TeletextCustomPagesData, ServerFnError> {
     use ersatzrs_domain::teletext_element_page_label;
     let links = application
@@ -359,13 +378,25 @@ async fn load_custom_pages(
         .list_teletext_elements()
         .await
         .map_err(|_| ServerFnError::new("unavailable"))?;
-    // The same plan the host producer runs at Check, so the page shows exactly
-    // what would block it. A failed plan shows no per-page reasons.
-    let issues =
-        Box::pin(application.plan_teletext_custom_pages(channel_id, ersatzrs_time::Utc::now()))
+    let guide_layout = if explicit_pages && links.iter().any(|link| link.enabled) {
+        application
+            .teletext_atlas_state(channel_id)
             .await
-            .map(|plan| plan.issues)
-            .unwrap_or_default();
+            .map_err(|_| ServerFnError::new("unavailable"))?
+            .map(|state| state.guide_pages)
+            .filter(|pages| !pages.is_empty())
+    } else {
+        None
+    };
+    // Diagnose the same assignments and reservations that channel save validates.
+    let issues = Box::pin(application.plan_teletext_custom_pages_with_layout(
+        channel_id,
+        ersatzrs_time::Utc::now(),
+        guide_layout.as_deref(),
+    ))
+    .await
+    .map(|plan| plan.issues)
+    .unwrap_or_default();
     let issue_for = |link_id: i64| {
         use ersatzrs_app::teletext_elements::broadcast::CustomPageIssueKind as K;
         issues
@@ -391,6 +422,7 @@ async fn load_custom_pages(
         links: links
             .iter()
             .map(|link| TeletextCustomPageData {
+                instance: link.instance.clone(),
                 link_id: link.id,
                 element_id: link.element_id,
                 name: link.element_name.clone(),
@@ -408,6 +440,10 @@ async fn load_custom_pages(
         library: library
             .iter()
             .map(|element| TeletextElementOptionData {
+                fields: element.fields.clone(),
+                cycle_seconds: element.cycle_seconds,
+                subpages: element.subpage_count,
+                revision: element.revision,
                 id: element.id,
                 name: element.name.clone(),
                 page: teletext_element_page_label(element.page_number),

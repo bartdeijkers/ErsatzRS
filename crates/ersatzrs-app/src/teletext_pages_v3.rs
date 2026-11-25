@@ -12,6 +12,8 @@ use crate::teletext_pages_v2::{checked_declared_service, TeletextAuthoredPagesEr
 #[derive(Debug, thiserror::Error)]
 pub enum TeletextAuthoredPagesV3Error {
     #[error(transparent)]
+    Cycle(#[from] d::TeletextSubpageCycleError),
+    #[error(transparent)]
     Contract(#[from] wire::TeletextPagesV3Error),
     #[error(transparent)]
     Authored(#[from] TeletextAuthoredPagesError),
@@ -40,9 +42,64 @@ pub fn parse_authored_service_with_metadata(
     TeletextAuthoredPagesV3Error,
 > {
     let input = wire::TeletextPagesV3Response::from_json(bytes, expected_generation)?;
-    let service = checked_declared_service(input.service, service_budget, declared_budget)?;
+    let mut service = checked_declared_service(input.service, service_budget, declared_budget)?;
     validate_panel_geometry(&service, &input.authoring)?;
-    Ok((service, input.authoring))
+    for page in input
+        .authoring
+        .pages
+        .iter()
+        .filter(|p| !p.channel_links.is_empty())
+    {
+        let owner = service
+            .semantic()
+            .base()
+            .pages
+            .iter()
+            .find(|p| {
+                p.address.page.get() == page.page.page
+                    && p.address.subcode.get() == page.page.subcode
+            })
+            .map(|p| p.address)
+            .ok_or(d::TeletextSubpageCycleError::MissingPage {
+                page: page.page.page,
+            })?;
+        let links = page
+            .channel_links
+            .iter()
+            .map(|(key, &number)| {
+                let role = match key.as_str() {
+                    "red" => d::TeletextNavigationRole::Red,
+                    "green" => d::TeletextNavigationRole::Green,
+                    "yellow" => d::TeletextNavigationRole::Yellow,
+                    _ => d::TeletextNavigationRole::Cyan,
+                };
+                Ok::<_, d::TeletextSubpageCycleError>(d::TeletextNavigationLink {
+                    role,
+                    target: d::TeletextNavigationTarget {
+                        page: d::TeletextPageNumber::new(number).map_err(|_| {
+                            d::TeletextSubpageCycleError::MissingPage { page: number }
+                        })?,
+                        subcode: None,
+                    },
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if !service.stage_channel_links(owner, links) {
+            return Err(d::TeletextSubpageCycleError::Count.into());
+        }
+    }
+    let cycles = input
+        .authoring
+        .pages
+        .iter()
+        .filter_map(|p| p.cycle_seconds.map(|seconds| (p.page.page, seconds)))
+        .map(|(page, seconds)| {
+            let owner = d::TeletextPageNumber::new(page)
+                .map_err(|_| d::TeletextSubpageCycleError::MissingPage { page })?;
+            d::TeletextSubpageCycle::new(owner, seconds)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((service.with_subpage_cycles(cycles)?, input.authoring))
 }
 
 fn validate_panel_geometry(

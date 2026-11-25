@@ -42,7 +42,7 @@ async function openFolded(form: Locator): Promise<void> {
   }
 }
 async function profileAndBinding(page: Page, fixture: TeletextChannelFixture, js: boolean): Promise<number> {
-  await page.goto(`/channels/${fixture.channels[1]}/teletext`); await ready(page, js);
+  await page.goto(`/channels/${fixture.channels[1]}/teletext?advanced=1`); await ready(page, js);
   const form = page.locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id=""]`);
   await openFolded(form);
   await form.locator('[name="name"]').fill('Synthetic health profile');

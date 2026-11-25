@@ -66,6 +66,8 @@ pub enum AcceptedTeletextIntentLoadError {
     /// Existing original-compilation or selected-generation storage failure.
     #[error(transparent)]
     Generation(#[from] NativeTeletextGenerationError),
+    #[error("channel teletext setting unavailable")]
+    ChannelSetting,
     /// Invalid explicit intent bound.
     #[error(transparent)]
     Configuration(#[from] TeletextPumpError),
@@ -94,6 +96,16 @@ pub async fn load_accepted_teletext_output_intent(
     }
     if budget.max_serialized_bytes == 0 {
         return Err(TeletextPumpError::Configuration.into());
+    }
+    if !timeout_at(
+        owner_deadline,
+        application.ports().channels().teletext_enabled(channel_id),
+    )
+    .await
+    .map_err(|_| AcceptedTeletextIntentLoadError::TimedOut)?
+    .map_err(|_| AcceptedTeletextIntentLoadError::ChannelSetting)?
+    {
+        return Ok(None);
     }
     let recovered = timeout_at(
         owner_deadline,
@@ -152,6 +164,19 @@ impl TeletextAcceptedOutputIntent {
     }
 
     async fn current(&self, application: &ApplicationServices, deadline: Instant) -> bool {
+        if !matches!(
+            timeout_at(
+                deadline,
+                application
+                    .ports()
+                    .channels()
+                    .teletext_enabled(self.candidate.selection().channel_id)
+            )
+            .await,
+            Ok(Ok(true))
+        ) {
+            return false;
+        }
         let confirmed = timeout_at(
             deadline,
             application.confirm_current_teletext_generation(

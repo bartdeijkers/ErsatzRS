@@ -10,6 +10,7 @@ fn documents(seconds: Option<u16>, foreign_page: u16) -> Vec<TeletextProfileDocu
         pages: [1, 2]
             .into_iter()
             .map(|subcode| TeletextCustomPageWire {
+                channel_links: Vec::new(),
                 element_id: 7,
                 element_revision: 3,
                 page: 150,

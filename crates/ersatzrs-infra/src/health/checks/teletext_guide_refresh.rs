@@ -72,6 +72,7 @@ impl TeletextGuideRefreshHealthCheck {
                 THEN json_extract(CAST(COALESCE(r."Source",s."Source") AS TEXT),'$.captured_at') END AS "CapturedAt"
             FROM "TeletextGuideRefreshCurrent" c LEFT JOIN "TeletextGuideRefreshSeed" s ON s."Id"=c."SeedId"
             LEFT JOIN "TeletextGuideRuntimeSnapshot" r ON r."Id"=c."RuntimeId" AND r."SeedId"=c."SeedId"
+            WHERE NOT EXISTS (SELECT 1 FROM "Channel" ch WHERE ch."Id"=c."ChannelId" AND ch."TeletextEnabled"=0)
             ORDER BY c."SeedId" LIMIT 257"#)
             .bind(i64::try_from(MAX_TELETEXT_GUIDE_SOURCE_TEXT_BYTES).unwrap_or(i64::MAX))
             .fetch_all(&self.pool).await.map_err(super::super::sqlx_error)?;
@@ -110,7 +111,7 @@ impl TeletextGuideRefreshHealthCheck {
         sqlx::query_scalar(r#"SELECT COUNT(*) FROM "TeletextAcceptedGenerationCurrent" selected
             JOIN "TeletextAcceptedGeneration" g ON g."Id"=selected."GenerationId" AND g."ChannelId"=selected."ChannelId"
             JOIN "Channel" channel ON channel."Id"=selected."ChannelId"
-            WHERE g."ArtifactVersion"=5
+            WHERE g."ArtifactVersion"=5 AND channel."TeletextEnabled"=1
             AND EXISTS (SELECT 1 FROM "ChannelTeletextBinding" b WHERE b."ChannelId"=selected."ChannelId" AND b."Enabled"=1)
             AND NOT EXISTS (SELECT 1 FROM "PlayoutTeletextInterval" i JOIN "Playout" p ON p."Id"=i."PlayoutId"
                 WHERE p."ChannelId"=selected."ChannelId" AND i."Start"<=? AND i."Finish">?)

@@ -133,6 +133,93 @@ pub(super) async fn prepare_base(
     Ok(candidate)
 }
 
+pub(super) async fn preview_base(
+    application: &ApplicationServices,
+    pool: &DbPool,
+    input: &NativeTeletextAuthoringInput,
+    selected: &TeletextChannelSelectionSnapshot,
+    operation: &Operation,
+    elements: &[ersatzrs_domain::TeletextAtlasElement],
+) -> Result<EncodedChannelTeletextDocumentCandidate, TeletextAuthoringError> {
+    let plan = super::before(
+        operation.deadline,
+        application.preview_teletext_instances(
+            input.channel_id(),
+            elements,
+            input.page_layout.as_deref(),
+            Utc::now(),
+        ),
+    )
+    .await?
+    .map_err(|_| failure(TeletextAuthoringStatus::CustomPagesBlocked))?;
+    if !plan.is_ready() {
+        return Err(failure(TeletextAuthoringStatus::CustomPagesBlocked));
+    }
+    let wire = (!plan.pages.is_empty()).then(|| ersatzrs_domain::TeletextCustomPagesWire {
+        schema: ersatzrs_domain::TELETEXT_CUSTOM_PAGES_SCHEMA.into(),
+        generation: "preview".into(),
+        pages: plan.pages,
+    });
+    let mut selected = selected.clone();
+    selected
+        .bindings
+        .retain(|b| !ersatzrs_domain::is_teletext_custom_pages_producer(&b.addon_id));
+    if wire.is_some() {
+        selected
+            .bindings
+            .push(ersatzrs_domain::teletext_custom_pages_selection(
+                input.channel_id(),
+            ));
+        selected
+            .bindings
+            .sort_by(|a, b| a.addon_id.cmp(&b.addon_id));
+    }
+    let mut context = GuidePreparationContext::from_operation(operation);
+    context.custom_page_source = TeletextCustomPageSource::Published(wire.as_ref());
+    let (candidate, _) = Box::pin(prepare_base_inner(
+        application,
+        pool,
+        input,
+        &selected,
+        &context,
+    ))
+    .await?;
+    Ok(candidate)
+}
+
+/// Produce the same V3 document before the channel has an enabled binding.
+/// The bounded invocation returns only a draft. Its configuration cannot be published.
+pub(super) async fn preview_unbound_guide(
+    pool: &DbPool,
+    input: &NativeTeletextAuthoringInput,
+    operation: &Operation,
+) -> Result<(Vec<u8>, String), TeletextAuthoringError> {
+    let context = GuidePreparationContext::from_operation(operation);
+    let (captured, mut read) = capture(pool, input, &context).await?;
+    let channels = captured.borrow_channels();
+    let locales = super::super::teletext_guide::supported_locales();
+    let generation = uuid::Uuid::new_v4().to_string();
+    let mut source = captured.context(&generation, &channels, &locales);
+    source.page_layout = input.page_layout.as_deref();
+    let request = ersatzrs_app::teletext_guide::build_request_for_schema(&source, 3)
+        .map_err(|_| failure(TeletextAuthoringStatus::InvalidInput))?;
+    let bytes = ersatzrs_infra::addons::teletext_invocation::preview_atlas_guide(
+        pool.clone(),
+        input.channel_id(),
+        crate::host::addons::runtime_context(),
+        request,
+        operation.deadline,
+        context.hold,
+    )
+    .await
+    .map_err(|_| failure(TeletextAuthoringStatus::ProducerFailed))?;
+    captured
+        .recheck_context(&mut read)
+        .await
+        .map_err(capture_error)?;
+    Ok((bytes, generation))
+}
+
 pub(super) async fn prepare_base_current(
     application: &ApplicationServices,
     pool: &DbPool,
@@ -185,7 +272,8 @@ async fn prepare_base_inner(
     let channels = captured.borrow_channels();
     let locales = super::super::teletext_guide::supported_locales();
     let generation = uuid::Uuid::new_v4().to_string();
-    let context = captured.context(&generation, &channels, &locales);
+    let mut context = captured.context(&generation, &channels, &locales);
+    context.page_layout = input.page_layout.as_deref();
     let policy = operation
         .policy
         .encoding_policy(input)
@@ -288,7 +376,8 @@ async fn prepare_effective_inner(
     let channels = captured.borrow_channels();
     let locales = super::super::teletext_guide::supported_locales();
     let generation = uuid::Uuid::new_v4().to_string();
-    let context = captured.context(&generation, &channels, &locales);
+    let mut context = captured.context(&generation, &channels, &locales);
+    context.page_layout = input.page_layout.as_deref();
     let policy = operation
         .policy
         .encoding_policy(input)

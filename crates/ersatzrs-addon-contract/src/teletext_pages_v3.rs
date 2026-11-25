@@ -143,6 +143,11 @@ authoring_object! {
     pub struct TeletextAuthoringPageWire {
         #[serde(deserialize_with = "crate::teletext_pages_v2::deserialize_object")]
         pub page: TeletextPageAddressWire,
+        /// Display dwell time, carried once on subpage zero of a logical page.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cycle_seconds: Option<u16>,
+        #[serde(default,skip_serializing_if="std::collections::BTreeMap::is_empty")]
+        pub channel_links: std::collections::BTreeMap<String,u16>,
         pub regions: Vec<TeletextAuthoringRegionWire>,
         pub dynamic_fields: Vec<TeletextAuthoringDynamicFieldWire>,
     }
@@ -306,6 +311,18 @@ impl TeletextAuthoringMetadataWire {
         for (page_index, page) in self.pages.iter().enumerate() {
             let position = Some(page_index);
             let address = (page.page.page, page.page.subcode);
+            if page.channel_links.iter().any(|(key, value)| {
+                !["red", "green", "yellow", "blue"].contains(&key.as_str())
+                    || !(100..=899).contains(value)
+            }) {
+                return Err(rejection(K::PageCoverage, position, None));
+            }
+            if page
+                .cycle_seconds
+                .is_some_and(|seconds| page.page.subcode != 0 || !(1..=600).contains(&seconds))
+            {
+                return Err(rejection(K::PageCoverage, position, None));
+            }
             if !original_addresses.contains(&address) || !addresses.insert(address) {
                 return Err(rejection(K::PageCoverage, position, None));
             }

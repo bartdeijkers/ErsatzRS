@@ -486,6 +486,7 @@ fn stored_original(effective: bool) -> Vec<u8> {
     if effective {
         let request = ersatzrs_app::teletext_guide::build_request_for_schema(
             &ersatzrs_app::teletext_guide::SuppliedTeletextGuideContext {
+                page_layout: None,
                 generation: "saved-operand-replay",
                 locale: "en",
                 supported_locales: &["en"],

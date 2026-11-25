@@ -130,6 +130,8 @@ pub struct TeletextCustomPageWire {
     /// current mutable element or link.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dynamic_fields: Vec<TeletextElementBinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub channel_links: Vec<crate::TeletextNavigationLink>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,6 +197,7 @@ pub struct TeletextCustomPagesDocument {
     overlays: Vec<TeletextPhysicalBaseOverlay>,
     origins: Vec<TeletextCustomPageOrigin>,
     cycles: Vec<TeletextSubpageCycle>,
+    channel_links: Vec<(TeletextPageAddress, Vec<crate::TeletextNavigationLink>)>,
 }
 
 /// Which element revision produced one page; recorded with the publication.
@@ -234,13 +237,20 @@ impl TeletextCustomPagesDocument {
         let mut cycles = std::collections::BTreeMap::new();
         let mut pages = Vec::with_capacity(wire.pages.len());
         let mut overlays = Vec::with_capacity(wire.pages.len());
+        let mut channel_links = Vec::new();
         let mut origins = Vec::with_capacity(wire.pages.len());
-        for page in wire.pages {
+        for mut page in wire.pages {
             let invalid = TeletextCustomPagesError::Address { page: page.page };
             let address = TeletextPageAddress {
                 page: TeletextPageNumber::new(page.page).map_err(|_| invalid)?,
                 subcode: TeletextSubcode::new(page.subcode).map_err(|_| invalid)?,
             };
+            if !page.channel_links.is_empty() {
+                if page.channel_links.len() > 4 {
+                    return Err(invalid);
+                }
+                channel_links.push((address, std::mem::take(&mut page.channel_links)));
+            }
             let national_option =
                 TeletextNationalOption::new(page.national_option).map_err(|_| invalid)?;
             if page.element_id <= 0 || page.element_revision <= 0 {
@@ -311,6 +321,7 @@ impl TeletextCustomPagesDocument {
             },
             overlays,
             origins,
+            channel_links,
             cycles: cycles.into_values().flatten().collect(),
         })
     }
@@ -331,6 +342,11 @@ impl TeletextCustomPagesDocument {
     }
 
     /// Published timing per logical page, absent for older frozen originals.
+    #[must_use]
+    pub fn channel_links(&self) -> &[(TeletextPageAddress, Vec<crate::TeletextNavigationLink>)] {
+        &self.channel_links
+    }
+
     #[must_use]
     pub fn subpage_cycles(&self) -> &[TeletextSubpageCycle] {
         &self.cycles
@@ -438,6 +454,7 @@ mod tests {
         cells[0] = 0x01; // alpha red
         cells[1..6].copy_from_slice(b"Hello");
         TeletextCustomPageWire {
+            channel_links: Vec::new(),
             element_id: 7,
             element_revision: 3,
             page: number,

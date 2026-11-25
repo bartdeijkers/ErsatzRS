@@ -43,6 +43,10 @@ pub fn build_app(app_state: AppState) -> Router {
             move || provide_context(app_state_for_leptos.clone()),
             move || shell(leptos_options_clone.clone(), app_state_for_shell.clone()),
         )
+        .route(
+            "/channels/",
+            get(|| async { axum::response::Redirect::permanent("/channels") }),
+        )
         .route_layer(middleware::from_fn(super::health_document::normalize))
         .with_state(leptos_options);
 
@@ -203,6 +207,18 @@ pub fn build_app(app_state: AppState) -> Router {
                 post(api::teletext::save_profile).layer(DefaultBodyLimit::max(
                     api::teletext::MAX_TELETEXT_FORM_BYTES,
                 )),
+            )
+            .route(
+                "/admin-api/teletext/atlas/theme",
+                post(api::teletext::atlas::save_theme).layer(DefaultBodyLimit::max(4096)),
+            )
+            .route(
+                "/admin-api/teletext/atlas/save",
+                post(api::teletext::atlas::save).layer(DefaultBodyLimit::max(96 * 1024)),
+            )
+            .route(
+                "/admin-api/teletext/atlas/picture",
+                post(api::teletext::atlas::picture).layer(DefaultBodyLimit::max(96 * 1024)),
             )
             .route(
                 "/admin-api/teletext/guide/setup",

@@ -160,6 +160,7 @@ async fn request_preflight_precedes_even_an_unavailable_database_or_filesystem()
         let mut fence = ResolutionFence::new(Instant::now() + Duration::from_secs(30));
         fence.hook = Some(blocker.hook());
         let invocation = Invocation {
+            draft: None,
             pool: pool.clone(),
             addon_id: "org.example.teletext-fixture".to_owned(),
             runtime: AddonRuntimeContext::default(),
@@ -285,6 +286,7 @@ mod unix {
 
         fn invocation(&self, cancellation: Option<oneshot::Receiver<()>>) -> Invocation {
             Invocation {
+                draft: None,
                 pool: self.pool.clone(),
                 addon_id: self.manifest.id.clone(),
                 runtime: AddonRuntimeContext::default(),

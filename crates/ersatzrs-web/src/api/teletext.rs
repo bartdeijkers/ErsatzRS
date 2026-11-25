@@ -21,6 +21,7 @@ use crate::{admin::server_fns::teletext::TeletextInstallationData, host::state::
 
 /// Includes URL-encoding overhead for the existing bounded complete override bag.
 pub const MAX_TELETEXT_FORM_BYTES: usize = 512 * 1024;
+pub(crate) mod atlas;
 mod guide;
 pub use guide::setup_guide;
 

@@ -777,6 +777,7 @@ async fn effective_custom_source_is_host_typed_and_retains_exact_association() {
         schema: ersatzrs_domain::TELETEXT_CUSTOM_PAGES_SCHEMA.to_owned(),
         generation: fixtures::context().generation.to_owned(),
         pages: vec![ersatzrs_domain::TeletextCustomPageWire {
+            channel_links: Vec::new(),
             element_id: 1,
             element_revision: 3,
             page: 150,
@@ -903,6 +904,7 @@ fn published_custom_wire() -> ersatzrs_domain::TeletextCustomPagesWire {
         schema: ersatzrs_domain::TELETEXT_CUSTOM_PAGES_SCHEMA.to_owned(),
         generation: fixtures::context().generation.to_owned(),
         pages: vec![ersatzrs_domain::TeletextCustomPageWire {
+            channel_links: Vec::new(),
             element_id: 1,
             element_revision: 3,
             page: 150,

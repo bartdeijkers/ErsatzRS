@@ -60,7 +60,7 @@ async function profile(page: Page, fixture: TeletextChannelFixture, theme: strin
   expect(saved).toBeDefined(); return saved!.Id;
 }
 async function baseOff(page: Page, fixture: TeletextChannelFixture, channel: number, id: number, js: boolean): Promise<void> {
-  await page.goto(`/channels/${channel}/teletext`); await ready(page, js);
+  await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, js);
   const addon = page.locator(`[data-addon-id="${fixture.addonId}"]`);
   const form = addon.getByTestId('teletext-binding-form');
   const revision = fixture.profiles().find(row => row.Id === id)!.Revision;
@@ -805,7 +805,7 @@ for (const js of [true, false]) for (const dark of [false, true]) {
     }
     try {
       await language(pages[0], 'en-us', dark);
-      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], js);
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(pages[0], js);
       const day = await profile(pages[0], fixture, 'day', js);
       const night = await profile(pages[0], fixture, 'night', js);
       for (const [index, id] of [[0, day], [1, night]] as const) {
@@ -816,7 +816,7 @@ for (const js of [true, false]) for (const dark of [false, true]) {
       const safe = safety(fixture);
       const urls: string[] = [];
       for (const [index, theme] of [[0, 'day'], [1, 'night']] as const) {
-        await pages[index].goto(`/channels/${fixture.channels[index]}/teletext`); await ready(pages[index], js);
+        await pages[index].goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(pages[index], js);
         urls.push(await prepare(pages[index], fixture, theme, js));
         await assertPreview(pages[index], theme);
       }
@@ -874,7 +874,7 @@ for (const js of [true, false]) for (const dark of [false, true]) {
         expect(safety(fixture)).toEqual(safe);
       }
       await resetScript(schedulingPage, fixture, fixture.channels[0], null, capturePrefix ? 8 : 4);
-      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], js);
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(pages[0], js);
       await expect(pages[0].getByTestId('teletext-effective-authoring')).toHaveAttribute('data-state', 'absent');
       const absentUrl = await prepare(pages[0], fixture, 'absent', js, true);
       expect(new URL(absentUrl).searchParams.get('absence')).toBe('1');

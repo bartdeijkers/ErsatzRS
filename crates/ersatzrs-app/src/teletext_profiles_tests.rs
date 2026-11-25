@@ -144,6 +144,7 @@ impl TeletextProfileRepository for Repository {
 
 fn context<'a>(channels: &'a [TeletextGuideChannel<'a>]) -> SuppliedTeletextGuideContext<'a> {
     SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: GENERATION,
         locale: "nl",
         supported_locales: &["nl", "en-us"],

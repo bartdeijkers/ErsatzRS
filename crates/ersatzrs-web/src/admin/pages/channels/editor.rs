@@ -111,6 +111,7 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
     let mirror_source_channel_id = RwSignal::new(initial_form.mirror_source_channel_id);
     let playout_offset_hours = RwSignal::new(initial_form.playout_offset_hours);
     let is_enabled = RwSignal::new(initial_form.is_enabled);
+    let teletext_enabled = RwSignal::new(initial_form.teletext_enabled.unwrap_or(false));
     let show_in_epg = RwSignal::new(initial_form.show_in_epg);
     let streaming_engine = RwSignal::new(initial_form.streaming_engine);
     let next_engine_text_subtitle_mode = RwSignal::new(initial_form.next_engine_text_subtitle_mode);
@@ -219,12 +220,6 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                 <a href="/channels" class=style::back_link>{tr(TextKey::Channels)}</a>
                 <h1 class=style::page_title inner_html=page_title></h1>
             </div>
-            {(channel_id > 0).then(|| view! {
-                <a href=format!("/channels/{channel_id}/teletext") data-testid="channel-teletext-link">
-                    {tr(TextKey::TeletextChannelTitle)}
-                </a>
-            })}
-
             <form method="post" action="/admin-api/channels/save-multipart" enctype="multipart/form-data">
                 <input type="hidden" name="id" value=channel_id.to_string()/>
                 <input type="hidden" name="logo_path" value=logo_path.get_untracked()/>
@@ -236,6 +231,12 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                     </p>
 
                     {text_field(tr(TextKey::Number), "number", number, "")}
+                    <div class=style::checkboxes>
+                        {checkbox_field(tr(TextKey::IsEnabled), "is_enabled", is_enabled)}
+                        <input type="hidden" name="teletext_control_present" value="true"/>
+                        {checkbox_field(tr(TextKey::TeletextEnabled), "teletext_enabled", teletext_enabled)}
+                        {checkbox_field(tr(TextKey::ShowInEpg), "show_in_epg", show_in_epg)}
+                    </div>
                     {text_field(tr(TextKey::Name), "name", name, "")}
                     {text_field(tr(TextKey::Group), "group", group, "")}
                     {text_field(
@@ -311,11 +312,6 @@ fn channel_editor_form(initial_data: ChannelEditorData, form_error: String) -> i
                         <span class=style::helper>{tr(TextKey::MirrorOptionsHelp)}</span>
                     </div>
                     <script inner_html=playout_source_dependency_script()></script>
-
-                    <div class=style::checkboxes>
-                        {checkbox_field(tr(TextKey::IsEnabled), "is_enabled", is_enabled)}
-                        {checkbox_field(tr(TextKey::ShowInEpg), "show_in_epg", show_in_epg)}
-                    </div>
 
                     {select_i32_field(
                         tr(TextKey::StreamingEngine),

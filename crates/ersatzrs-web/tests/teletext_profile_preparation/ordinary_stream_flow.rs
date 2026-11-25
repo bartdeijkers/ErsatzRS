@@ -383,6 +383,68 @@ async fn export_capture(channel: i64, bytes: &[u8]) {
     file.sync_all().await.unwrap();
 }
 
+#[tokio::test]
+#[ignore = "requires FFmpeg 9 and an ordinary loopback TCP stream"]
+async fn channel_teletext_switch_withdraws_and_restores_the_same_live_edition() {
+    use super::editorial_imports::live_updates::live_tcp;
+    let tools = Tools::load().await;
+    let (fixture, _) = installed_profiles_with(&tools, themed_pages, 60).await;
+    let edition = accept(&fixture, 1).await;
+    let mut policy: Value = serde_json::from_str(POLICY).unwrap();
+    policy["version"] = json!(2);
+    policy["live_updates"] = json!({"poll_interval_ms": 50, "recovery_timeout_ms": 2000});
+    setting(&fixture, POLICY_KEY, &policy.to_string()).await;
+    reset_source_start(&fixture).await;
+    let mut origin = live_tcp::Origin::start(&fixture, fixture.root.path())
+        .await
+        .unwrap();
+    let mut viewer = live_tcp::Observer::start_for(&origin, 1, "day");
+    let wire = &origin.captures()[0];
+    wire.service_encoded(0, edition.service()).await;
+    for enabled in [false, true] {
+        let start = wire.position();
+        sqlx::query(r#"UPDATE "Channel" SET "TeletextEnabled"=? WHERE "Id"=1"#)
+            .bind(enabled)
+            .execute(&fixture.state.pool)
+            .await
+            .unwrap();
+        if enabled {
+            wire.service_encoded(start, edition.service()).await;
+        } else {
+            wire.off(start).await;
+            wire.off(wire.position()).await;
+        }
+    }
+    assert_eq!(origin.requests_seen(), [true, false, false]);
+    assert_eq!(reload(&fixture, 1).await.generation(), edition.generation());
+    viewer.close().await.unwrap();
+    origin.close().await.unwrap();
+    live_tcp::wait_for_cleanup().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires FFmpeg 9 and TSDuck"]
+async fn channel_teletext_switch_applies_to_static_output_when_tuning() {
+    let tools = Tools::load().await;
+    let (fixture, source) = installed_profiles(&tools).await;
+    let edition = accept(&fixture, 1).await;
+    setting(&fixture, POLICY_KEY, POLICY).await;
+    for enabled in [false, true] {
+        sqlx::query(r#"UPDATE "Channel" SET "TeletextEnabled"=? WHERE "Id"=1"#)
+            .bind(enabled)
+            .execute(&fixture.state.pool)
+            .await
+            .unwrap();
+        reset_source_start(&fixture).await;
+        let bytes = capture(&fixture, 1).await;
+        if enabled {
+            verify_authored(&tools, &source, &bytes, edition.service()).await;
+        } else {
+            verify_plain(&tools, &source, &bytes).await;
+        }
+    }
+}
+
 /// Validate captures made through the real served host and native admin flow.
 /// The independent expected fixture supplies the same redistributable model;
 /// this test does not generate or replace the supplied HTTP capture bytes.

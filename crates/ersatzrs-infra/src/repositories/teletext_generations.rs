@@ -355,6 +355,39 @@ async fn insert_generation_seeded(
     let id = crate::db::last_insert_id(result);
     sqlx::query(r#"INSERT INTO "TeletextAcceptedGenerationCurrent" ("ChannelId","GenerationId") VALUES (?,?) ON CONFLICT("ChannelId") DO UPDATE SET "GenerationId"=excluded."GenerationId""#)
         .bind(save.request.channel_id).bind(id).execute(&mut *transaction).await.repository()?;
+    // Atlas binds the selected generation and its idempotence key in this same
+    // transaction. Concurrent edits roll back both the pointer and history insert.
+    let atlas: Option<(i64, String)> = sqlx::query_as(
+        r#"SELECT "AtlasRevision","PublicationKey"
+        FROM "TeletextAtlasCandidate" WHERE "ChannelId"=? AND "DesignId"=? AND "DesignRevision"=?"#,
+    )
+    .bind(save.request.channel_id)
+    .bind(save.request.design_id)
+    .bind(save.request.revision)
+    .fetch_optional(&mut *transaction)
+    .await
+    .repository()?;
+    if let Some((revision, key)) = atlas {
+        let changed = sqlx::query(
+            r#"UPDATE "ChannelTeletextAtlas" SET "PublicationKey"=?,"Generation"=?
+            WHERE "ChannelId"=? AND "Revision"=?"#,
+        )
+        .bind(key)
+        .bind(id)
+        .bind(save.request.channel_id)
+        .bind(revision)
+        .execute(&mut *transaction)
+        .await
+        .repository()?;
+        if changed.rows_affected() != 1 {
+            return Ok(M::Rejected(R::Publication(P::SelectionChanged)));
+        }
+    }
+    if !super::teletext_elements::apply_atlas_binding(&mut transaction, save.request.channel_id)
+        .await?
+    {
+        return Ok(M::Rejected(R::Publication(P::SelectionChanged)));
+    }
     let generation = TeletextAcceptedGeneration {
         id,
         request: save.request.clone(),

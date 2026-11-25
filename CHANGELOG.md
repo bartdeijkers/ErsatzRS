@@ -24,6 +24,19 @@ release section when tagging a release.
   jsonschema 0.62, nix 0.32, gloo-net 0.8, win32job 2.1 and pest 2.9.6.
   Programme times and time-zone handling are unchanged.
 
+### Added
+
+- Channel teletext has a page index, receiver preview and source assignments.
+  The 4:3 preview opens index and colour links, reveals concealed text in place,
+  and shows guide changes before the first publication. Duplicate numbers stay
+  marked until corrected. Page numbers and row actions align in columns, and
+  the receiver groups navigation, digits and colour keys. The broadcast index
+  includes library pages. Enable teletext in channel settings to open its editor
+  from the Channels list and carry the published pages in the broadcast.
+  Turning it off preserves the pages for later use.
+  Operators can edit subpages, colours and timing, then validate and publish
+  the channel with one save. Shared TV guide styling is available in Teletext elements.
+
 ### Fixed
 
 - Scanning a Remote Stream whose add-on is missing, disabled or incompatible

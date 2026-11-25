@@ -30,6 +30,7 @@ use super::{
     AddonError, AddonRuntimeContext, ResolvedAddonCommand,
 };
 use crate::db::DbPool;
+use crate::repositories::{AtlasGuideSettings, SqliteTeletextProfileRepository};
 
 const EXECUTION_TIMEOUT: Duration = Duration::from_secs(30);
 const RESOLUTION_SETTLEMENT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -152,6 +153,7 @@ async fn invoke_effective_with_host_membership(
     let fence = effective_fence(&selection, deadline)?;
     let receipt = invoke_with_fence(
         Invocation {
+            draft: None,
             pool,
             addon_id: addon_id.clone(),
             runtime,
@@ -258,6 +260,7 @@ pub async fn invoke(
     let fence = ResolutionFence::new(Instant::now() + EXECUTION_TIMEOUT);
     invoke_with_fence(
         Invocation {
+            draft: None,
             pool,
             addon_id,
             runtime,
@@ -370,6 +373,7 @@ async fn invoke_profile_before_owned(
         ResolutionFence::new(Instant::from_std(deadline).min(Instant::now() + EXECUTION_TIMEOUT));
     let receipt = invoke_with_fence(
         Invocation {
+            draft: None,
             pool,
             addon_id: selection.addon_id.clone(),
             runtime,
@@ -393,7 +397,50 @@ async fn invoke_profile_before_owned(
     })
 }
 
+/// Render the installed TV guide with the channel's prospective settings.
+/// No binding or publication receipt is created.
+/// # Errors
+/// Fails if settings change, the package fails admission, or the work deadline expires.
+pub async fn preview_atlas_guide(
+    pool: DbPool,
+    channel: i64,
+    runtime: AddonRuntimeContext,
+    input: Vec<u8>,
+    deadline: std::time::Instant,
+    hold: TeletextWorkHold,
+) -> Result<Vec<u8>, TeletextInvocationError> {
+    let until = Instant::from_std(deadline).min(Instant::now() + EXECUTION_TIMEOUT);
+    let settings = tokio::time::timeout_at(
+        until,
+        SqliteTeletextProfileRepository(pool.clone()).atlas_guide_settings(channel),
+    )
+    .await
+    .map_err(|_| TeletextInvocationError::TimedOut)?
+    .map_err(|_| TeletextInvocationError::AdmissionRejected)?
+    .ok_or(TeletextInvocationError::AdmissionRejected)?;
+    let invocation = Invocation {
+        pool,
+        addon_id: settings.installation.addon_id.clone(),
+        runtime,
+        input,
+        draft: Some(settings),
+        cancellation: None,
+        selection: None,
+        effective_selection: None,
+        effective_host_membership: EffectiveHostMembership::Current,
+        hold: Some(hold),
+    };
+    Ok(invoke_with_fence(
+        invocation,
+        ResolutionFence::new(until),
+        RESOLUTION_SETTLEMENT_TIMEOUT,
+    )
+    .await?
+    .stdout)
+}
+
 struct Invocation {
+    draft: Option<AtlasGuideSettings>,
     pool: DbPool,
     addon_id: String,
     runtime: AddonRuntimeContext,
@@ -420,14 +467,18 @@ async fn invoke_with_fence(
     if invocation.input.len() > MAX_TELETEXT_PAGES_INPUT_BYTES {
         return Err(TeletextInvocationError::InvalidRequest);
     }
-    let contract = match (&invocation.selection, &invocation.effective_selection) {
-        (Some(_), Some(_)) => return Err(TeletextInvocationError::AdmissionRejected),
-        (_, Some(selection)) => effective_binding(selection, &invocation.addon_id)
-            .and_then(binding_contract)
-            .map_err(|_| TeletextInvocationError::AdmissionRejected)?,
-        (selection, None) => selection
-            .as_ref()
-            .map_or(TeletextPageContract::V1, |s| s.contract),
+    let contract = if invocation.draft.is_some() {
+        TeletextPageContract::V3
+    } else {
+        match (&invocation.selection, &invocation.effective_selection) {
+            (Some(_), Some(_)) => return Err(TeletextInvocationError::AdmissionRejected),
+            (_, Some(selection)) => effective_binding(selection, &invocation.addon_id)
+                .and_then(binding_contract)
+                .map_err(|_| TeletextInvocationError::AdmissionRejected)?,
+            (selection, None) => selection
+                .as_ref()
+                .map_or(TeletextPageContract::V1, |s| s.contract),
+        }
     };
     let generation =
         TeletextPagesRequest::from_json_for_schema(&invocation.input, contract.schema_version())
@@ -547,15 +598,27 @@ async fn invoke_owned(
     if fence.check().is_err() {
         return Err(TeletextInvocationError::TimedOut);
     }
-    let resolution = resolve_invocation_for_launch(
-        &invocation.pool,
-        &invocation.addon_id,
-        &invocation.runtime,
-        invocation.selection.as_ref(),
-        invocation.effective_selection.as_deref(),
-        invocation.effective_host_membership,
-        &fence,
-    );
+    let resolution = async {
+        if let Some(draft) = invocation.draft.as_ref() {
+            return resolve_selected_for_launch(
+                &invocation.pool,
+                ProfileAuthority::Atlas(draft),
+                &invocation.runtime,
+                &fence,
+            )
+            .await;
+        }
+        resolve_invocation_for_launch(
+            &invocation.pool,
+            &invocation.addon_id,
+            &invocation.runtime,
+            invocation.selection.as_ref(),
+            invocation.effective_selection.as_deref(),
+            invocation.effective_host_membership,
+            &fence,
+        )
+        .await
+    };
     tokio::pin!(resolution);
     let selected = tokio::select! {
         biased;
@@ -738,6 +801,7 @@ fn binding_contract(
 }
 
 enum ProfileAuthority<'a> {
+    Atlas(&'a AtlasGuideSettings),
     Base(&'a TeletextSelectionSnapshot),
     Effective {
         selection: &'a TeletextEffectiveChannelSelectionSnapshot,
@@ -756,6 +820,18 @@ struct ProfileData<'a> {
 impl ProfileAuthority<'_> {
     async fn check(&self, pool: &DbPool, fence: &ResolutionFence) -> Result<(), AddonError> {
         match self {
+            Self::Atlas(expected) => {
+                fence.check()?;
+                let current = SqliteTeletextProfileRepository(pool.clone())
+                    .atlas_guide_settings(expected.channel)
+                    .await
+                    .map_err(|_| AddonError::Database("guide settings unavailable".into()))?;
+                fence.check()?;
+                if current.as_ref() != Some(*expected) {
+                    return Err(AddonError::Validation("guide settings changed".into()));
+                }
+                Ok(())
+            }
             Self::Base(selection) => check_selection(pool, selection, fence).await,
             Self::Effective {
                 selection,
@@ -800,6 +876,12 @@ impl ProfileAuthority<'_> {
 
     fn data(&self) -> Result<ProfileData<'_>, AddonError> {
         match self {
+            Self::Atlas(draft) => Ok(ProfileData {
+                addon_id: &draft.installation.addon_id,
+                contract: TeletextPageContract::V3,
+                installation: &draft.installation,
+                settings: &draft.settings,
+            }),
             Self::Base(base) => Ok(ProfileData {
                 addon_id: &base.addon_id,
                 contract: base.contract,

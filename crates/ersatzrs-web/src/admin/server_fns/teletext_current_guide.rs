@@ -8,10 +8,14 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextCurrentGuidePreviewData {
+    #[serde(default)]
+    pub hits: crate::admin::server_fns::teletext_atlas::AtlasHitMap,
     pub channel_id: i64,
     pub generation: TeletextOutputGenerationObservation,
     pub owner: TeletextPageAddress,
     pub image_url: String,
+    #[serde(default)]
+    pub cycle_seconds: Option<u16>,
     pub pages: Vec<TeletextPageAddress>,
     pub navigation: Vec<TeletextNavigationLink>,
     pub diagnostics: Vec<super::TeletextDraftDiagnosticData>,
@@ -22,15 +26,26 @@ pub async fn load_current_teletext_guide_preview(
     channel_id: i64,
     owner: TeletextPageAddress,
 ) -> Result<TeletextCurrentGuidePreviewData, ServerFnError> {
+    load_atlas_guide_preview(channel_id, Some(owner), false).await
+}
+
+#[server(prefix = "/admin-api")]
+pub async fn load_atlas_guide_preview(
+    channel_id: i64,
+    owner: Option<TeletextPageAddress>,
+    reveal: bool,
+) -> Result<TeletextCurrentGuidePreviewData, ServerFnError> {
     let state = expect_context::<crate::host::state::AppState>();
     state
-        .preview_current_guide(channel_id, owner, move |preview| {
+        .preview_current_guide(channel_id, owner, reveal, move |preview| {
             Ok(TeletextCurrentGuidePreviewData {
                 channel_id,
                 generation: preview.generation.clone(),
                 owner: preview.raster.owner(),
+                hits: preview.hits.clone(),
                 image_url: super::raster_image(&preview.raster)?,
                 pages: preview.pages.clone(),
+                cycle_seconds: preview.cycle_seconds,
                 navigation: preview.navigation.clone(),
                 diagnostics: super::raster_diagnostics(Some(&preview.raster)),
             })

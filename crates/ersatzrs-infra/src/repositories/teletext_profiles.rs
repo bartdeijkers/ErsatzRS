@@ -27,6 +27,56 @@ use crate::{
 #[derive(Clone)]
 pub struct SqliteTeletextProfileRepository(pub DbPool);
 
+/// Configuration for an unpublished Atlas guide preview. It has no binding or publication identity.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct AtlasGuideSettings {
+    pub channel: EntityId,
+    pub installation: TeletextInstallationSnapshot,
+    pub settings: Vec<TeletextProfileSetting>,
+}
+
+impl SqliteTeletextProfileRepository {
+    pub(crate) async fn atlas_guide_settings(
+        &self,
+        channel: EntityId,
+    ) -> Result<Option<AtlasGuideSettings>> {
+        const GUIDE: &str = "org.ersatzrs.addon.tvguide-teletext";
+        // Read-only transaction: the binding, profile and installation belong to one preview.
+        let mut tx = self.0.begin().await.repository()?;
+        if !channel_exists(&mut tx, channel).await? {
+            return Ok(None);
+        }
+        if let Some(binding) = load_binding(&mut tx, channel, GUIDE).await? {
+            if let M::Saved(valid) = validated_profile(&mut tx, GUIDE, binding.profile_id).await? {
+                return Ok(
+                    (valid.contract == ersatzrs_domain::TeletextPageContract::V3).then_some(
+                        AtlasGuideSettings {
+                            channel,
+                            installation: valid.profile.validated_installation,
+                            settings: valid.effective_settings,
+                        },
+                    ),
+                );
+            }
+        }
+        let config = configuration_with_settings(&mut tx, GUIDE, Some(&[])).await?;
+        if config.installation.availability != A::Configured
+            || config.contract != Some(ersatzrs_domain::TeletextPageContract::V3)
+        {
+            return Ok(None);
+        }
+        Ok(config
+            .installation
+            .snapshot
+            .zip(config.effective_settings)
+            .map(|(installation, settings)| AtlasGuideSettings {
+                channel,
+                installation,
+                settings,
+            }))
+    }
+}
+
 /// Recheck a complete effective origin in the caller's existing transaction.
 pub(super) async fn recheck_effective_in_transaction(
     tx: &mut Transaction<'_, Db>,
@@ -118,12 +168,35 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         if !channel_exists(&mut tx, channel_id).await? {
             return Ok(M::Rejected(R::MissingChannel));
         }
-        let Some(binding) = load_binding(&mut tx, channel_id, addon_id).await? else {
-            return Ok(M::Rejected(R::MissingBinding));
+        let current = load_binding(&mut tx, channel_id, addon_id).await?;
+        let binding = if let Some(binding) = current
+            .as_ref()
+            .filter(|b| b.revision == expected_binding_revision)
+        {
+            binding.clone()
+        } else {
+            // A checked channel save grants a prospective invocation. Existing
+            // outputs keep using their committed binding revision during preparation.
+            let row = sqlx::query(
+                r#"SELECT * FROM "TeletextAtlasBindingDraft"
+                WHERE "ChannelId"=? AND "AddonId"=? AND "Revision"=? AND "ExpectedRevision"=?"#,
+            )
+            .bind(channel_id)
+            .bind(addon_id)
+            .bind(expected_binding_revision)
+            .bind(current.as_ref().map_or(0, |b| b.revision))
+            .fetch_optional(&mut *tx)
+            .await
+            .repository()?;
+            let Some(row) = row else {
+                return Ok(M::Rejected(if current.is_some() {
+                    R::Conflict
+                } else {
+                    R::MissingBinding
+                }));
+            };
+            binding_from_row(&row)?
         };
-        if binding.revision != expected_binding_revision {
-            return Ok(M::Rejected(R::Conflict));
-        }
         selection_for_binding(&mut tx, &binding).await
     }
 
@@ -282,50 +355,9 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
         save: &ChannelTeletextBindingSave,
     ) -> Result<M<ChannelTeletextBinding>> {
         let mut tx = crate::db::begin_write(&self.0).await.repository()?;
-        if !channel_exists(&mut tx, save.channel_id).await? {
-            return Ok(M::Rejected(R::MissingChannel));
-        }
-        if let Some(rejection) =
-            installation_rejection(&mut tx, &save.addon_id, &save.expected_installation).await?
-        {
-            return Ok(M::Rejected(rejection));
-        }
-        if let Some(rejection) = profile_rejection(
-            &mut tx,
-            &save.addon_id,
-            save.profile_id,
-            save.expected_profile_revision,
-        )
-        .await?
-        {
-            return Ok(M::Rejected(rejection));
-        }
-        let profile = load_profile(&mut tx, save.profile_id)
-            .await?
-            .ok_or_else(|| decode_error("selected profile missing"))?;
-        if profile_availability(&mut tx, &profile).await? != A::Configured {
-            return Ok(M::Rejected(R::InvalidSettings));
-        }
-        let current = load_binding(&mut tx, save.channel_id, &save.addon_id).await?;
-        if current.as_ref().map(|binding| binding.revision) != save.expected_binding_revision {
-            return Ok(M::Rejected(R::Conflict));
-        }
-        if current
-            .as_ref()
-            .is_some_and(|binding| binding.revision == i64::MAX)
-        {
-            return Ok(M::Rejected(R::RevisionLimit));
-        }
-        sqlx::query(r#"INSERT INTO "ChannelTeletextBinding" ("ChannelId", "AddonId", "ProfileId", "Enabled", "Revision")
-            VALUES (?, ?, ?, ?, 1) ON CONFLICT("ChannelId", "AddonId") DO UPDATE
-            SET "ProfileId" = excluded."ProfileId", "Enabled" = excluded."Enabled", "Revision" = "Revision" + 1"#)
-            .bind(save.channel_id).bind(&save.addon_id).bind(save.profile_id).bind(save.enabled)
-            .execute(&mut *tx).await.repository()?;
-        let binding = load_binding(&mut tx, save.channel_id, &save.addon_id)
-            .await?
-            .ok_or_else(|| decode_error("saved binding missing"))?;
+        let result = save_binding_in_transaction(&mut tx, save).await?;
         tx.commit().await.repository()?;
-        Ok(M::Saved(binding))
+        Ok(result)
     }
 
     async fn disable_binding(
@@ -401,11 +433,60 @@ impl TeletextProfileRepository for SqliteTeletextProfileRepository {
 // One canonical snapshot policy for preparation and publication-request CAS.
 // The caller owns the transaction; publication uses BEGIN IMMEDIATE so no
 // writer can change membership, profiles or installed settings before commit.
+pub(super) async fn save_binding_in_transaction(
+    tx: &mut Transaction<'_, Db>,
+    save: &ChannelTeletextBindingSave,
+) -> Result<M<ChannelTeletextBinding>> {
+    if !channel_exists(tx, save.channel_id).await? {
+        return Ok(M::Rejected(R::MissingChannel));
+    }
+    if let Some(rejection) =
+        installation_rejection(tx, &save.addon_id, &save.expected_installation).await?
+    {
+        return Ok(M::Rejected(rejection));
+    }
+    if let Some(rejection) = profile_rejection(
+        tx,
+        &save.addon_id,
+        save.profile_id,
+        save.expected_profile_revision,
+    )
+    .await?
+    {
+        return Ok(M::Rejected(rejection));
+    }
+    let profile = load_profile(tx, save.profile_id)
+        .await?
+        .ok_or_else(|| decode_error("selected profile missing"))?;
+    if profile_availability(tx, &profile).await? != A::Configured {
+        return Ok(M::Rejected(R::InvalidSettings));
+    }
+    let current = load_binding(tx, save.channel_id, &save.addon_id).await?;
+    if current.as_ref().map(|binding| binding.revision) != save.expected_binding_revision {
+        return Ok(M::Rejected(R::Conflict));
+    }
+    if current
+        .as_ref()
+        .is_some_and(|binding| binding.revision == i64::MAX)
+    {
+        return Ok(M::Rejected(R::RevisionLimit));
+    }
+    sqlx::query(r#"INSERT INTO "ChannelTeletextBinding" ("ChannelId", "AddonId", "ProfileId", "Enabled", "Revision")
+            VALUES (?, ?, ?, ?, 1) ON CONFLICT("ChannelId", "AddonId") DO UPDATE
+            SET "ProfileId" = excluded."ProfileId", "Enabled" = excluded."Enabled", "Revision" = "Revision" + 1"#)
+            .bind(save.channel_id).bind(&save.addon_id).bind(save.profile_id).bind(save.enabled)
+            .execute(&mut **tx).await.repository()?;
+    let binding = load_binding(tx, save.channel_id, &save.addon_id)
+        .await?
+        .ok_or_else(|| decode_error("saved binding missing"))?;
+    Ok(M::Saved(binding))
+}
+
 pub(super) async fn channel_snapshot_in_transaction(
     tx: &mut Transaction<'_, Db>,
     channel_id: EntityId,
 ) -> Result<M<TeletextChannelSelectionSnapshot>> {
-    let mut snapshot = match channel_published_dependencies_in_transaction(tx, channel_id).await? {
+    let mut snapshot = match base_dependencies(tx, channel_id, true).await? {
         M::Saved(snapshot) => snapshot,
         M::Rejected(reason) => return Ok(M::Rejected(reason)),
     };
@@ -446,6 +527,14 @@ pub(super) async fn channel_published_dependencies_in_transaction(
     tx: &mut Transaction<'_, Db>,
     channel_id: EntityId,
 ) -> Result<M<TeletextChannelSelectionSnapshot>> {
+    base_dependencies(tx, channel_id, false).await
+}
+
+async fn base_dependencies(
+    tx: &mut Transaction<'_, Db>,
+    channel_id: EntityId,
+    working: bool,
+) -> Result<M<TeletextChannelSelectionSnapshot>> {
     if !channel_exists(tx, channel_id).await? {
         return Ok(M::Rejected(R::MissingChannel));
     }
@@ -453,10 +542,16 @@ pub(super) async fn channel_published_dependencies_in_transaction(
     // producer must contribute at least one page to the eventual union.
     let limit = i64::try_from(MAX_TELETEXT_PAGE_RECORDS + 1)
         .map_err(|_| decode_error("binding resource limit"))?;
-    let rows = sqlx::query(
-        r#"SELECT * FROM "ChannelTeletextBinding" WHERE "ChannelId" = ?
-            AND "Enabled" = 1 ORDER BY "AddonId" LIMIT ?"#,
-    )
+    let rows = sqlx::query(r#"WITH draft AS (
+        SELECT d.* FROM "TeletextAtlasBindingDraft" d LEFT JOIN "ChannelTeletextBinding" b
+          ON b."ChannelId"=d."ChannelId" AND b."AddonId"=d."AddonId"
+        WHERE ? AND d."ChannelId"=? AND COALESCE(b."Revision",0)=d."ExpectedRevision")
+        SELECT "ChannelId","AddonId","ProfileId","Enabled","Revision" FROM "ChannelTeletextBinding"
+        WHERE "ChannelId"=? AND "Enabled"=1 AND "AddonId" NOT IN (SELECT "AddonId" FROM draft)
+        UNION ALL SELECT "ChannelId","AddonId","ProfileId","Enabled","Revision" FROM draft WHERE "Enabled"=1
+        ORDER BY "AddonId" LIMIT ?"#)
+    .bind(working)
+    .bind(channel_id)
     .bind(channel_id)
     .bind(limit)
     .fetch_all(&mut **tx)

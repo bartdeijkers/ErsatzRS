@@ -276,7 +276,13 @@ async fn snapshot_migration_leaves_existing_external_playouts_in_direct_mode() {
     .run(&pool)
     .await
     .unwrap();
-    seed(&pool, Path::new("legacy.json")).await;
+    common::seed_legacy_channel(&pool).await;
+    pool.execute(
+        r#"INSERT INTO "Playout" ("Id","ChannelId","ScheduleKind","ScheduleFile","Seed")
+           VALUES (1,1,20,'legacy.json',1)"#,
+    )
+    .await
+    .unwrap();
     migrations.run(&pool).await.unwrap();
     assert!(snapshot::accepted(&pool, 1).await.unwrap().is_none());
     assert_eq!(

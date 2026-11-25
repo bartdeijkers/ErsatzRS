@@ -8,6 +8,7 @@ fn page(number: u16, subcode: u16, source: TeletextElementBindingSource) -> Tele
     cells[..5].copy_from_slice(b"OLD!!");
     cells[20..25].copy_from_slice(b"FIXED");
     TeletextCustomPageWire {
+        channel_links: Vec::new(),
         element_id: 1,
         element_revision: 7,
         page: number,

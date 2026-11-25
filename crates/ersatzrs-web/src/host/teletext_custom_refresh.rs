@@ -423,7 +423,20 @@ fn render(
     let correlation = document.generation.clone();
     let document =
         TeletextCustomPagesDocument::from_wire(document, &correlation).map_err(|_| RefreshError)?;
-    if document.subpage_cycles() != root.subpage_cycles() {
+    // The sealed service can also contain cycles belonging to a guide producer.
+    let owners: std::collections::BTreeSet<_> = document
+        .draft()
+        .pages
+        .iter()
+        .map(|p| p.address.page)
+        .collect();
+    let original: Vec<_> = root
+        .subpage_cycles()
+        .iter()
+        .copied()
+        .filter(|cycle| owners.contains(&cycle.page()))
+        .collect();
+    if document.subpage_cycles() != original {
         return Err(RefreshError);
     }
     let (_, replacements) = document.into_parts();

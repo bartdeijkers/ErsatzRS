@@ -74,6 +74,10 @@ pub struct ChannelSaveForm {
     #[serde(default)]
     is_enabled: bool,
     #[serde(default)]
+    teletext_enabled: Option<bool>,
+    #[serde(default)]
+    teletext_control_present: Option<bool>,
+    #[serde(default)]
     show_in_epg: bool,
     #[serde(default)]
     fallback_filler_id: i64,
@@ -360,6 +364,12 @@ impl ChannelSaveForm {
             streaming_mode: parse_i32(fields, "streaming_mode"),
             watermark_id: parse_i64(fields, "watermark_id"),
             is_enabled: parse_bool(fields, "is_enabled"),
+            teletext_control_present: fields
+                .get("teletext_control_present")
+                .map(|_| parse_bool(fields, "teletext_control_present")),
+            teletext_enabled: fields
+                .get("teletext_enabled")
+                .map(|_| parse_bool(fields, "teletext_enabled")),
             show_in_epg: parse_bool(fields, "show_in_epg"),
             fallback_filler_id: parse_i64(fields, "fallback_filler_id"),
             preferred_subtitle_language_code: text(fields, "preferred_subtitle_language_code"),
@@ -412,6 +422,10 @@ impl ChannelSaveForm {
             streaming_mode: self.streaming_mode,
             watermark_id: self.watermark_id,
             is_enabled: self.is_enabled,
+            teletext_enabled: self.teletext_enabled.or(self
+                .teletext_control_present
+                .unwrap_or_default()
+                .then_some(false)),
             show_in_epg: self.show_in_epg,
             fallback_filler_id: self.fallback_filler_id,
             preferred_subtitle_language_code: self.preferred_subtitle_language_code,
@@ -498,6 +512,32 @@ mod tests {
     use std::fmt::Write as _;
 
     use super::*;
+
+    #[test]
+    fn channel_teletext_checkbox_distinguishes_omission_from_unchecking() {
+        let base = "id=7&number=101&name=Atlas&ffmpeg_profile_id=3&streaming_mode=1";
+        for (fields, expected) in [
+            ("", None),
+            ("&teletext_control_present=false", None),
+            ("&teletext_control_present=true", Some(false)),
+            (
+                "&teletext_control_present=true&teletext_enabled=true",
+                Some(true),
+            ),
+            ("&teletext_enabled=false", Some(false)),
+        ] {
+            let encoded = format!("{base}{fields}");
+            let form: ChannelSaveForm = serde_urlencoded::from_str(&encoded).unwrap();
+            assert_eq!(form.into_channel_form().teletext_enabled, expected);
+            let fields = serde_urlencoded::from_str(&encoded).unwrap();
+            assert_eq!(
+                ChannelSaveForm::from_fields(&fields)
+                    .into_channel_form()
+                    .teletext_enabled,
+                expected
+            );
+        }
+    }
 
     #[test]
     fn source_teletext_delivery_html_and_multipart_preserve_omission_and_invalid_input() {

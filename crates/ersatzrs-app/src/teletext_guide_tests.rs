@@ -44,6 +44,7 @@ fn channel(programmes: &[ProgrammeOccurrence]) -> TeletextGuideChannel<'_> {
 
 fn context<'a>(channels: &'a [TeletextGuideChannel<'a>]) -> SuppliedTeletextGuideContext<'a> {
     SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: "generation-1",
         locale: "nl",
         supported_locales: &["nl", "en-us"],

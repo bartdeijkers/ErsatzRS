@@ -767,6 +767,15 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
     // join any editorial rows as one physical overlay set; an editorial row
     // on a custom page is rejected by the composition as a repeated owner.
     let mut physical_rows = std::mem::take(&mut editorial.programs.0);
+    let channel_links = documents
+        .iter()
+        .flat_map(|d| match d {
+            TeletextProfileDocument::CustomPages(p) => p.channel_links(),
+            TeletextProfileDocument::Authored(p) => p.channel_links(),
+            TeletextProfileDocument::Base(_) => &[],
+        })
+        .cloned()
+        .collect::<Vec<_>>();
     let subpage_cycles = custom_subpage_cycles(&documents, policy.composition.service.max_records)?;
     for document in &documents {
         if let TeletextProfileDocument::CustomPages(custom) = document {
@@ -790,7 +799,12 @@ pub(super) fn encode_original_producer_documents_with_editorial_resources(
             .with_physical_base_overlays(physical_rows, policy.composition)
             .map_err(|error| ChannelTeletextDocumentEncodingError::Composition(Box::new(error)))?;
     }
-    let (producers, provenance, metadata, declared) = composition.into_parts();
+    let (producers, provenance, metadata, mut declared) = composition.into_parts();
+    if !channel_links.is_empty() {
+        declared
+            .resolve_channel_links(channel_links, policy.composition.service)
+            .map_err(|_| ChannelTeletextDocumentEncodingError::Association)?;
+    }
     let declared =
         apply_editorial_operands(declared, &editorial, &object_resources, policy.composition)?;
     check_deadline(deadline)?;
@@ -838,11 +852,14 @@ fn custom_subpage_cycles(
     documents: &[TeletextProfileDocument],
     maximum: usize,
 ) -> Result<Vec<ersatzrs_domain::TeletextSubpageCycle>, ChannelTeletextDocumentEncodingError> {
-    if !documents.iter().any(|document| {
-        matches!(document,
-            TeletextProfileDocument::CustomPages(custom) if !custom.subpage_cycles().is_empty()
-        )
-    }) {
+    fn cycles(document: &TeletextProfileDocument) -> &[ersatzrs_domain::TeletextSubpageCycle] {
+        match document {
+            TeletextProfileDocument::Authored(service) => service.subpage_cycles(),
+            TeletextProfileDocument::CustomPages(custom) => custom.subpage_cycles(),
+            TeletextProfileDocument::Base(_) => &[],
+        }
+    }
+    if documents.iter().all(|document| cycles(document).is_empty()) {
         return Ok(Vec::new());
     }
     let mut records = 0_usize;
@@ -852,12 +869,9 @@ fn custom_subpage_cycles(
             .filter(|count| *count <= maximum)
             .ok_or(ChannelTeletextDocumentEncodingError::Association)?;
     }
-    let mut cycles = Vec::new();
+    let mut result = Vec::new();
     for (owner, document) in documents.iter().enumerate() {
-        let TeletextProfileDocument::CustomPages(custom) = document else {
-            continue;
-        };
-        for cycle in custom.subpage_cycles() {
+        for cycle in cycles(document) {
             if documents.iter().enumerate().any(|(index, other)| {
                 index != owner
                     && other
@@ -868,10 +882,10 @@ fn custom_subpage_cycles(
             }) {
                 return Err(ChannelTeletextDocumentEncodingError::Association);
             }
-            cycles.push(*cycle);
+            result.push(*cycle);
         }
     }
-    Ok(cycles)
+    Ok(result)
 }
 
 fn check_original_editorial_input(
