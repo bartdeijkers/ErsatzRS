@@ -343,12 +343,12 @@ impl ProgrammeClock {
         &self,
         now: DateTime<Utc>,
     ) -> Result<(DateTime<Utc>, DateTime<Utc>), jiff::Error> {
-        let zoned = Timestamp::new(now.timestamp(), 0)?.to_zoned(self.0.clone());
+        let zoned = Timestamp::new(now.timestamp(), 0)?.to_zoned_datetime(self.0.clone());
         let start = zoned.start_of_day()?.timestamp();
         let finish = zoned
             .date()
             .tomorrow()?
-            .to_zoned(self.0.clone())?
+            .to_zoned_datetime(self.0.clone())?
             .timestamp();
         Ok((start.into(), finish.into()))
     }
@@ -381,12 +381,13 @@ impl ProgrammeClock {
             ))
         })?;
         // This constructor checks Jiff's seconds range before construction.
-        let zoned = Timestamp::new(captured_at.timestamp(), nanoseconds)?.to_zoned(self.0.clone());
+        let zoned =
+            Timestamp::new(captured_at.timestamp(), nanoseconds)?.to_zoned_datetime(self.0.clone());
         let start = zoned.start_of_day()?.timestamp();
         let finish = zoned
             .date()
             .checked_add(Span::new().days(days.get()))?
-            .to_zoned(self.0.clone())?
+            .to_zoned_datetime(self.0.clone())?
             .start_of_day()?
             .timestamp();
         if finish <= start {
@@ -403,7 +404,7 @@ impl ProgrammeClock {
     /// Returns an error outside Jiff's supported range.
     pub fn local_time(&self, now: DateTime<Utc>) -> Result<String, jiff::Error> {
         Ok(Timestamp::new(now.timestamp(), 0)?
-            .to_zoned(self.0.clone())
+            .to_zoned_datetime(self.0.clone())
             .strftime("%Y-%m-%dT%H:%M:%S%:z")
             .to_string())
     }

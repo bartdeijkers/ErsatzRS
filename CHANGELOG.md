@@ -13,6 +13,17 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Security
+
+- Update bundled SQLite through sqlx 0.9.1 and `libsqlite3-sys` 0.40,
+  resolving RUSTSEC-2026-0459. `cargo deny` no longer ignores that advisory.
+
+### Changed
+
+- Update dependencies, including Jiff 1.0 (`Zoned` is now `ZonedDateTime`),
+  jsonschema 0.62, nix 0.32, gloo-net 0.8, win32job 2.1 and pest 2.9.6.
+  Programme times and time-zone handling are unchanged.
+
 ### Fixed
 
 - Scanning a Remote Stream whose add-on is missing, disabled or incompatible
