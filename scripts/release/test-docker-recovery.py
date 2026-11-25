@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline regressions for the actual Docker-recovery workflow's CI guard."""
+"""Offline regressions for the release recovery workflows' CI guards."""
 
 from contextlib import redirect_stdout
 import io
@@ -16,6 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = (ROOT / ".github/workflows/release-docker-recovery.yml").read_text()
 GUARD = textwrap.dedent(re.search(
     r"          python3 - <<'PY'\n(.*?)\n          PY", WORKFLOW, re.S
+).group(1))
+WINDOWS_WORKFLOW = (ROOT / ".github/workflows/release-windows-recovery.yml").read_text()
+WINDOWS_GUARD = textwrap.dedent(re.search(
+    r"          @'\n(.*?)\n          '@ \| Set-Content", WINDOWS_WORKFLOW, re.S
 ).group(1))
 CI_WORKFLOW = (ROOT / ".github/workflows/ci.yml").read_text()
 SOURCE = "a" * 40
@@ -36,7 +40,7 @@ def passed_jobs(names):
             for name in sorted(names)]
 
 
-class DockerRecoveryGuard(unittest.TestCase):
+class ReleaseRecoveryGuard(unittest.TestCase):
     def setUp(self):
         self.release = {"isDraft": True, "isPrerelease": False}
         self.asset_run = {"head_sha": SOURCE, "head_branch": TAG,
@@ -48,17 +52,33 @@ class DockerRecoveryGuard(unittest.TestCase):
         self.ci_jobs.append({"name": "Commit lint", "status": "completed",
                              "conclusion": "skipped"})
 
-    def run_guard(self, ci_workflow=CI_WORKFLOW):
+    def run_guard(self, ci_workflow=CI_WORKFLOW, *, windows=False):
         def check_output(command, **kwargs):
+            if windows and command == ["git", "rev-parse", "HEAD"]:
+                return SOURCE + "\n"
             self.assertEqual(command[0], "gh")
             self.assertTrue(kwargs.get("text"))
             args = command[1:]
             if args[:2] == ["release", "view"]:
                 response = self.release
+            elif args == ["api", f"repos/example/ersatzrs/git/ref/tags/{TAG}"]:
+                response = {"object": {"type": "commit", "sha": SOURCE}}
             elif args == ["api", ENDPOINT]:
                 response = self.asset_run
             elif args == ["api", ENDPOINT + "/jobs?per_page=100"]:
-                response = {"jobs": self.asset_jobs}
+                jobs = self.asset_jobs
+                if windows:
+                    jobs = [*jobs, {
+                        "id": 789,
+                        "name": "Release archive (win-x64)",
+                        "status": "completed",
+                        "conclusion": "failure",
+                        "steps": [*passed_jobs({"Build (cargo)", "Test Windows startup registration"}), {
+                            "name": "Run actions/setup-python@v7",
+                            "conclusion": "failure",
+                        }],
+                    }]
+                response = {"jobs": jobs}
             elif args[:2] == ["run", "list"]:
                 self.assertEqual(args[args.index("--commit") + 1], SOURCE)
                 response = self.ci_runs
@@ -70,15 +90,43 @@ class DockerRecoveryGuard(unittest.TestCase):
 
         output = io.StringIO()
         with patch.dict(os.environ, {"TAG": TAG, "SOURCE_SHA": SOURCE,
-                                     "ASSETS_RUN": "123", "GITHUB_REPOSITORY": "example/ersatzrs"}), \
+                                     "ASSETS_RUN": "123", "GITHUB_REPOSITORY": "example/ersatzrs",
+                                     "GITHUB_SHA": "b" * 40}), \
                 patch("subprocess.check_output", side_effect=check_output), \
                 patch.object(Path, "read_text", return_value=ci_workflow), redirect_stdout(output):
-            exec(compile(GUARD, "release-docker-recovery.yml:guard", "exec"), {})
+            guard = WINDOWS_GUARD if windows else GUARD
+            exec(compile(guard, "release recovery CI guard", "exec"), {})
         return output.getvalue()
 
     def test_current_full_push_accepts_thirteen_jobs_without_optional_enhanced(self):
         self.assertEqual(len(REQUIRED), 13)
         self.assertIn("Accepted source CI: 456", self.run_guard())
+
+    def test_recovery_accepts_verified_artifacts_from_exact_source_full_ci(self):
+        jobs = REQUIRED - {"Build CI artifacts"}
+        verified = {"Verify reused CI artifacts", "CI ok"}
+        self.ci_runs[0]["event"] = "workflow_dispatch"
+        for windows in (False, True):
+            with self.subTest(windows=windows):
+                self.ci_jobs = passed_jobs(jobs | verified | {"Commit lint"})
+                self.assertIn("456", self.run_guard(windows=windows))
+                self.ci_runs[0]["headSha"] = "b" * 40
+                with self.assertRaisesRegex(SystemExit, "No complete successful source CI"):
+                    self.run_guard(windows=windows)
+                self.ci_runs[0]["headSha"] = SOURCE
+
+    def test_reuse_does_not_accept_partial_coverage_or_unverified_artifacts(self):
+        jobs = REQUIRED - {"Build CI artifacts"} | {"Verify reused CI artifacts", "Commit lint", "CI ok"}
+        self.ci_runs[0]["event"] = "workflow_dispatch"
+        for windows in (False, True):
+            for missing in ("Verify reused CI artifacts", "CI ok", "Playwright E2E (1.5, firefox)"):
+                for conclusion in ("skipped", "failure"):
+                    with self.subTest(windows=windows, job=missing, conclusion=conclusion):
+                        self.ci_jobs = passed_jobs(jobs - {missing}) + [
+                            {"name": missing, "status": "completed", "conclusion": conclusion}
+                        ]
+                        with self.assertRaisesRegex(SystemExit, "No complete successful source CI"):
+                            self.run_guard(windows=windows)
 
     def test_each_required_job_remains_mandatory(self):
         for missing in sorted(REQUIRED):

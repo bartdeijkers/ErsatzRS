@@ -78,14 +78,14 @@ jobs:
           from pathlib import Path
           ci_workflow = Path('.github/workflows/ci.yml').read_text()
           optional_enhanced = 'experimental2.5 requires teletext_only=2.5/all.' in ci_workflow
+          artifact_required = 'Build CI artifacts' in ci_workflow
+          reuse_supported = 'Verify reused CI artifacts' in ci_workflow
           if 'name: Preflight' in ci_workflow:
               required.add('Preflight')
           if 'teletext_only:' in ci_workflow:
               required -= {'Playwright E2E (chromium)', 'Playwright E2E (firefox)'}
               levels = ('1.5',) if optional_enhanced else ('1.5', '2.5')
               required |= {f'Teletext {level}' for level in levels}
-              if 'Build CI artifacts' in ci_workflow:
-                  required.add('Build CI artifacts')
               required |= {f'Playwright E2E ({suite}, {browser})'
                            for suite in ('general', *levels)
                            for browser in ('chromium', 'firefox')}
@@ -102,7 +102,9 @@ jobs:
               jobs = gh('run', 'view', str(run['databaseId']), '--json', 'jobs')['jobs']
               passed = {j['name'] for j in jobs if j['status'] == 'completed' and j['conclusion'] == 'success'}
               run_required = required | ({'Commit lint'} if optional_enhanced and run['event'] != 'push' else set())
-              if run_required <= passed:
+              artifact_ok = ('Build CI artifacts' in passed or
+                             (reuse_supported and {'Verify reused CI artifacts', 'CI ok'} <= passed))
+              if run_required <= passed and (not artifact_required or artifact_ok):
                   print('Accepted source CI:', run['databaseId'])
                   break
           else:

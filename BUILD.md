@@ -490,7 +490,7 @@ gh run view <run-id> --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
 
 Create the release tag only when the evidence run reports the same full
 `headSha`, `status: completed`, and `conclusion: success`, **and** its job
-list shows `success` for `Format`, `Clippy`, `Build CI artifacts`, the `Test` job(s) for its runner
+list shows `success` for `Format`, `Clippy`, the `Test` job(s) for its runner
 configuration, `Teletext 1.5`, all four required `Playwright E2E` combinations
 (general and Level 1.5 in Chromium and Firefox), `Next engine`, `Cargo deny`, and
 `Documentation links`. A green workflow conclusion alone is not enough,
@@ -500,6 +500,25 @@ dispatched full run on the candidate SHA as release evidence. A failed, cancelle
 in-progress run is not release evidence. Any commit or amend after the
 successful run creates a new candidate SHA and requires new CI evidence before
 tagging.
+
+For the build requirement, accept either a successful `Build CI artifacts` job
+or a successful `Verify reused CI artifacts` job with a successful `CI ok`.
+If a previous full run already passed for the exact release SHA, use that
+run as the evidence. If only the artifacts are available from earlier CI, pass
+both immutable Rust and web references to a [full reuse run](#reuse-verified-artifacts-for-ci-recovery)
+on a branch at the release SHA:
+
+```bash
+gh workflow run ci.yml --ref "$candidate_branch" -f runner=self-hosted \
+  -F reuse_artifacts=@release-ci-artifacts.json
+```
+
+The JSON file supplies the original producer SHA, cache key, SHA-256, toolchain
+and build flags for each artifact. Full verification checks the source and
+workspace coverage before reusing the archived test binaries and matched web
+bundle. The evidence run must report the release SHA and pass the full set of
+release tests. Windows and Linux distribution packages have their own build and
+verification in the release workflow.
 
 Level 2.5 Rust and browser suites remain optional explicit dispatches for the
 experimental enhanced features. They do not replace any required general or
@@ -696,7 +715,7 @@ A green main run executes small checks and may point to earlier exact-tree PR
 or full proof. Record both its provenance and the original behavioral evidence;
 never count skipped jobs as fresh passes. For release qualification, find a
 completed full run for the exact candidate SHA and inspect every required job
-listed above. The existing source-bound PR-proof and failed-job recovery tools
+listed above, including the artifact check for the selected build method. The existing source-bound PR-proof and failed-job recovery tools
 accept full runs dispatched directly through `ci.yml`; the weekly reusable
 workflow is independently visible full-suite evidence, not a direct recovery
 producer for those tools.
