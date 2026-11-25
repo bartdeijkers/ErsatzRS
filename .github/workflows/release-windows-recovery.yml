@@ -260,6 +260,16 @@ jobs:
           verified_hash=$(jq -er --arg source "$SOURCE_SHA" 'select(.source_sha == $source) | .sha256 | select(test("^[a-f0-9]{64}$"))' package-provenance.json)
           printf '%s  %s\n' "$verified_hash" "$archive" | sha256sum --check
           unzip -tq "$archive"
-          tag_object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags" -f tag=v1.3.1 -f message='v1.3.1 Windows-only release' -f type=commit -f object="$SOURCE_SHA" --jq .sha)
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref=refs/tags/v1.3.1 -f sha="$tag_object" --jq .ref
+          tags="repos/$GITHUB_REPOSITORY/git"
+          current=$(gh api "$tags/matching-refs/tags/v1.3.1" --jq '.[] | select(.ref == "refs/tags/v1.3.1") | [.object.type, .object.sha] | @tsv')
+          if [ -n "$current" ]; then
+            IFS=$'	' read -r kind tag_object <<< "$current"
+            [[ "$kind" = tag && "$(gh api "$tags/tags/$tag_object" --jq .object.sha)" = "$SOURCE_SHA" ]]
+          else
+            tag_object=$(gh api "$tags/tags" -f tag=v1.3.1 -f message='v1.3.1 Windows-only release' \
+              -f type=commit -f object="$SOURCE_SHA" -f 'tagger[name]=github-actions[bot]' \
+              -f 'tagger[email]=41898282+github-actions[bot]@users.noreply.github.com' \
+              -f "tagger[date]=$(date -u +%FT%TZ)" --jq .sha)
+            gh api "$tags/refs" -f ref=refs/tags/v1.3.1 -f sha="$tag_object" --jq .ref
+          fi
           gh release create v1.3.1 "$archive" --verify-tag --draft --title 'ErsatzRS v1.3.1' --repo "$GITHUB_REPOSITORY" --notes "Windows x64 package for the Channel Teletext Atlas and broadcast switch. See PR #207. The package is built from $SOURCE_SHA and reports the source workspace version 1.3.0."
