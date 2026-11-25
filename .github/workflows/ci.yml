@@ -107,7 +107,7 @@ on:
         required: false
         default: ''
       resume_run:
-        description: Completed full CI run whose successful unchanged checks may be reused (requires reuse_artifacts)
+        description: Completed full CI or same-tree PR run whose successful full-scope checks may be reused (requires reuse_artifacts)
         type: string
         required: false
         default: ''
@@ -420,14 +420,27 @@ jobs:
           if '--allow-escape-sequences' in subprocess.check_output(['gh', 'api', '--help'], text=True):
               log_args.append('--allow-escape-sequences')
           producer_log = subprocess.check_output(log_args, text=True)
-          browser_logs = {}
+          browser_logs, job_logs = {}, {}
+          is_pr = run['event'] == 'pull_request'
           for row in jobs['jobs']:
-              if row['name'] in ('Playwright E2E (general, chromium)', 'Playwright E2E (general, firefox)'):
+              name = row['name']
+              log_needed = (is_pr and row['conclusion'] == 'success'
+                            and (name in ('Test', 'Next engine') or name.startswith('Playwright E2E (')))
+              if log_needed or (not is_pr and name in (
+                      'Playwright E2E (general, chromium)', 'Playwright E2E (general, firefox)')):
                   args = list(log_args)
                   args[2] = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/jobs/{row['id']}/logs"
-                  browser_logs[row['name']] = subprocess.check_output(args, text=True)
+                  try:
+                      log = subprocess.check_output(args, text=True)
+                  except subprocess.CalledProcessError:
+                      continue
+                  if is_pr:
+                      job_logs[name] = log
+                  else:
+                      browser_logs[name] = log
           proof = artifacts.resume_checks(run, jobs, os.environ['GITHUB_REPOSITORY'],
-              os.environ['GITHUB_SHA'], os.environ['RESUME_ARTIFACTS'], producer_log, browser_logs)
+              os.environ['GITHUB_SHA'], os.environ['RESUME_ARTIFACTS'], producer_log, browser_logs,
+              job_logs=job_logs)
           print('resumed_checks=' + json.dumps(proof, separators=(',', ':')))
           for output, job in [('run_test', 'test'), ('run_next', 'next_engine'),
                               ('run_teletext', 'teletext'), ('run_browser', 'hydration')]:

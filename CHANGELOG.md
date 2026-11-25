@@ -39,6 +39,11 @@ release section when tagging a release.
 
 ### Fixed
 
+- Release qualification and recovery accept verified CI artifacts from an
+  earlier run when the release source and full test coverage are confirmed.
+  Matching successful checks are carried forward so CI can run only the
+  remaining coverage.
+
 - Scanning a Remote Stream whose add-on is missing, disabled or incompatible
   keeps its library registration out of Trash. The scan reports the add-on
   error. A successful rescan restores streams flagged by earlier versions.

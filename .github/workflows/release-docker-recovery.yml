@@ -34,7 +34,9 @@ jobs:
       - uses: actions/checkout@v7
       - name: Retain corrected build recipe
         shell: bash
-        run: cp Dockerfile.release "$RUNNER_TEMP/Dockerfile.release.recovery"
+        run: |
+          cp Dockerfile.release "$RUNNER_TEMP/Dockerfile.release.recovery"
+          cp scripts/release/ci-evidence.py "$RUNNER_TEMP/release-ci-evidence.py"
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag }}
@@ -53,7 +55,11 @@ jobs:
           [[ "$ASSETS_RUN" =~ ^[0-9]+$ ]]
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           python3 - <<'PY'
-          import json, os, subprocess
+          import json, os, runpy, subprocess
+          from pathlib import Path
+
+          completed_checks = runpy.run_path(
+              str(Path(os.environ['RUNNER_TEMP']) / 'release-ci-evidence.py'))['completed_checks']
           def gh(*args):
               return json.loads(subprocess.check_output(['gh', *args], text=True))
           release = gh('release', 'view', os.environ['TAG'], '--json', 'isDraft,isPrerelease')
@@ -75,17 +81,16 @@ jobs:
                       'Commit lint', 'Next engine'}
           # The checked-out immutable source determines the CI job contract;
           # historical releases retain their original two-browser requirement.
-          from pathlib import Path
           ci_workflow = Path('.github/workflows/ci.yml').read_text()
           optional_enhanced = 'experimental2.5 requires teletext_only=2.5/all.' in ci_workflow
+          artifact_required = 'Build CI artifacts' in ci_workflow
+          reuse_supported = 'Verify reused CI artifacts' in ci_workflow
           if 'name: Preflight' in ci_workflow:
               required.add('Preflight')
           if 'teletext_only:' in ci_workflow:
               required -= {'Playwright E2E (chromium)', 'Playwright E2E (firefox)'}
               levels = ('1.5',) if optional_enhanced else ('1.5', '2.5')
               required |= {f'Teletext {level}' for level in levels}
-              if 'Build CI artifacts' in ci_workflow:
-                  required.add('Build CI artifacts')
               required |= {f'Playwright E2E ({suite}, {browser})'
                            for suite in ('general', *levels)
                            for browser in ('chromium', 'firefox')}
@@ -100,9 +105,11 @@ jobs:
                       or run['conclusion'] != 'success'):
                   continue
               jobs = gh('run', 'view', str(run['databaseId']), '--json', 'jobs')['jobs']
-              passed = {j['name'] for j in jobs if j['status'] == 'completed' and j['conclusion'] == 'success'}
+              passed = completed_checks(os.environ['GITHUB_REPOSITORY'], os.environ['SOURCE_SHA'], jobs)
               run_required = required | ({'Commit lint'} if optional_enhanced and run['event'] != 'push' else set())
-              if run_required <= passed:
+              artifact_ok = ('Build CI artifacts' in passed or
+                             (reuse_supported and {'Verify reused CI artifacts', 'CI ok'} <= passed))
+              if run_required <= passed and (not artifact_required or artifact_ok):
                   print('Accepted source CI:', run['databaseId'])
                   break
           else:

@@ -46,6 +46,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          clean: false
+      - name: Retain release CI verifier
+        shell: pwsh
+        run: Copy-Item scripts/release/ci-evidence.py "$env:RUNNER_TEMP/release-ci-evidence.py"
+      - uses: actions/checkout@v7
+        with:
           ref: ${{ inputs.source_sha }}
           # Keep the accepted native build; do not delete the runner's warm target.
           clean: false
@@ -68,7 +74,11 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           @'
-          import json, os, re, subprocess
+          import json, os, re, runpy, subprocess
+          from pathlib import Path
+
+          completed_checks = runpy.run_path(
+              str(Path(os.environ['RUNNER_TEMP']) / 'release-ci-evidence.py'))['completed_checks']
 
           def gh(*args):
               return json.loads(subprocess.check_output(['gh', *args], text=True))
@@ -111,14 +121,16 @@ jobs:
                       'Playwright E2E (firefox)', 'Cargo deny', 'Documentation links', 'Next engine'}
           # The checked-out immutable source determines the CI job contract;
           # historical releases retain their original two-browser requirement.
-          from pathlib import Path
-          if 'teletext_only:' in Path('.github/workflows/ci.yml').read_text():
+          ci_workflow = Path('.github/workflows/ci.yml').read_text()
+          artifact_required = 'Build CI artifacts' in ci_workflow
+          reuse_supported = 'Verify reused CI artifacts' in ci_workflow
+          optional_enhanced = 'experimental2.5 requires teletext_only=2.5/all.' in ci_workflow
+          if 'teletext_only:' in ci_workflow:
               required -= {'Playwright E2E (chromium)', 'Playwright E2E (firefox)'}
-              required |= {'Teletext 1.5', 'Teletext 2.5'}
-              if 'name: Build CI artifacts' in Path('.github/workflows/ci.yml').read_text():
-                  required.add('Build CI artifacts')
+              levels = ('1.5',) if optional_enhanced else ('1.5', '2.5')
+              required |= {f'Teletext {level}' for level in levels}
               required |= {f'Playwright E2E ({suite}, {browser})'
-                           for suite in ('general', '1.5', '2.5')
+                           for suite in ('general', *levels)
                            for browser in ('chromium', 'firefox')}
           ci_runs = gh('run', 'list', '--repo', repo, '--workflow', 'ci.yml', '--commit', source,
                        '--limit', '100', '--json', 'databaseId,headSha,status,conclusion')
@@ -126,8 +138,10 @@ jobs:
               if ci['headSha'] != source or ci['status'] != 'completed' or ci['conclusion'] != 'success':
                   continue
               ci_jobs = gh('run', 'view', str(ci['databaseId']), '--repo', repo, '--json', 'jobs')['jobs']
-              passed = {j['name'] for j in ci_jobs if j['status'] == 'completed' and j['conclusion'] == 'success'}
-              if required <= passed:
+              passed = completed_checks(repo, source, ci_jobs)
+              artifact_ok = ('Build CI artifacts' in passed or
+                             (reuse_supported and {'Verify reused CI artifacts', 'CI ok'} <= passed))
+              if required <= passed and (not artifact_required or artifact_ok):
                   print('Accepted application CI:', ci['databaseId'])
                   break
           else:
