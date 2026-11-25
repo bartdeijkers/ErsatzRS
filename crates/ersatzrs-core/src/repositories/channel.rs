@@ -12,6 +12,8 @@ pub struct ChannelAdminListRow {
     pub name: String,
     pub preferred_audio_language_code: Option<String>,
     pub is_enabled: bool,
+    #[serde(default)]
+    pub teletext_enabled: bool,
     pub show_in_epg: bool,
     pub streaming_mode: i32,
     pub ffmpeg_profile_name: String,
@@ -124,6 +126,9 @@ pub struct ChannelEditorForm {
     pub transcode_mode: i32,
     pub idle_behavior: i32,
     pub is_enabled: bool,
+    /// Older clients may omit this field when editing an existing channel.
+    #[serde(default)]
+    pub teletext_enabled: Option<bool>,
     pub show_in_epg: bool,
 }
 
@@ -269,6 +274,9 @@ impl ChannelValidationError {
 #[async_trait]
 pub trait ChannelRepository: Send + Sync {
     async fn get_with_profile(&self, id: EntityId) -> Result<Channel>;
+    async fn teletext_enabled(&self, id: EntityId) -> Result<bool> {
+        Ok(self.get_with_profile(id).await?.teletext_enabled)
+    }
     async fn get_by_number(&self, number: &str) -> Result<Channel>;
     async fn list_enabled(&self) -> Result<Vec<Channel>>;
     async fn upsert(&self, channel: &Channel) -> Result<()>;

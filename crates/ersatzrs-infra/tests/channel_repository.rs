@@ -1339,6 +1339,7 @@ async fn source_teletext_delivery_is_explicit_preserved_and_output_channel_local
         .unwrap()
         .form;
     assert_eq!(form.source_teletext_delivery, Some(0));
+    form.teletext_enabled = Some(true);
     form.source_teletext_delivery = Some(1);
     assert!(repos
         .channel
@@ -1347,6 +1348,7 @@ async fn source_teletext_delivery_is_explicit_preserved_and_output_channel_local
         .unwrap()
         .is_success());
     assert_eq!(load(&pool, saved.id).await.unwrap(), DvbSubtitles);
+    form.teletext_enabled = None; // Older editors omit both teletext choices.
     form.source_teletext_delivery = None;
     form.name = "Preserved choice".into();
     assert!(repos
@@ -1356,6 +1358,7 @@ async fn source_teletext_delivery_is_explicit_preserved_and_output_channel_local
         .unwrap()
         .is_success());
     assert_eq!(load(&pool, saved.id).await.unwrap(), DvbSubtitles);
+    assert!(repos.channel.teletext_enabled(saved.id).await.unwrap());
     let mirror = repos
         .channel
         .save_editor_form(ChannelEditorForm {
@@ -1381,6 +1384,7 @@ async fn source_teletext_delivery_is_explicit_preserved_and_output_channel_local
         .await
         .unwrap()
         .is_success());
+    form.teletext_enabled = Some(false);
     form.source_teletext_delivery = Some(0);
     assert!(repos
         .channel
@@ -1390,6 +1394,8 @@ async fn source_teletext_delivery_is_explicit_preserved_and_output_channel_local
         .is_success());
     assert_eq!(load(&pool, saved.id).await.unwrap(), Burn);
     assert_eq!(load(&pool, mirror.id).await.unwrap(), DvbSubtitles);
+    assert!(!repos.channel.teletext_enabled(saved.id).await.unwrap());
+    assert!(!repos.channel.teletext_enabled(mirror.id).await.unwrap());
 }
 
 #[tokio::test]

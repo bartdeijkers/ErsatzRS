@@ -3273,6 +3273,7 @@ TextKey::NonPlayableItems => "Elementos no reproducibles",
         TextKey::SeekSeconds => "Segundos de desplazamiento",
         TextKey::Schema => "Esquema",
         TextKey::ShowDisabled => "Mostrar desactivados",
+        TextKey::TeletextEnabled => "Teletexto habilitado",
         TextKey::ShowInEpg => "Mostrar en la EPG",
         TextKey::SlugSeconds => "Segundos de separación",
         TextKey::SlugSecondsHelp => {

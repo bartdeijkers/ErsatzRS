@@ -212,8 +212,8 @@ export class TeletextChannelFixture {
         this.database.prepare(`INSERT INTO "Channel" (
           "Id","UniqueId","Number","SortNumber","Name","Group","FFmpegProfileId",
           "StreamingMode","StreamSelectorMode","PlayoutSource","PlayoutMode","TranscodeMode",
-          "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg"
-        ) VALUES (?, ?, ?, ?, ?, 'E2E teletext', ?, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1)`)
+          "IdleBehavior","MusicVideoCreditsMode","SongVideoMode","SubtitleMode","IsEnabled","ShowInEpg","TeletextEnabled"
+        ) VALUES (?, ?, ?, ?, ?, 'E2E teletext', ?, 5, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1)`)
           .run(id, randomUUID(), String(id), id, `Synthetic teletext ${index + 1}`, profile.Id);
       }
       this.database.exec('COMMIT;');

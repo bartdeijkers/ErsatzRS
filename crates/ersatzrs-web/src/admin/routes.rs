@@ -114,7 +114,7 @@ pub fn AdminRoutes() -> impl IntoView {
             <Route path=StaticSegment("") view=HomePage/>
             <Route path=StaticSegment("dev/components") view=ComponentsPage/>
             <Route path=StaticSegment("epg") view=EpgPreviewPage/>
-            <Route path=StaticSegment("channels") view=ChannelsListPage/>
+            <Route path=StaticSegment("channels") view=ChannelsListPage ssr=SsrMode::InOrder/>
             <Route
                 path=(StaticSegment("channels"), StaticSegment("add"))
                 view=ChannelEditorPage

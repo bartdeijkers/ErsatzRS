@@ -3266,6 +3266,7 @@ TextKey::NonPlayableItems => "Éléments non lisibles",
         TextKey::SeekSeconds => "Position de départ (secondes)",
         TextKey::Schema => "Schéma",
         TextKey::ShowDisabled => "Afficher les désactivées",
+        TextKey::TeletextEnabled => "Télétexte activé",
         TextKey::ShowInEpg => "Afficher dans l'EPG",
         TextKey::SlugSeconds => "Slug (secondes)",
         TextKey::SlugSecondsHelp => {

@@ -74,6 +74,10 @@ pub struct ChannelSaveForm {
     #[serde(default)]
     is_enabled: bool,
     #[serde(default)]
+    teletext_enabled: Option<bool>,
+    #[serde(default)]
+    teletext_control_present: bool,
+    #[serde(default)]
     show_in_epg: bool,
     #[serde(default)]
     fallback_filler_id: i64,
@@ -360,6 +364,10 @@ impl ChannelSaveForm {
             streaming_mode: parse_i32(fields, "streaming_mode"),
             watermark_id: parse_i64(fields, "watermark_id"),
             is_enabled: parse_bool(fields, "is_enabled"),
+            teletext_control_present: parse_bool(fields, "teletext_control_present"),
+            teletext_enabled: fields
+                .get("teletext_enabled")
+                .map(|_| parse_bool(fields, "teletext_enabled")),
             show_in_epg: parse_bool(fields, "show_in_epg"),
             fallback_filler_id: parse_i64(fields, "fallback_filler_id"),
             preferred_subtitle_language_code: text(fields, "preferred_subtitle_language_code"),
@@ -412,6 +420,9 @@ impl ChannelSaveForm {
             streaming_mode: self.streaming_mode,
             watermark_id: self.watermark_id,
             is_enabled: self.is_enabled,
+            teletext_enabled: self
+                .teletext_enabled
+                .or(self.teletext_control_present.then_some(false)),
             show_in_epg: self.show_in_epg,
             fallback_filler_id: self.fallback_filler_id,
             preferred_subtitle_language_code: self.preferred_subtitle_language_code,

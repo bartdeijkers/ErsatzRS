@@ -22,6 +22,7 @@ pub enum RowIcon {
     Watch,
     Stop,
     Edit,
+    Teletext,
     Troubleshoot,
     Copy,
     Delete,
@@ -33,6 +34,7 @@ impl RowIcon {
             Self::Watch => IconName::Play,
             Self::Stop => IconName::Stop,
             Self::Edit => IconName::Edit,
+            Self::Teletext => IconName::Teletext,
             Self::Troubleshoot => IconName::Search,
             Self::Copy => IconName::Copy,
             Self::Delete => IconName::Delete,
@@ -108,10 +110,13 @@ pub fn RowActionLink(
     /// The action does not apply to this row; it keeps its slot.
     #[prop(optional)]
     hidden: bool,
+    #[prop(optional)] disabled: bool,
 ) -> impl IntoView {
     view! {
         <a
-            href=href
+            href=(!disabled).then_some(href)
+            aria-disabled=disabled.then_some("true")
+            role=disabled.then_some("link")
             class=action_class(icon)
             title=label
             aria-label=label

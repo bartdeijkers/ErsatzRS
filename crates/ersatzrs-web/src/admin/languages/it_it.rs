@@ -3264,6 +3264,7 @@ TextKey::NonPlayableItems => "Elementi non riproducibili",
         TextKey::SeekSeconds => "Cerca secondi",
         TextKey::Schema => "Schema",
         TextKey::ShowDisabled => "Mostra disabilitata",
+        TextKey::TeletextEnabled => "Televideo abilitato",
         TextKey::ShowInEpg => "Mostra in EPG",
         TextKey::SlugSeconds => "Slug secondi",
         TextKey::SlugSecondsHelp => {

@@ -14,6 +14,7 @@ use crate::admin::server_fns::channels::{
 use crate::admin::ui::primitives::{
     dialog::{DeleteDialog, Modal},
     page_header::{PageAction, PageActionKind, PageHeader},
+    resource_state::admin_result_view,
     row_actions::{RowActionButton, RowActionLink, RowActions, RowIcon},
     table::{Column, PageParams, PagedTable, RowActionsRenderer},
     toast::{load_or_notify, use_toast, ToastSeverity},
@@ -25,16 +26,28 @@ const PAGE_SIZE: u32 = 10;
 
 #[component]
 pub fn ChannelsListPage() -> impl IntoView {
-    view! { <ChannelsListIsland/> }
+    let content = Suspend::new(async {
+        let initial = async {
+            let rows = list_channel_rows(false, 0, PAGE_SIZE).await?;
+            let count = count_channels(false).await?;
+            Ok::<_, ServerFnError>((rows, count))
+        }
+        .await;
+        admin_result_view(initial, |(rows, count)| {
+            view! { <ChannelsListIsland initial_rows=rows initial_count=count/> }.into_any()
+        })
+    });
+    view! { {content} }
 }
 
 #[island]
-fn ChannelsListIsland() -> impl IntoView {
+fn ChannelsListIsland(initial_rows: Vec<ChannelListRow>, initial_count: u64) -> impl IntoView {
     let show_disabled = RwSignal::new(false);
     let params = RwSignal::new(PageParams::new(PAGE_SIZE));
     let load_toast = use_toast();
-
-    let rows_resource: LocalResource<Vec<ChannelListRow>> = LocalResource::new(move || {
+    let rows = RwSignal::new(Some(initial_rows));
+    let count = RwSignal::new(Some(initial_count));
+    let rows_resource = LocalResource::new(move || {
         let disabled = show_disabled.get();
         let p = params.get();
         async move {
@@ -44,13 +57,21 @@ fn ChannelsListIsland() -> impl IntoView {
             )
         }
     });
-
-    let count_resource: LocalResource<u64> = LocalResource::new(move || {
+    let count_resource = LocalResource::new(move || {
         let disabled = show_disabled.get();
         async move { load_or_notify(count_channels(disabled).await, load_toast) }
     });
-
-    let total = Signal::derive(move || count_resource.get());
+    Effect::new(move |_| {
+        if let Some(updated) = rows_resource.get() {
+            rows.set(Some(updated));
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(updated) = count_resource.get() {
+            count.set(Some(updated));
+        }
+    });
+    let total = Signal::derive(move || count.get());
 
     let delete_action = Action::new(|id: &i64| delete_channel(*id));
     let delete_target: RwSignal<Option<ChannelListRow>> = RwSignal::new(None);
@@ -187,6 +208,7 @@ fn ChannelsListIsland() -> impl IntoView {
         let active_number = number.clone();
         let is_active =
             move || active_numbers.with(|nums| nums.iter().any(|n| n == &active_number));
+        let teletext_enabled = ch.teletext_enabled;
         let can_troubleshoot = can_troubleshoot_channel(ch);
         let troubleshoot_href = if can_troubleshoot {
             format!("/system/troubleshooting/playback?channel={id}")
@@ -237,6 +259,12 @@ fn ChannelsListIsland() -> impl IntoView {
                     label=tr(TextKey::EditChannel)
                 />
                 <RowActionLink
+                    icon=RowIcon::Teletext
+                    href=format!("/channels/{id}/teletext")
+                    label=tr(TextKey::TeletextChannelTitle)
+                    disabled=!teletext_enabled
+                />
+                <RowActionLink
                     icon=RowIcon::Troubleshoot
                     href=troubleshoot_href
                     label=tr(TextKey::TroubleshootChannel)
@@ -284,7 +312,7 @@ fn ChannelsListIsland() -> impl IntoView {
                     </div>
 
                     <PagedTable
-                        rows=rows_resource
+                        rows=rows
                         total=total
                         params=params
                         columns=columns

@@ -384,6 +384,16 @@ impl SelectedTeletextOutputCandidate {
             return false;
         }
         let confirmation = async {
+            if !matches!(
+                application
+                    .ports()
+                    .channels()
+                    .teletext_enabled(self.channel_id())
+                    .await,
+                Ok(true)
+            ) {
+                return false;
+            }
             // Transaction-owned source hashing must retain the same admission
             // after cancellation. Static confirmations perform no guide CPU work.
             if let Some(proof) = self.guide_qualification() {
@@ -467,6 +477,21 @@ impl GuideTeletextOutputCandidate {
         if Instant::now() >= deadline {
             return false;
         }
+        if admission.is_none()
+            && !matches!(
+                tokio::time::timeout_at(
+                    deadline.into(),
+                    application
+                        .ports()
+                        .channels()
+                        .teletext_enabled(self.confirmation.seed.generation.request.channel_id)
+                )
+                .await,
+                Ok(Ok(true))
+            )
+        {
+            return false;
+        }
         let guard = if self.confirmation.status == TeletextGuideRefreshStatus::Fresh
             && admission.is_none()
         {
@@ -533,6 +558,7 @@ async fn admit_confirmation(
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SelectedTeletextReadFailure;
 
+#[derive(Default)]
 pub(crate) struct SelectedTeletextObservation {
     pub(crate) generation: Option<TeletextAcceptedGeneration>,
     pub(crate) effective: bool,
@@ -577,6 +603,15 @@ pub(super) async fn observe_selected_teletext_output_with_guide(
     guide: Option<&GuideRuntime>,
     maximum: usize,
 ) -> Result<SelectedTeletextObservation, SelectedTeletextReadFailure> {
+    if !application
+        .ports()
+        .channels()
+        .teletext_enabled(channel_id)
+        .await
+        .map_err(|_| SelectedTeletextReadFailure)?
+    {
+        return Ok(SelectedTeletextObservation::default());
+    }
     let monotonic = tokio::time::Instant::now();
     let observed = Utc::now();
     let scope = application

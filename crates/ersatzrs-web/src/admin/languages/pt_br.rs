@@ -3982,6 +3982,7 @@ TextKey::NonPlayableItems => "Itens não reproduzíveis",
         TextKey::SeekSeconds => "Segundos de busca",
         TextKey::Schema => "Esquema",
         TextKey::ShowDisabled => "Mostrar desativados",
+        TextKey::TeletextEnabled => "Teletexto ativado",
         TextKey::ShowInEpg => "Mostrar no EPG",
         TextKey::SlugSeconds => "Segundos de intervalo",
         TextKey::SlugSecondsHelp => {

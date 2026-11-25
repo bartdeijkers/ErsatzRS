@@ -22,6 +22,8 @@ An Atlas guide preview may invoke the installed, enabled TV-guide package before
 
 The index request includes the numbers and titles of channel library pages as destinations. The add-on includes these entries in its sorted index while the library producer retains ownership of their page content.
 
+Channel settings own the teletext output switch. The Channels list opens Atlas when the switch is enabled. Turning it off preserves drafts and accepted generations and suppresses authored output. Live output policies observe changes on their next poll. The version 1 policy applies the choice when a receiver tunes in. Source subtitle selection remains independent.
+
 ## Consequences
 
 Historical documents and guide requests without Atlas fields retain their original encoding. A shared guide theme applies to a channel on its next save. The accepted generation identifies the selected edition. Output consumers report application separately.

@@ -185,6 +185,8 @@ pub struct Channel {
     pub transcode_mode: ChannelTranscodeMode,
     pub idle_behavior: ChannelIdleBehavior,
     pub is_enabled: bool,
+    #[serde(default)]
+    pub teletext_enabled: bool,
     pub show_in_epg: bool,
 }
 
@@ -242,6 +244,7 @@ impl Default for Channel {
             transcode_mode: ChannelTranscodeMode::default(),
             idle_behavior: ChannelIdleBehavior::default(),
             is_enabled: true,
+            teletext_enabled: false,
             show_in_epg: true,
         }
     }

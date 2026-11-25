@@ -3193,6 +3193,7 @@ TextKey::NonPlayableItems => "Non-playable items",
         TextKey::SeekSeconds => "Seek Seconds",
         TextKey::Schema => "Schema",
         TextKey::ShowDisabled => "Show Disabled",
+        TextKey::TeletextEnabled => "Teletext enabled",
         TextKey::ShowInEpg => "Show In EPG",
         TextKey::SlugSeconds => "Slug Seconds",
         TextKey::SlugSecondsHelp => {

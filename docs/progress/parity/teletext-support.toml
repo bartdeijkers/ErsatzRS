@@ -24,7 +24,7 @@ Phase9 engine/release components or resume enhanced-only/editor work.
 Atlas (ADR 0140), verified 2026-11-25 with the native host and guide 0.1.4:
 4:3 at 4K, unpublished previews, mixed index and FastText links, TTI reveal,
 number conflicts after reload, one-save publication, stale tabs, themes,
-subpages and server-rendered reading.
+subpages and server-rendered reading. Channel settings gate Atlas and authored MPEG-TS on live and static output.
 
 Enhanced-only service/resources remain experimental.
 Standalone Level1/1.5 is accepted at p9a-level15; enhanced-only

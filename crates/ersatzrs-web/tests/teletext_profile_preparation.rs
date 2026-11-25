@@ -219,6 +219,7 @@ async fn seed_channels(pool: &SqlitePool) {
                 name: format!("Synthetic {id}"),
                 ffmpeg_profile_id: 1,
                 is_enabled: true,
+                teletext_enabled: true,
                 ..Channel::default()
             })
             .await

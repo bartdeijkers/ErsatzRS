@@ -3963,6 +3963,7 @@ TextKey::NonPlayableItems => "Pozycje nieodtwarzalne",
         TextKey::SeekSeconds => "Sekundy przewijania",
         TextKey::Schema => "Schemat",
         TextKey::ShowDisabled => "Pokaż wyłączone",
+        TextKey::TeletextEnabled => "Teletekst włączony",
         TextKey::ShowInEpg => "Pokaż w EPG",
         TextKey::SlugSeconds => "Sekundy przerwy",
         TextKey::SlugSecondsHelp => {

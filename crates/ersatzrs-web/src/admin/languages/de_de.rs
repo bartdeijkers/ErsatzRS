@@ -3276,6 +3276,7 @@ TextKey::NonPlayableItems => "Nicht abspielbare Einträge",
         TextKey::SeekSeconds => "Suchposition (Sekunden)",
         TextKey::Schema => "Schema",
         TextKey::ShowDisabled => "Deaktivierte anzeigen",
+        TextKey::TeletextEnabled => "Videotext aktiviert",
         TextKey::ShowInEpg => "Im EPG anzeigen",
         TextKey::SlugSeconds => "Slug-Sekunden",
         TextKey::SlugSecondsHelp => {

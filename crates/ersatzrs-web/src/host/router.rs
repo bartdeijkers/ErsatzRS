@@ -43,6 +43,10 @@ pub fn build_app(app_state: AppState) -> Router {
             move || provide_context(app_state_for_leptos.clone()),
             move || shell(leptos_options_clone.clone(), app_state_for_shell.clone()),
         )
+        .route(
+            "/channels/",
+            get(|| async { axum::response::Redirect::permanent("/channels") }),
+        )
         .route_layer(middleware::from_fn(super::health_document::normalize))
         .with_state(leptos_options);
 

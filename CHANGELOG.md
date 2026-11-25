@@ -31,7 +31,9 @@ release section when tagging a release.
   and shows guide changes before the first publication. Duplicate numbers stay
   marked until corrected. Page numbers and row actions align in columns, and
   the receiver groups navigation, digits and colour keys. The broadcast index
-  includes library pages.
+  includes library pages. Enable teletext in channel settings to open its editor
+  from the Channels list and carry the published pages in the broadcast.
+  Turning it off preserves the pages for later use.
   Operators can edit subpages, colours and timing, then validate and publish
   the channel with one save. Shared TV guide styling is available in Teletext elements.
 

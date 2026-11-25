@@ -10,6 +10,8 @@ pub struct ChannelListRow {
     pub preferred_audio_language_code: String,
     pub preferred_audio_language: String,
     pub is_enabled: bool,
+    #[serde(default)]
+    pub teletext_enabled: bool,
     pub show_in_epg: bool,
     pub streaming_mode: i32,
     pub streaming_mode_label: String,
@@ -188,6 +190,7 @@ pub struct ChannelForm {
     pub streaming_mode: i32,
     pub watermark_id: i64,
     pub is_enabled: bool,
+    pub teletext_enabled: Option<bool>,
     pub show_in_epg: bool,
     /// 0 = no fallback filler.
     pub fallback_filler_id: i64,
@@ -233,6 +236,8 @@ struct ChannelFormInput {
     streaming_mode: i32,
     watermark_id: i64,
     is_enabled: bool,
+    #[serde(default)]
+    teletext_enabled: Option<bool>,
     show_in_epg: bool,
     /// 0 = no fallback filler.
     fallback_filler_id: i64,
@@ -281,6 +286,7 @@ impl From<ChannelFormInput> for ChannelForm {
             streaming_mode: input.streaming_mode,
             watermark_id: input.watermark_id,
             is_enabled: input.is_enabled,
+            teletext_enabled: input.teletext_enabled,
             show_in_epg: input.show_in_epg,
             fallback_filler_id: input.fallback_filler_id,
             preferred_subtitle_language_code: input.preferred_subtitle_language_code,
@@ -367,6 +373,7 @@ impl ChannelForm {
             streaming_mode: form.streaming_mode,
             watermark_id: form.watermark_id.unwrap_or_default(),
             is_enabled: form.is_enabled,
+            teletext_enabled: form.teletext_enabled,
             show_in_epg: form.show_in_epg,
             fallback_filler_id: form.fallback_filler_id.unwrap_or_default(),
             preferred_subtitle_language_code: form
@@ -437,6 +444,7 @@ impl ChannelForm {
             transcode_mode: self.transcode_mode,
             idle_behavior: self.idle_behavior,
             is_enabled: self.is_enabled,
+            teletext_enabled: self.teletext_enabled,
             show_in_epg: self.show_in_epg,
         }
     }
@@ -519,6 +527,7 @@ pub async fn list_channel_rows(
                         )),
                         preferred_audio_language_code,
                         is_enabled: row.is_enabled,
+                        teletext_enabled: row.teletext_enabled,
                         show_in_epg: row.show_in_epg,
                         streaming_mode: mode,
                         streaming_mode_label: streaming_mode_label(mode),

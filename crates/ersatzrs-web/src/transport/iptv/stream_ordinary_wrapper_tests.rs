@@ -299,6 +299,7 @@ async fn application(root: &Path, provider: &Server) -> AppState {
             name: "Synthetic routed".into(),
             ffmpeg_profile_id: 1,
             is_enabled: true,
+            teletext_enabled: true,
             streaming_mode: StreamingMode::TransportStream,
             preferred_audio_language_code: Some("eng".into()),
             ..Default::default()

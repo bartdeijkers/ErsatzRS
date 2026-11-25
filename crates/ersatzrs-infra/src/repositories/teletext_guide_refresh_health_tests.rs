@@ -7,6 +7,10 @@ use ersatzrs_core::health::{HealthCheck as _, HealthCheckStatus};
 async fn guide_maintenance_health_separates_review_from_serving_caps_and_bounds_redacted_state() {
     let fixture = Fixture::new().await;
     let repo = SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+    sqlx::query(r#"UPDATE "Channel" SET "TeletextEnabled"=1 WHERE "Id"=1"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
     let health = TeletextGuideRefreshHealthCheck::new(repo.0.clone());
     assert_eq!(
         health.check().await.unwrap().status,
@@ -27,6 +31,18 @@ async fn guide_maintenance_health_separates_review_from_serving_caps_and_bounds_
     let result = health.check_at(at).await.unwrap();
     assert_eq!(result.status, HealthCheckStatus::Pass);
     assert!(result.message.contains("fresh=1"));
+    sqlx::query(r#"UPDATE "Channel" SET "TeletextEnabled"=0 WHERE "Id"=1"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
+    assert_eq!(
+        health.check_at(at).await.unwrap().status,
+        HealthCheckStatus::Info
+    );
+    sqlx::query(r#"UPDATE "Channel" SET "TeletextEnabled"=1 WHERE "Id"=1"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
     let port = repo.guide_refresh().unwrap();
     let seed = base_current(port).await.seed;
     sqlx::query(r#"UPDATE "TeletextGuideRefreshCurrent" SET "Failure"=3 WHERE "SeedId"=?"#)
@@ -107,6 +123,10 @@ async fn add_bounded_health_origins(
 async fn check_legacy_base_authorization() {
     let fixture = Fixture::new().await;
     let repo = SqliteTeletextGenerationRepository(fixture.repo.0.clone());
+    sqlx::query(r#"UPDATE "Channel" SET "TeletextEnabled"=1 WHERE "Id"=1"#)
+        .execute(&repo.0)
+        .await
+        .unwrap();
     let save = base_save(&fixture).await;
     // Replay the old accepted/pointer SQL path, not new acceptance followed by
     // deleting its seed. No native/runtime or client qualification is inferred.

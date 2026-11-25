@@ -26,14 +26,14 @@
     transition: background-color 150ms, color 150ms;
 }
 
-.action:hover:not(:disabled) { background-color: var(--color-table-hover); }
+.action:hover:not(:disabled, [aria-disabled="true"]) { background-color: var(--color-table-hover); }
 
 .action:focus-visible {
     outline: 2px solid var(--color-primary);
     outline-offset: 2px;
 }
 
-.action:disabled {
+.action:disabled, .action[aria-disabled="true"] {
     opacity: 0.5;
     cursor: not-allowed;
 }
@@ -45,7 +45,8 @@
 /* Card layout (see table.module.css): thumb-sized targets. */
 @container (max-width: 48rem) {
     .slots {
-        grid-auto-columns: 2.75rem;
+        display: flex;
+        flex-wrap: wrap;
         gap: 0.75rem;
     }
 
