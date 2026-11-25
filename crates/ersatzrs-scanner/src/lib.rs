@@ -483,10 +483,17 @@ async fn scan_local_library_with_progress_once(
                                 Err(error) => Err(error),
                             };
                             if let Err(error) = result {
-                                retry_sqlite_busy(|| async {
-                                    flag_invalid_remote_stream(pool, &path).await
-                                })
-                                .await?;
+                                // Keep the last scanned registration on add-on or database
+                                // failures. Only a rejected definition needs quarantining here.
+                                if matches!(
+                                    error,
+                                    ScannerError::RemoteStream(RemoteStreamError::Definition(_))
+                                ) {
+                                    retry_sqlite_busy(|| async {
+                                        flag_invalid_remote_stream(pool, &path).await
+                                    })
+                                    .await?;
+                                }
                                 report.failed_files += 1;
                                 let display_path = path
                                     .strip_prefix(&library_path.path)
@@ -6101,6 +6108,72 @@ create_playlist: true
         )
         .await
         .expect("published add-on list item");
+    }
+
+    #[tokio::test]
+    async fn remote_stream_incompatible_addon_preserves_items_and_rescan_recovers_trash() {
+        let temp = tempfile::tempdir().expect("fixture");
+        let root = temp.path().join("library");
+        let pool = test_db().await;
+        seed_managed_remote_stream_playlist(&pool, &root, &temp.path().join("addon")).await;
+        let config = super::LocalScanConfig {
+            library_id: 1,
+            ffprobe_path: "unused-ffprobe".to_owned(),
+            deep_scan: false,
+            managed_claim: None,
+        };
+        let first = super::scan_local_library(&pool, &config).await.unwrap();
+        assert_eq!(first.failed_files, 0, "{:?}", first.issues);
+
+        let registration = || {
+            sqlx::query_as::<_, (i64, i64)>(
+                r#"SELECT mi."Id", mi."State" FROM "MediaItem" mi
+                   JOIN "RemoteStream" rs ON rs."Id" = mi."Id""#,
+            )
+            .fetch_all(&pool)
+        };
+        let initial = registration().await.unwrap();
+        assert_eq!(initial.len(), 1);
+        assert_eq!(initial[0].1, 0);
+
+        let set_host_range = |range| {
+            sqlx::query(
+                r#"UPDATE "AddonInstallation"
+                   SET "ManifestJson" = json_set("ManifestJson", '$.host_version', ?)"#,
+            )
+            .bind(range)
+            .execute(&pool)
+        };
+        set_host_range("<0.1.0").await.unwrap();
+        let failed = super::scan_local_library(&pool, &config).await.unwrap();
+        assert!(
+            failed
+                .issues
+                .iter()
+                .any(|issue| issue.contains("OldMatch-one.yml") && issue.contains("incompatible")),
+            "{:?}",
+            failed.issues
+        );
+        assert_eq!(registration().await.unwrap(), initial);
+
+        // An absent definition still belongs in Trash. Restoring it exercises
+        // the same state transition as a rescan of a false legacy Trash entry.
+        // Take the list manifest offline too so it cannot regenerate the file.
+        let manifest = root.join("Fixture.playlist.yml");
+        let saved_manifest = temp.path().join("saved.playlist.yml");
+        std::fs::rename(&manifest, &saved_manifest).unwrap();
+        let definition = root.join("Fixture/OldMatch-one.yml");
+        let saved = temp.path().join("saved.yml");
+        std::fs::rename(&definition, &saved).unwrap();
+        super::scan_local_library(&pool, &config).await.unwrap();
+        assert_eq!(registration().await.unwrap(), [(initial[0].0, 1)]);
+
+        std::fs::rename(saved, definition).unwrap();
+        std::fs::rename(saved_manifest, manifest).unwrap();
+        set_host_range("*").await.unwrap();
+        let recovered = super::scan_local_library(&pool, &config).await.unwrap();
+        assert_eq!(recovered.failed_files, 0, "{:?}", recovered.issues);
+        assert_eq!(registration().await.unwrap(), initial);
     }
 
     #[tokio::test]

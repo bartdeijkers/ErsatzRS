@@ -13,6 +13,12 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Scanning a Remote Stream whose add-on is missing, disabled or incompatible
+  keeps its library registration out of Trash. The scan reports the add-on
+  error. A successful rescan restores streams flagged by earlier versions.
+
 ## [1.3.0] - 2026-11-24
 
 ### Security
