@@ -86,9 +86,8 @@ async fn yaml_preserving_refresh_upgrade_retains_legacy_rows_until_explicit_rese
     .run(&pool)
     .await
     .unwrap();
-    pool.execute(r#"INSERT INTO "Resolution" ("Id", "Name", "Width", "Height") VALUES (1, '1920x1080', 1920, 1080)"#).await.unwrap();
+    common::seed_legacy_channel(&pool).await;
     let repos = make_repositories(pool.clone());
-    common::seed_profile_and_channel(&repos, 1).await;
     seed_refresh_rebuild_fixture(&pool, &repos).await;
     sqlx::query(r#"UPDATE "Playout" SET "ScheduleKind" = 3, "ProgramScheduleId" = NULL, "ScheduleFile" = ? WHERE "Id" = 88"#)
         .bind(SERIES).execute(&pool).await.unwrap();

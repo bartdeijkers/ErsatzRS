@@ -89,6 +89,35 @@ pub async fn seed_profile_and_channel(repos: &Repositories, channel_id: i64) {
         .unwrap();
 }
 
+/// Seed the channel row used by upgrade tests with the historical schema.
+///
+/// # Panics
+/// Panics if the fixture resolution, profile, or channel cannot be inserted.
+pub async fn seed_legacy_channel(pool: &SqlitePool) {
+    pool.execute(
+        r#"INSERT OR IGNORE INTO "Resolution" ("Id","Name","Width","Height")
+           VALUES (1,'fixture',1920,1080)"#,
+    )
+    .await
+    .unwrap();
+    ersatzrs_infra::repositories::make_repositories(pool.clone())
+        .ffmpeg_profile
+        .upsert(&profile(1, "default"))
+        .await
+        .unwrap();
+    pool.execute(
+        r#"INSERT INTO "Channel" (
+            "Id", "UniqueId", "Number", "Name", "SortNumber", "FFmpegProfileId",
+            "IdleBehavior", "MusicVideoCreditsMode", "PlayoutMode", "PlayoutSource",
+            "SongVideoMode", "StreamSelectorMode", "StreamingMode", "SubtitleMode",
+            "TranscodeMode", "IsEnabled", "ShowInEpg"
+           ) VALUES (1, '00000000-0000-0000-0000-000000000001', '1', 'Channel 1', 1, 1,
+                     0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1)"#,
+    )
+    .await
+    .unwrap();
+}
+
 /// # Panics
 /// Panics if seeding the fixture media source, library, or path fails.
 pub async fn seed_media_path(pool: &SqlitePool, source_id: i64, library_id: i64, path_id: i64) {
