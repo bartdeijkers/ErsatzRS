@@ -362,6 +362,14 @@ rerun only changed and failed spec files, using the existing browser filter.
 Unchanged successful cases retain their original proof. Missing logs, incomplete
 counts, unrelated projects or setup/global failures keep the full browser scope;
 the exact log hashes and counts remain in the composed proof.
+A successful ready PR can also supply `resume_run` evidence. Use the merge
+SHA recorded by the artifact producer, which may differ from the PR head and
+the final merge SHA. The gate requires the same Git tree, successful publication
+of both referenced artifacts and matching job definitions. It imports only
+successful jobs from the same attempt. For Rust and browser jobs that can
+narrow their selection, the original job log must show the full scope. CI
+executes any missing or narrower suite on the reused artifacts.
+
 Only failed browser suite/project entries are selected when their execution is
 unchanged. Format, dependency audit, commit lint, contract tests and complete
 artifact verification still run; `CI ok` requires every remaining check and
@@ -503,6 +511,10 @@ tagging.
 
 For the build requirement, accept either a successful `Build CI artifacts` job
 or a successful `Verify reused CI artifacts` job with a successful `CI ok`.
+For a reuse run, count successful checks recorded in the full gate's
+`Verified reused check provenance` as well as freshly executed checks. The
+provenance must identify the release SHA and cover any required check counted
+from the earlier run.
 If a previous full run already passed for the exact release SHA, use that
 run as the evidence. If only the artifacts are available from earlier CI, pass
 both immutable Rust and web references to a [full reuse run](#reuse-verified-artifacts-for-ci-recovery)
@@ -510,14 +522,15 @@ on a branch at the release SHA:
 
 ```bash
 gh workflow run ci.yml --ref "$candidate_branch" -f runner=self-hosted \
-  -F reuse_artifacts=@release-ci-artifacts.json
+  -F reuse_artifacts=@release-ci-artifacts.json -f resume_run="$previous_ci_run"
 ```
 
 The JSON file supplies the original producer SHA, cache key, SHA-256, toolchain
-and build flags for each artifact. Full verification checks the source and
+and build flags for each artifact. Set `previous_ci_run` to the numeric ID of
+the completed run that used those artifacts. Full verification checks the source and
 workspace coverage before reusing the archived test binaries and matched web
-bundle. The evidence run must report the release SHA and pass the full set of
-release tests. Windows and Linux distribution packages have their own build and
+bundle. It passes the full set of release checks by combining the recorded
+results with any checks still due on the release SHA. Windows and Linux distribution packages have their own build and
 verification in the release workflow.
 
 Level 2.5 Rust and browser suites remain optional explicit dispatches for the

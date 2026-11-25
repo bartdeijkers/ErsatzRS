@@ -868,6 +868,96 @@ class CompletedCheckReuse(unittest.TestCase):
         proof = self.plan(run=run, jobs=jobs, references=json.dumps(references), producer_log=log)
         self.assertEqual(set(proof['jobs']), {'clippy', 'test', 'hydration'})
 
+    def ready_pr(self):
+        run, jobs, _, references, log = self.ordinary_publisher()
+        run.update(event="pull_request", conclusion="success", head_sha="f" * 40)
+        jobs["jobs"] = [row for row in jobs["jobs"] if not row["name"].endswith("firefox)")]
+        jobs["total_count"] = len(jobs["jobs"])
+        for row in jobs["jobs"]:
+            row.update(conclusion="success", labels=["self-hosted", "Linux", "X64"], run_attempt=1)
+        logs = {
+            "Test": "  NEXTEST_FILTER: all()",
+            "Next engine": "  NEXT_CASE_SET: all",
+            "Playwright E2E (general, chromium)": (
+                "  PR_GENERAL_FILTER: channels.spec.ts$\n"
+                "  COMBINED_CANDIDATE: false\n  BROWSER_ONLY: none"
+            ),
+            "Playwright E2E (1.5, chromium)": (
+                "  PR_TELETEXT_FILTER: \n  COMBINED_CANDIDATE: false\n  BROWSER_ONLY: none"
+            ),
+        }
+        return dict(run=run, jobs=jobs, references=json.dumps(references), producer_log=log,
+                    pr_source=SHA, job_logs=logs, changes=[])
+
+    def test_same_tree_pr_reuses_only_actual_full_scope_jobs(self):
+        proof = self.plan(**self.ready_pr())
+        self.assertEqual(proof["source_sha"], SHA)
+        self.assertEqual(set(proof["jobs"]), {"clippy", "test", "next_engine", "teletext"})
+        pending = {(row["suite"], row["project"]) for row in proof["browser_pending"]}
+        self.assertEqual(pending, {("general", "chromium"), ("general", "firefox"), ("1.5", "firefox")})
+        self.assertEqual(len(proof["browser_passed"]), 1)
+
+    def test_different_browser_filter_syntax_can_cover_the_same_specs(self):
+        evidence = self.ready_pr()
+        evidence["browser_specs"] = {"1.5": {"teletext-flow", "teletext-health"}}
+        evidence["job_logs"]["Playwright E2E (1.5, chromium)"] = (
+            r"  PR_TELETEXT_FILTER: (^|/)(teletext-health|teletext-flow)\.spec\.ts$"
+            "\n  COMBINED_CANDIDATE: \n  BROWSER_ONLY: \n"
+            '  echo "::notice title=Capacity proofs skipped::"'
+        )
+        self.assertEqual(len(self.plan(**evidence)["browser_passed"]), 1)
+        evidence["browser_specs"]["1.5"].add("teletext-other")
+        self.assertEqual(self.plan(**evidence)["browser_passed"], [])
+
+    def test_pr_workflow_binds_the_archive_merge_commit_to_the_run_head(self):
+        options = self.ready_pr()
+        execution = "b" * 40
+        head = options["run"]["head_sha"]
+
+        def git(command, **_):
+            match command[1:]:
+                case ["rev-parse", "HEAD"]:
+                    return execution + "\n"
+                case ["cat-file", "commit", source]:
+                    self.assertEqual(source, SHA)
+                    return f"tree {'c' * 40}\nparent {'d' * 40}\nparent {head}\n\nMerge"
+                case ["show", path] if path.endswith("ci.yml"):
+                    return self.workflow
+                case ["show", path] if path.endswith("ci-build-artifacts.py"):
+                    return self.helper
+                case _:
+                    self.fail(f"Unexpected command {command!r}")
+
+        def check():
+            return artifacts.resume_checks(
+                options["run"], options["jobs"], "fixture/repo", execution,
+                options["references"], options["producer_log"], job_logs=options["job_logs"]
+            )
+
+        with (patch.object(artifacts.subprocess, "check_output", side_effect=git),
+              patch.object(artifacts.subprocess, "run", return_value=SimpleNamespace(returncode=0)),
+              patch.object(artifacts, "verify_source_equivalence", return_value=[]),
+              patch.object(artifacts, "resume_browser_inventory", return_value={})):
+            self.assertEqual(check()["source_sha"], SHA)
+            options["run"]["head_sha"] = "e" * 40
+            with self.assertRaisesRegex(ValueError, "tested merge of the PR head"):
+                check()
+
+    def test_same_tree_pr_uses_no_ambiguous_or_scoped_results(self):
+        evidence = self.ready_pr()
+        logs = evidence["job_logs"]
+        logs["Test"] = "  NEXTEST_FILTER: package(=ersatzrs-web)"
+        logs["Next engine"] = ""
+        logs["Playwright E2E (1.5, chromium)"] += "\n##[notice]Capacity proofs skipped"
+        clippy = next(row for row in evidence["jobs"]["jobs"] if row["name"] == "Clippy")
+        clippy["run_attempt"] = 2
+        proof = self.plan(**evidence)
+        self.assertEqual(set(proof["jobs"]), {"teletext"})
+        self.assertEqual(len(proof["browser_pending"]), 4)
+        evidence["changes"] = ["BUILD.md"]
+        with self.assertRaisesRegex(ValueError, "unchanged merge tree"):
+            self.plan(**evidence)
+
     def test_ordinary_build_reuse_requires_both_exact_successful_publications(self):
         for fault in ('hosted', 'failed step', 'wrong source', 'wrong key', 'wrong digest', 'missing digest'):
             run, jobs, producer, references, log = self.ordinary_publisher()

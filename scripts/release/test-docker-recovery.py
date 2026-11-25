@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import textwrap
 import unittest
 from unittest.mock import patch
@@ -21,6 +22,7 @@ WINDOWS_WORKFLOW = (ROOT / ".github/workflows/release-windows-recovery.yml").rea
 WINDOWS_GUARD = textwrap.dedent(re.search(
     r"          @'\n(.*?)\n          '@ \| Set-Content", WINDOWS_WORKFLOW, re.S
 ).group(1))
+EVIDENCE = runpy.run_path(str(ROOT / "scripts/release/ci-evidence.py"))
 CI_WORKFLOW = (ROOT / ".github/workflows/ci.yml").read_text()
 SOURCE = "a" * 40
 TAG = "v1.2.0"
@@ -48,6 +50,7 @@ class ReleaseRecoveryGuard(unittest.TestCase):
         self.asset_jobs = passed_jobs({"Build web assets"})
         self.ci_runs = [{"databaseId": 456, "headSha": SOURCE, "event": "push",
                          "status": "completed", "conclusion": "success"}]
+        self.aggregate_log = ""
         self.ci_jobs = passed_jobs(REQUIRED)
         self.ci_jobs.append({"name": "Commit lint", "status": "completed",
                              "conclusion": "skipped"})
@@ -79,6 +82,10 @@ class ReleaseRecoveryGuard(unittest.TestCase):
                         }],
                     }]
                 response = {"jobs": jobs}
+            elif args == ["api", "--help"]:
+                return ""
+            elif args == ["api", "repos/example/ersatzrs/actions/jobs/888/logs"]:
+                return self.aggregate_log
             elif args[:2] == ["run", "list"]:
                 self.assertEqual(args[args.index("--commit") + 1], SOURCE)
                 response = self.ci_runs
@@ -91,9 +98,10 @@ class ReleaseRecoveryGuard(unittest.TestCase):
         output = io.StringIO()
         with patch.dict(os.environ, {"TAG": TAG, "SOURCE_SHA": SOURCE,
                                      "ASSETS_RUN": "123", "GITHUB_REPOSITORY": "example/ersatzrs",
-                                     "GITHUB_SHA": "b" * 40}), \
+                                     "GITHUB_SHA": "b" * 40, "RUNNER_TEMP": "/fixture"}), \
                 patch("subprocess.check_output", side_effect=check_output), \
-                patch.object(Path, "read_text", return_value=ci_workflow), redirect_stdout(output):
+                patch.object(Path, "read_text", return_value=ci_workflow), \
+                patch("runpy.run_path", return_value=EVIDENCE), redirect_stdout(output):
             guard = WINDOWS_GUARD if windows else GUARD
             exec(compile(guard, "release recovery CI guard", "exec"), {})
         return output.getvalue()
@@ -127,6 +135,33 @@ class ReleaseRecoveryGuard(unittest.TestCase):
                         ]
                         with self.assertRaisesRegex(SystemExit, "No complete successful source CI"):
                             self.run_guard(windows=windows)
+
+    def test_release_accepts_full_ci_with_recorded_prior_checks(self):
+        browser = "Playwright E2E (1.5, chromium)"
+        self.ci_runs[0]["event"] = "workflow_dispatch"
+        self.ci_jobs = passed_jobs(REQUIRED - {"Build CI artifacts", "Test", browser} |
+                                   {"Verify reused CI artifacts", "Commit lint"})
+        self.ci_jobs.append({"name": "CI ok", "status": "completed", "conclusion": "success",
+                             "databaseId": 888})
+        proof = {
+            "execution_sha": SOURCE, "source_sha": "c" * 40, "jobs": {"test": [31]},
+            "browser_passed": [42],
+            "browser_pending": [{"suite": suite, "project": project} for suite, project in
+                                (("general", "chromium"), ("general", "firefox"), ("1.5", "firefox"))],
+        }
+        self.aggregate_log = ("2026-11-25T19:00:00Z Verified reused check provenance: "
+                              + json.dumps(proof) + "\nAll gate jobs passed (full lane).\n")
+        for windows in (False, True):
+            with self.subTest(windows=windows):
+                self.assertIn("456", self.run_guard(windows=windows))
+        for log in ("", self.aggregate_log.replace(SOURCE, "d" * 40),
+                    self.aggregate_log.replace("full lane", "pr lane")):
+            self.aggregate_log = log
+            for windows in (False, True):
+                with self.subTest(windows=windows), self.assertRaisesRegex(
+                    SystemExit, "No complete successful source CI"
+                ):
+                    self.run_guard(windows=windows)
 
     def test_each_required_job_remains_mandatory(self):
         for missing in sorted(REQUIRED):

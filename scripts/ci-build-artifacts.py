@@ -307,8 +307,9 @@ def resume_artifacts_guard(log, references, execution_sha):
             raise ValueError("completed CI check artifact provenance differs")
 
 
-def resume_published_artifacts_guard(run, producer, log, references):
+def resume_published_artifacts_guard(run, producer, log, references, source_sha=None):
     """Bind ordinary self-hosted output to its successful publication steps."""
+    source_sha = source_sha or run['head_sha']
     repository_id = run.get('repository', {}).get('id')
     attempt = run.get('run_attempt')
     if (type(repository_id) is not int or repository_id <= 0
@@ -322,13 +323,13 @@ def resume_published_artifacts_guard(run, producer, log, references):
         reference = reuse_reference(references, kind)
         step = [row for row in producer.get('steps', [])
                 if row.get('name') == f'Publish local {label} artifact']
-        key = f"{repository_id}-{run['head_sha']}-{run['id']}-{attempt}-{kind}"
+        key = f"{repository_id}-{source_sha}-{run['id']}-{attempt}-{kind}"
         prefix = (f'python3 scripts/ci-build-artifacts.py publish-local --kind {kind} '
                   f'--archive ci-artifacts/{kind}.tar.gz ')
         publish = [group for group in groups if group.startswith(prefix)]
         if (len(step) != 1 or step[0].get('status') != 'completed'
                 or step[0].get('conclusion') != 'success' or len(publish) != 1
-                or reference['source_sha'] != run['head_sha'] or reference['cache_key'] != key
+                or reference['source_sha'] != source_sha or reference['cache_key'] != key
                 or re.findall(r'^  CI_ARTIFACT_KEY: (\S+)$', publish[0], re.M) != [key]
                 or re.findall(r'^digest=([0-9a-f]{64})$', publish[0], re.M) != [reference['sha256']]):
             raise ValueError('completed CI check artifact publisher provenance differs')
@@ -370,17 +371,78 @@ def resume_browser_cases(rows, logs, changes):
     return pattern, evidence
 
 
+def resume_log_text(log):
+    plain = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', log)
+    return re.sub(r'^\ufeff?\d{4}-\d\d-\d\dT\S+ ', '', plain, flags=re.M)
+
+
+def resume_job_env_values(log, name):
+    return {value.strip() for value in re.findall(rf'^  {re.escape(name)}:([^\n]*)$', log, re.M)}
+
+
+def resume_full_browser_filter(value, expected_specs):
+    if not value:
+        return True
+    # ci-domains.py emits only literal spec names separated by alternation.
+    selection = re.fullmatch(r'\(\^\|/\)\(([a-z0-9|-]+)\)\\.spec\\.ts\$', value)
+    return selection is not None and set(selection[1].split("|")) == expected_specs
+
+
+def resume_pr_job_scope(row, log, browser_specs):
+    """A ready PR may execute a subset even when its archive covers the workspace."""
+    name = row["name"]
+    if not {"self-hosted", "Linux"} <= set(row.get("labels", [])):
+        return False
+    log = resume_log_text(log)
+
+    def env(name, *expected):
+        values = resume_job_env_values(log, name)
+        return bool(values) and values <= set(expected)
+
+    capacity_skipped = re.search(r'^(?:::notice|##\[notice\]).*Capacity proofs skipped', log, re.M)
+    if name == "Test":
+        return env("NEXTEST_FILTER", "", "all()")
+    if name == "Next engine":
+        return not capacity_skipped and env("NEXT_CASE_SET", "all")
+    if name.startswith("Playwright E2E ("):
+        suite = "general" if name.startswith("Playwright E2E (general,") else "1.5"
+        filter_name = "PR_GENERAL_FILTER" if suite == "general" else "PR_TELETEXT_FILTER"
+        values = resume_job_env_values(log, filter_name)
+        return (not capacity_skipped and env("COMBINED_CANDIDATE", "", "false")
+                and env("BROWSER_ONLY", "", "none") and bool(values)
+                and all(resume_full_browser_filter(value, browser_specs.get(suite))
+                        for value in values))
+    return name in {"Clippy", "Teletext 1.5"}
+
+
+def resume_browser_inventory():
+    import runpy
+
+    selector = runpy.run_path("scripts/ci-teletext-selection.py")["browser_filter"]
+    paths = subprocess.check_output(["git", "ls-files", "-z", "--", "tests/e2e"]).decode().split("\0")
+    specs = {}
+    for suite in ("general", "1.5"):
+        pattern = re.compile(selector(suite))
+        specs[suite] = {Path(path).name.removesuffix(".spec.ts") for path in paths if pattern.search(path)}
+    return specs
+
+
 def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
-                old_helper, new_helper, changes, references, producer_log, browser_logs=None):
-    """Reuse only actual successful jobs from a completed ordinary full run."""
+                old_helper, new_helper, changes, references, producer_log, browser_logs=None, *,
+                pr_source=None, job_logs=None, browser_specs=None):
+    """Reuse successful jobs from a full run or proven full-scope PR jobs."""
+    pr = run.get("event") == "pull_request"
     if (run.get("status") != "completed" or run.get("conclusion") not in ("success", "failure")
             or run.get("path") != ".github/workflows/ci.yml"
-            or run.get("event") not in ("push", "schedule", "workflow_dispatch")
+            or run.get("event") not in ("push", "schedule", "workflow_dispatch", "pull_request")
             or run.get("head_repository", {}).get("full_name") != repository
             or not re.fullmatch(r"[0-9a-f]{40}", run.get("head_sha", ""))
             or type(run.get("id")) is not int or run["id"] <= 0
             or not re.fullmatch(r"[0-9a-f]{40}", sha)):
         raise ValueError("resume requires a completed same-repository full CI run")
+    if pr and (run["conclusion"] != "success" or changes
+               or not re.fullmatch(r"[0-9a-f]{40}", pr_source or "")):
+        raise ValueError("PR check reuse requires a successful unchanged merge tree")
     rows = jobs.get("jobs", [])
     by_name = {row["name"]: row for row in rows}
     browsers = [
@@ -401,7 +463,15 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
     required.update(name for name in candidate_jobs
                     if name in by_name and by_name[name].get("conclusion") == "skipped")
     producers = set(by_name) & {'Build CI artifacts', 'Verify reused CI artifacts'}
-    if (len(producers) != 1 or set(by_name) != required | producers
+    if pr:
+        inventory_ok = (producers == {"Build CI artifacts"}
+                        and {"Preflight", "CI ok"} <= set(by_name)
+                        and set(by_name) <= required | producers
+                        and all(by_name[name].get("run_attempt") == run.get("run_attempt")
+                                for name in ("Build CI artifacts", "Preflight", "CI ok")))
+    else:
+        inventory_ok = len(producers) == 1 and set(by_name) == required | producers
+    if (not inventory_ok
             or len(rows) != len(by_name) or jobs.get("total_count") != len(rows)
             or any(row.get("status") != "completed" for row in rows)
             or any(row.get("run_id") != run["id"] for row in rows)
@@ -413,15 +483,21 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
     if producer.get('conclusion') != 'success':
         raise ValueError('previous artifact production or verification did not pass')
     if (by_name['Preflight'].get('conclusion') != 'success'
-            or by_name['CI ok'].get('conclusion') not in ('success', 'failure')):
+            or by_name['CI ok'].get('conclusion') not in (('success',) if pr else ('success', 'failure'))):
         raise ValueError('previous run did not execute the full gate')
     if producer_name == 'Build CI artifacts':
-        resume_published_artifacts_guard(run, producer, producer_log, references)
+        resume_published_artifacts_guard(run, producer, producer_log, references, pr_source)
     else:
         resume_artifacts_guard(producer_log, references, run['head_sha'])
     resume_source_guard(changes, old_helper, new_helper, old_workflow, new_workflow)
     scopes = {"clippy": ["Clippy"], "test": ["Test"], "next_engine": ["Next engine"],
               "teletext": ["Teletext 1.5"], "hydration": browser_names}
+    def reusable(name):
+        row = by_name.get(name)
+        return (row is not None and row.get("conclusion") == "success"
+                and (not pr or (row.get("run_attempt") == run.get("run_attempt")
+                                and resume_pr_job_scope(row, (job_logs or {}).get(name, ""), browser_specs or {}))))
+
     reused = {}
     passed_browsers = []
     pending_browsers = list(browsers)
@@ -433,16 +509,18 @@ def resume_plan(run, jobs, repository, sha, old_workflow, new_workflow,
                                            'tests/e2e/local-library-scan-lifecycle.spec.ts'}
                        and name.startswith('Playwright E2E (general,')}
         passed = [by_name[name]["id"] for name in names
-                  if by_name[name].get("conclusion") == "success" and name not in invalidated]
+                  if reusable(name) and name not in invalidated]
         if len(passed) == len(names):
             reused[job] = passed
         if job == "hydration":
             passed_browsers = passed
             pending_browsers = [row for row, name in zip(browsers, names)
-                                if by_name[name].get("conclusion") != "success" or name in invalidated]
-    general = [by_name[name] for name in browser_names[:2]]
-    replay_filter, case_proof = resume_browser_cases(general, browser_logs or {}, changes)
-    return {"run_id": run["id"], "source_sha": run["head_sha"], "execution_sha": sha,
+                                if not reusable(name) or name in invalidated]
+    replay_filter, case_proof = "", []
+    if not pr:
+        general = [by_name[name] for name in browser_names[:2]]
+        replay_filter, case_proof = resume_browser_cases(general, browser_logs or {}, changes)
+    return {"run_id": run["id"], "source_sha": pr_source or run["head_sha"], "execution_sha": sha,
             "jobs": reused, "browser_passed": passed_browsers,
             "browser_pending": pending_browsers, "general_filter": replay_filter,
             "browser_case_proof": case_proof}
@@ -527,7 +605,7 @@ def resume_pr_checks(repository, head, execution, *, candidate=False):
     return None
 
 
-def resume_checks(run, jobs, repository, sha, references, producer_log, browser_logs=None):
+def resume_checks(run, jobs, repository, sha, references, producer_log, browser_logs=None, *, job_logs=None):
     """Bind the API proof to clean exact source before exporting any skips."""
     if subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() != sha:
         raise ValueError("resume checkout differs from the execution SHA")
@@ -537,15 +615,28 @@ def resume_checks(run, jobs, repository, sha, references, producer_log, browser_
     if (not re.fullmatch(r"[0-9a-f]{40}", producer)
             or run.get("head_repository", {}).get("full_name") != repository):
         raise ValueError("resume source is not a same-repository commit")
-    changes = verify_source_equivalence(producer, sha)
+    pr_source = None
+    if run.get("event") == "pull_request":
+        pr_source = reuse_reference(references, "rust")["source_sha"]
+        if reuse_reference(references, "web")["source_sha"] != pr_source:
+            raise ValueError("PR check reuse requires one source for both artifacts")
+    source_sha = pr_source or producer
+    changes = verify_source_equivalence(source_sha, sha)
+    if pr_source:
+        output = subprocess.check_output(["git", "cat-file", "commit", pr_source], text=True)
+        header = output.split("\n\n", 1)[0]
+        parents = [line.removeprefix("parent ") for line in header.splitlines() if line.startswith("parent ")]
+        if len(parents) != 2 or parents[1] != producer:
+            raise ValueError("Artifact source is not the tested merge of the PR head")
     def source(revision, path):
         return subprocess.check_output(["git", "show", f"{revision}:{path}"], text=True)
     return resume_plan(run, jobs, repository, sha,
-                       source(producer, ".github/workflows/ci.yml"),
+                       source(source_sha, ".github/workflows/ci.yml"),
                        source(sha, ".github/workflows/ci.yml"),
-                       source(producer, "scripts/ci-build-artifacts.py"),
+                       source(source_sha, "scripts/ci-build-artifacts.py"),
                        source(sha, "scripts/ci-build-artifacts.py"), changes,
-                       references, producer_log, browser_logs)
+                       references, producer_log, browser_logs, pr_source=pr_source, job_logs=job_logs,
+                       browser_specs=resume_browser_inventory() if pr_source else None)
 
 
 def workspace_test_targets(metadata):
