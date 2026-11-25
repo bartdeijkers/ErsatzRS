@@ -151,14 +151,14 @@ for (const javaScriptEnabled of [true, false]) {
         await pages[0].request.post('/admin-api/settings/ui/save', {
           form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
         });
-        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`);
+        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`);
         await ready(pages[0], javaScriptEnabled);
         const day = await createProfile(pages[0], fixture, 'day', javaScriptEnabled);
         const night = await createProfile(pages[0], fixture, 'night', javaScriptEnabled);
         const urls: string[] = [];
         for (const [index, theme, profile] of [[0, 'day', day], [1, 'night', night]] as const) {
           const page = pages[index];
-          await page.goto(`/channels/${fixture.channels[index]}/teletext`);
+          await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`);
           await ready(page, javaScriptEnabled);
           await selectProfile(page, fixture, profile, javaScriptEnabled);
           const form = await prepareFields(page, fixture, theme);
@@ -361,14 +361,14 @@ for (const [javaScriptEnabled, dark] of [[true, false], [false, true]] as const)
     const text = translations('en_us');
     try {
       await pages[0].request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0 });
-      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`);
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`);
       await ready(pages[0], javaScriptEnabled);
       const day = await createProfile(pages[0], fixture, 'day', javaScriptEnabled);
       const night = await createProfile(pages[0], fixture, 'night', javaScriptEnabled);
       const urls: string[] = [];
       for (const [index, theme, profile] of [[0, 'day', day], [1, 'night', night]] as const) {
         const page = pages[index];
-        await page.goto(`/channels/${fixture.channels[index]}/teletext`);
+        await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`);
         await ready(page, javaScriptEnabled);
         await selectProfile(page, fixture, profile, javaScriptEnabled);
         await submit(page, await prepareFields(page, fixture, theme), text('TeletextValidateSaveDraft'), javaScriptEnabled);
@@ -417,7 +417,7 @@ for (const [javaScriptEnabled, dark] of [[true, false], [false, true]] as const)
       fixture.setOutputPolicy();
       fixture.resetSourceStart();
       await captureOrdinary(fixture, baseURL!, fixture.channels[0], `${candidate}.recovered.ts`, true);
-      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`);
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`);
       await ready(pages[0], javaScriptEnabled);
       await submit(pages[0], pages[0].locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-disable-form"]`), text('TeletextBindingOff'), javaScriptEnabled);
       expect(fixture.binding(fixture.channels[0])?.Enabled).toBe(0);

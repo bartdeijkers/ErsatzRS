@@ -431,6 +431,30 @@ pub struct TeletextSemanticService {
 }
 
 impl TeletextSemanticService {
+    pub(super) fn resolve_channel_links(
+        &mut self,
+        links: Vec<(TeletextPageAddress, Vec<super::TeletextNavigationLink>)>,
+        budget: TeletextServiceBudget,
+    ) -> Result<(), TeletextServiceError> {
+        for (owner, extra) in links {
+            let page = self
+                .base
+                .pages
+                .iter_mut()
+                .find(|p| p.address == owner)
+                .ok_or(TeletextStructureError::MissingInitialPage)?;
+            let previous = page.navigation.len();
+            for link in extra {
+                page.navigation.retain(|old| old.role != link.role);
+                page.navigation.push(link);
+            }
+            self.original_structure_items =
+                self.original_structure_items - previous + page.navigation.len();
+        }
+        self.base.validate_structure()?;
+        self.check_existing_service_budgets(budget)
+    }
+
     /// Validate the complete supplied resolved selection under aggregate budgets.
     /// # Errors
     /// Rejects base/metadata/resource collisions, absent owners, invalid declared

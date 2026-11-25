@@ -335,6 +335,7 @@ impl ApplicationServices {
                                 &input,
                                 deadline,
                                 Some(&selection),
+                                None,
                             ))
                             .await?
                         };
@@ -470,10 +471,7 @@ where
             continue;
         };
         check_deadline(deadline)?;
-        let input = requests
-            .request(contract)
-            .ok_or(Error::SelectionShape)?
-            .to_vec();
+        let input = requests.producer_input(context, contract, selected.addon_id())?;
         let receipt = invoke(
             Arc::clone(&selection),
             selected.addon_id().to_owned(),

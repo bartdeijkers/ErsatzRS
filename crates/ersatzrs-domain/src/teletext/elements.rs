@@ -285,6 +285,9 @@ pub struct TeletextElementSummary {
     pub page_number: u16,
     pub subpage_count: u16,
     pub binding_count: u16,
+    pub cycle_seconds: u16,
+    pub fields: Vec<String>,
+    pub revision: i64,
     pub unset_binding_count: u16,
     pub channel_count: u16,
 }
@@ -303,6 +306,8 @@ pub struct TeletextElementUsage {
 /// A channel's link to an element.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChannelTeletextElement {
+    #[serde(default)]
+    pub instance: Option<TeletextElementInstance>,
     pub id: EntityId,
     pub channel_id: EntityId,
     pub element_id: EntityId,
@@ -314,6 +319,48 @@ pub struct ChannelTeletextElement {
     pub enabled: bool,
 }
 
+/// Working editor revision and the edition selected from it, when available.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeletextAtlasState {
+    pub revision: i64,
+    pub guide_pages: String,
+    pub publication_key: Option<String>,
+    pub generation: Option<i64>,
+    pub staged_guide: Option<bool>,
+}
+
+/// Channel-owned overrides for one use of a library element.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TeletextElementInstance {
+    pub title: Option<String>,
+    pub interval: Option<u16>,
+    #[serde(default)]
+    pub fields: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    pub subpages: Vec<TeletextInstanceSheet>,
+    #[serde(default)]
+    pub links: std::collections::BTreeMap<String, Option<crate::TeletextPageNumber>>,
+    /// Configured keys whose guide destination is switched off in this edition.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inactive_keys: Vec<String>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TeletextInstanceSheet {
+    pub part: u16,
+    pub title: Option<String>,
+    #[serde(default)]
+    pub fields: std::collections::BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeletextAtlasElement {
+    pub element_id: i64,
+    pub page: u16,
+    pub instance: TeletextElementInstance,
+}
 /// Format a hexadecimal magazine/page number as the teletext page users see.
 #[must_use]
 pub fn teletext_element_page_label(page: u16) -> String {

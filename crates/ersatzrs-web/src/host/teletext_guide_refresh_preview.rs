@@ -22,7 +22,9 @@ use super::{
 
 pub(crate) struct CurrentGuidePreview {
     pub(crate) generation: TeletextOutputGenerationObservation,
+    pub(crate) hits: crate::admin::server_fns::teletext_atlas::AtlasHitMap,
     pub(crate) raster: TeletextRaster,
+    pub(crate) cycle_seconds: Option<u16>,
     pub(crate) pages: Vec<TeletextPageAddress>,
     pub(crate) navigation: Vec<TeletextNavigationLink>,
 }
@@ -31,12 +33,21 @@ impl super::state::AppState {
     pub(crate) async fn preview_current_guide<T: Send + 'static>(
         &self,
         channel_id: i64,
-        owner: TeletextPageAddress,
+        owner: Option<TeletextPageAddress>,
+        reveal: bool,
         projection: impl FnOnce(&CurrentGuidePreview) -> Result<T, TeletextAuthoringError>
             + Send
             + 'static,
     ) -> Result<T, TeletextAuthoringError> {
-        preview_current_guide(&self.application, &self.pool, channel_id, owner, projection).await
+        preview_current_guide(
+            &self.application,
+            &self.pool,
+            channel_id,
+            owner,
+            reveal,
+            projection,
+        )
+        .await
     }
 }
 
@@ -47,7 +58,8 @@ async fn preview_current_guide<T: Send + 'static>(
     application: &ApplicationServices,
     pool: &DbPool,
     channel_id: i64,
-    owner: TeletextPageAddress,
+    owner: Option<TeletextPageAddress>,
+    reveal: bool,
     projection: impl FnOnce(&CurrentGuidePreview) -> Result<T, TeletextAuthoringError> + Send + 'static,
 ) -> Result<T, TeletextAuthoringError> {
     let started = Instant::now();
@@ -105,6 +117,7 @@ async fn preview_current_guide<T: Send + 'static>(
             render_current_guide(
                 &service,
                 owner,
+                reveal,
                 generation,
                 authoring.preview,
                 projection,
@@ -131,7 +144,8 @@ async fn preview_current_guide<T: Send + 'static>(
 
 fn render_current_guide<T>(
     service: &ersatzrs_ffmpeg::teletext::EncodedTeletextAuthoredService,
-    owner: TeletextPageAddress,
+    owner: Option<TeletextPageAddress>,
+    reveal: bool,
     generation: TeletextOutputGenerationObservation,
     budget: super::teletext_preview::TeletextPreviewBudget,
     projection: impl FnOnce(&CurrentGuidePreview) -> Result<T, TeletextAuthoringError>,
@@ -140,11 +154,26 @@ fn render_current_guide<T>(
     if Instant::now() >= deadline {
         return Err(unavailable());
     }
-    let preview = project_teletext_preview(
+    let base = service.declared().semantic().base();
+    let owner = match owner {
+        Some(exact) => exact,
+        None => base
+            .pages
+            .iter()
+            .find(|p| p.address.page == base.initial_page)
+            .map(|p| p.address)
+            .ok_or_else(unavailable)?,
+    };
+    let cycle_seconds = service
+        .subpage_cycles()
+        .iter()
+        .find(|cycle| cycle.page() == owner.page)
+        .map(ersatzrs_domain::TeletextSubpageCycle::seconds);
+    let mut preview = project_teletext_preview(
         service,
         owner,
         TeletextColourPixelOptions {
-            reveal_concealed: false,
+            reveal_concealed: reveal,
             flash_phase: TeletextFlashPhase::Original,
         },
         budget,
@@ -158,11 +187,14 @@ fn render_current_guide<T>(
         .iter()
         .map(|p| p.address)
         .collect();
+    let hits = std::mem::take(&mut preview.hits);
     let (raster, navigation) = preview.into_parts();
     let result = projection(&CurrentGuidePreview {
         generation,
         raster,
+        cycle_seconds,
         pages,
+        hits,
         navigation: navigation.to_vec(),
     })
     .map_err(|_| failed_at("projection"))?;

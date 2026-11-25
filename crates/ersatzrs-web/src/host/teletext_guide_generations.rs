@@ -169,10 +169,12 @@ pub(super) fn qualify(
             let expected_bytes = captured
                 .request_bytes(&saved.generation, schema)
                 .map_err(|error| capture_error(&error))?;
-            let expected = TeletextPagesRequest::from_json_for_schema(&expected_bytes, schema)
+            let mut expected = TeletextPagesRequest::from_json_for_schema(&expected_bytes, schema)
                 .map_err(|_| NativeTeletextGenerationError::GuideFreshnessRequired)?;
             // Wire validation alone cannot prove Current/Next/Continuing roles.
             // This comparison also covers every original programme/segment fact.
+            // Page assignments are editor input, separate from the independently captured guide.
+            expected.page_layout.clone_from(&saved.page_layout);
             if saved != expected {
                 return Err(NativeTeletextGenerationError::GuideFreshnessRequired);
             }

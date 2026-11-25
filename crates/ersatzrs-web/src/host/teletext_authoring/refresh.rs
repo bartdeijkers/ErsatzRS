@@ -5,7 +5,7 @@ use std::time::Instant;
 use ersatzrs_app::{
     teletext_design_documents::{
         decode_teletext_design_documents, decode_teletext_effective_design_documents,
-        TeletextDesignDocumentBudget, TeletextSavedDocumentSource,
+        TeletextDesignDocumentBudget, TeletextSavedDocumentSource, TeletextSavedGuideInputs,
         TeletextSavedResourceTransmission, TeletextSavedV1Region,
     },
     ApplicationServices,
@@ -93,6 +93,7 @@ impl GuideRefreshPreparationContext {
 }
 
 struct Recipe {
+    page_layout: Option<String>,
     entry_addon_id: String,
     entry: TeletextPageAddress,
     region: Option<TeletextSavedV1Region>,
@@ -111,6 +112,10 @@ fn original_custom_pages<'a>(
         .find(|(addon, _)| ersatzrs_domain::is_teletext_custom_pages_producer(addon))
         .map(|(_, bytes)| serde_json::from_slice(bytes).map_err(|_| Error::NeedsReview))
         .transpose()
+}
+
+fn guide_page_layout(inputs: Option<&TeletextSavedGuideInputs>) -> Option<String> {
+    inputs.and_then(TeletextSavedGuideInputs::page_layout)
 }
 
 async fn recipe(
@@ -162,6 +167,7 @@ async fn recipe(
                     return Err(Error::NeedsReview);
                 }
                 Ok(Recipe {
+                    page_layout: guide_page_layout(parts.guide_inputs.as_ref()),
                     custom_pages: original_custom_pages(
                         parts
                             .selection
@@ -200,6 +206,7 @@ async fn recipe(
                         .zip(parts.sources.iter().map(TeletextSavedDocumentSource::bytes)),
                 )?;
                 Ok(Recipe {
+                    page_layout: guide_page_layout(parts.guide_inputs.as_ref()),
                     entry_addon_id: parts.entry_addon_id.ok_or(Error::NeedsReview)?,
                     entry: parts.entry.ok_or(Error::NeedsReview)?,
                     region: parts.v1_region,
@@ -325,7 +332,7 @@ pub(in crate::host) async fn prepare_baseline(
         context.hold.clone(),
     )
     .await?;
-    let input = serde_json::json!({
+    let mut input = serde_json::json!({
         "input_version": 2,
         "channel_id": request_channel(&claim.seed),
         "entry_addon_id": recipe.entry_addon_id,
@@ -336,6 +343,10 @@ pub(in crate::host) async fn prepare_baseline(
         "resource_transmissions": recipe.transmissions,
         "guide_channel_ids": claim.seed.qualification.source.channel_ids,
     });
+    if let Some(layout) = recipe.page_layout.as_deref() {
+        input["input_version"] = 3.into();
+        input["page_layout"] = layout.into();
+    }
     let input = parse_native_teletext_authoring_input(&input.to_string(), &context.policy)
         .map_err(|_| Error::NeedsReview)?;
     let preparation = super::guide::GuidePreparationContext {

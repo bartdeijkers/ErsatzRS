@@ -33,6 +33,15 @@ impl TeletextSavedGuideInputs {
         }
     }
 
+    /// Page assignments from the exact v3 request retained with this edition.
+    #[must_use]
+    pub fn page_layout(&self) -> Option<String> {
+        let request = self.request(TeletextPageContract::V3)?;
+        TeletextPagesRequest::from_json_for_schema(request, 3)
+            .ok()?
+            .page_layout
+    }
+
     /// Whether canonically validated invocation inputs contained guide channels.
     /// Even an empty programme list carries source-dependent channel identity.
     /// False identifies frozen inputs, not current clock/guide freshness.
@@ -281,6 +290,9 @@ fn validate(
             // Compare all typed request fields except the deliberately selected
             // schema. Do not clone or reserialize either original byte buffer.
             parsed.schema_version = previous.schema_version;
+            // The receiver assignments belong only to the v3 guide producer.
+            // The exact v3 request bytes are retained above for replay.
+            parsed.page_layout.clone_from(&previous.page_layout);
             if parsed != *previous {
                 return Err(failure(TeletextDesignDocumentFailure::GuideInputs));
             }

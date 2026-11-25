@@ -33,6 +33,7 @@ pub(super) fn count_label(count: u16, one: TextKey, many: TextKey) -> String {
 #[component]
 pub fn TeletextElementsListPage() -> impl IntoView {
     let query = use_query_map();
+    let theme_feedback = query.with_untracked(|q| q.get("theme").unwrap_or_default());
     let saved = query.with_untracked(|q| q.get("saved"));
     let feedback = (saved.as_deref() == Some("deleted")).then(|| {
         view! {
@@ -61,6 +62,7 @@ pub fn TeletextElementsListPage() -> impl IntoView {
                 </a>
             </header>
             {feedback}
+            <super::guide_theme::GuideTheme feedback=theme_feedback/>
             {body}
         </div>
     }

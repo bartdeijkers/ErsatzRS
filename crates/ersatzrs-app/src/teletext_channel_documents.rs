@@ -66,6 +66,29 @@ pub struct TeletextChannelRequestTemplates {
 }
 
 impl TeletextChannelRequestTemplates {
+    pub(super) fn producer_input(
+        &self,
+        context: &SuppliedTeletextGuideContext<'_>,
+        contract: TeletextPageContract,
+        addon: &str,
+    ) -> Result<Vec<u8>, ChannelTeletextDocumentError> {
+        if context.page_layout.is_some()
+            && contract == TeletextPageContract::V3
+            && addon != "org.ersatzrs.addon.tvguide-teletext"
+        {
+            return Ok(build_request_for_schema(
+                &SuppliedTeletextGuideContext {
+                    page_layout: None,
+                    ..*context
+                },
+                3,
+            )?);
+        }
+        Ok(self
+            .request(contract)
+            .ok_or(ChannelTeletextDocumentError::SelectionShape)?
+            .to_vec())
+    }
     /// Borrow the exact template; unselected contracts and Off return `None`.
     #[must_use]
     pub fn request(&self, contract: TeletextPageContract) -> Option<&[u8]> {
@@ -498,9 +521,13 @@ impl ApplicationServices {
                             selected, &input, deadline, published,
                         );
                     }
-                    return Box::pin(
-                        self.produce_teletext_custom_pages(selected, &input, deadline, None),
-                    )
+                    return Box::pin(self.produce_teletext_custom_pages(
+                        selected,
+                        &input,
+                        deadline,
+                        None,
+                        context.page_layout,
+                    ))
                     .await;
                 }
                 match hold {
@@ -690,10 +717,7 @@ where
     let mut remaining = budget.max_response_bytes;
     for (binding, selected) in selection.bindings.iter().enumerate() {
         check_deadline(now(), deadline)?;
-        let input = requests
-            .request(selected.contract)
-            .ok_or(ChannelTeletextDocumentError::SelectionShape)?
-            .to_vec();
+        let input = requests.producer_input(context, selected.contract, &selected.addon_id)?;
         let receipt = invoke(selected.clone(), input, deadline)
             .await
             .map_err(|error| ChannelTeletextDocumentError::Runtime { binding, error })?;

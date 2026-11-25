@@ -4,7 +4,7 @@ use leptos_router::hooks::use_location;
 use crate::admin::i18n::{tr, TextKey};
 
 stylance::import_crate_style!(
-    style,
+    pub(crate) style,
     "src/admin/ui/primitives/settings_navigation.module.css"
 );
 

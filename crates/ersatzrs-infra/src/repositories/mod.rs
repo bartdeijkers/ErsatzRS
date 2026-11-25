@@ -62,6 +62,7 @@ use sqlx::Pool;
 pub use teletext_designs::SqliteTeletextDesignRepository;
 pub use teletext_elements::SqliteTeletextElementRepository;
 pub use teletext_generations::SqliteTeletextGenerationRepository;
+pub(crate) use teletext_profiles::AtlasGuideSettings;
 pub use teletext_profiles::SqliteTeletextProfileRepository;
 pub use teletext_publications::SqliteTeletextPublicationRepository;
 pub use television::SqliteTelevisionRepository;

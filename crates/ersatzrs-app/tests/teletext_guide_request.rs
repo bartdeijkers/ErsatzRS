@@ -44,6 +44,7 @@ fn public_builder_retains_full_group_and_actual_segments_without_internal_metada
         programmes: &occurrences,
     }];
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: "epoch",
         locale: "nl-NL",
         supported_locales: &["nl-NL"],
@@ -79,6 +80,7 @@ fn public_builder_retains_full_group_and_actual_segments_without_internal_metada
 #[test]
 fn public_builder_rejects_noncanonical_locale_without_fallback() {
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: "epoch",
         locale: "NL-nl",
         supported_locales: &["nl-NL", "en-US"],

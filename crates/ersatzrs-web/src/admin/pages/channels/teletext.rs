@@ -24,6 +24,7 @@ use crate::admin::ui::primitives::teletext::{
 
 stylance::import_crate_style!(pub(super) style, "src/admin/pages/channels/teletext.module.css");
 
+mod atlas;
 mod guided;
 #[path = "teletext_readiness.rs"]
 mod readiness;
@@ -40,6 +41,20 @@ pub fn ChannelTeletextPage() -> impl IntoView {
                 .unwrap_or(0)
         })
     };
+    if !query.with_untracked(|q| {
+        [
+            "advanced",
+            "design_id",
+            "guide_setup",
+            "guide_preview",
+            "saved",
+            "error",
+        ]
+        .iter()
+        .any(|key| q.get(key).is_some())
+    }) {
+        return view! { <atlas::Atlas channel_id=channel_id()/> }.into_any();
+    }
     let error = query.with_untracked(|values| values.get("error").unwrap_or_default());
     let saved = query.with_untracked(|values| values.get("saved").unwrap_or_default());
     let data = Resource::new_blocking(
@@ -70,7 +85,7 @@ pub fn ChannelTeletextPage() -> impl IntoView {
                 ))
             }}
         </Suspense>
-    }
+    }.into_any()
 }
 
 type ChannelPageData = (

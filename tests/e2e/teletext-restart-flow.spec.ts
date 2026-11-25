@@ -169,13 +169,13 @@ for (const standalone of [false, true]) for (const [language, module, js, dark] 
     copyFileSync(join(fixture.root, 'synthetic-client-source.ts'), `${prefix}.source.ts`);
     try {
       await pages[0].request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0 });
-      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], js);
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(pages[0], js);
       const day = await createProfile(pages[0], fixture, 'day', js);
       const night = await createProfile(pages[0], fixture, 'night', js);
       const selectedUrls: string[] = [];
       for (const [index, theme, profile] of [[0, 'day', day], [1, 'night', night]] as const) {
         const page = pages[index];
-        await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, js);
+        await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, js);
         await bind(page, fixture, profile, js);
         selectedUrls.push(await prepare(page, fixture, `Restart selected ${theme}`, js));
         await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), js);
@@ -421,14 +421,14 @@ test('standalone Level 1.5 Lua scopes survive real host restarts and expire to a
   };
   try {
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const day = await createProfile(page, fixture, 'day', true);
     const night = await createProfile(page, fixture, 'night', true);
     const bases: string[] = [];
     for (const [index, theme, profile] of [[0, 'day', day], [1, 'night', night]] as const) {
       await queueScripted(page, fixture, fixture.channels[index], 'reset', undefined, 80);
       expect(fixture.scriptedIntervals(fixture.channels[index])).toEqual([]);
-      await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, true);
       await bind(page, fixture, profile, true);
       bases.push(await prepare(page, fixture, `Scoped restart base ${theme}`, true)); await publish();
     }
@@ -436,7 +436,7 @@ test('standalone Level 1.5 Lua scopes survive real host restarts and expire to a
     const enabled = fixture.scriptedIntervals(fixture.channels[0]);
     expect(enabled).toHaveLength(1); expect(enabled[0].State).toBe(1); expect(enabled[0].ProfileId).toBe(night);
     const onFinish = scopeUtc(enabled[0].Finish); expect(Number.isFinite(onFinish)).toBe(true);
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const scopedOn = await prepare(page, fixture, 'Scoped restart Lua Night', true, true); await publish();
     await raster(page, 'night', '200');
     await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[0], `${prefix}.on.before.ts`);
@@ -453,7 +453,7 @@ test('standalone Level 1.5 Lua scopes survive real host restarts and expire to a
     await queueScripted(page, fixture, fixture.channels[0], 'continue', undefined, 80);
     expect(fixture.scriptedIntervals(fixture.channels[0])).toEqual(off);
     const finish = scopeUtc(off[0].Finish); expect(Number.isFinite(finish)).toBe(true);
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const form = page.getByTestId('teletext-effective-authoring-form');
     const publishAdvanced = page.getByTestId('teletext-publish-advanced');
     if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
@@ -533,13 +533,13 @@ test('standalone Level 1.5 future On survives host replacement and expires to ba
   };
   try {
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const day = await createProfile(page, fixture, 'day', true);
     const night = await createProfile(page, fixture, 'night', true);
     const bases: string[] = [];
     for (const [index, theme, profile] of [[0, 'day', day], [1, 'night', night]] as const) {
       await queueScripted(page, fixture, fixture.channels[index], 'reset', undefined, 80);
-      await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, true);
       await bind(page, fixture, profile, true);
       bases.push(await prepare(page, fixture, `Future scope base ${theme}`, true)); await publish();
     }
@@ -558,7 +558,7 @@ test('standalone Level 1.5 future On survives host replacement and expires to ba
     await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[0], `${prefix}.future.after.day.ts`);
     expect(Date.now()).toBeLessThan(start);
     await expect.poll(() => Date.now() >= start, { timeout: 85_000 }).toBe(true);
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const scoped = await prepare(page, fixture, 'Future Lua Night now active', true, true); await publish();
     await raster(page, 'night', '200');
     await captureScheduled(fixture, isolatedWebHost.baseURL, fixture.channels[0], `${prefix}.active.night.ts`);
@@ -662,10 +662,10 @@ test(`standalone Level 1.5 active ${mode} viewers release source processes and l
       await saveWrapperChoice(page, '', 'en_us', true);
       expect(fixture.setting('ffmpeg.default_mpegts_script')).toBe('');
     }
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const profiles = [await createProfile(page, fixture, 'day', true), await createProfile(page, fixture, 'night', true)];
     for (const [index, profile] of profiles.entries()) {
-      await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, true);
       await bind(page, fixture, profile, true);
       await prepare(page, fixture, `Active viewer ${index}`, true);
       await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), true);
@@ -888,11 +888,11 @@ for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: fal
       try {
         await pages[0].request.post('/admin-api/settings/ui/save',
           { form: { language: 'en-us', is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
-        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], variant.js);
+        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(pages[0], variant.js);
         const shared = await createProfile(pages[0], fixture, 'day', variant.js);
         const urls: string[] = [];
         for (const [index, page] of pages.entries()) {
-          await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, variant.js);
+          await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, variant.js);
           await bind(page, fixture, shared, variant.js);
           urls.push(await prepare(page, fixture, `Shared initial ${index}`, variant.js));
           await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), variant.js);
@@ -905,7 +905,7 @@ for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: fal
           { form: { language: variant.language, is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
         await observe(urls, ['selected', 'selected'], 'day', 'initial');
         await captures('initial', [true, true]);
-        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], variant.js);
+        await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(pages[0], variant.js);
         const form = pages[0].locator(`[data-addon-id="${fixture.addonId}"] [data-testid="teletext-profile-form"][data-profile-id="${shared}"]`);
         const advanced = form.locator('xpath=ancestor::details[@data-testid="teletext-source-advanced"]');
         if (await advanced.count() > 0 && await advanced.getAttribute('open') === null) await advanced.locator(':scope > summary').click();
@@ -918,7 +918,7 @@ for (const variant of [{ module: 'en_us', language: 'en-us', js: true, dark: fal
         await observe(urls, ['unavailable', 'unavailable'], 'day', 'invalidated');
         await captures('invalidated', [false, false]);
         for (const [index, page] of pages.entries()) {
-          await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, variant.js);
+          await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, variant.js);
           // The existing prepare helper uses EN labels; input language alone is
           // switched for preparation, then both publication views return to NL/EN.
           await page.request.post('/admin-api/settings/ui/save',
@@ -985,7 +985,7 @@ test('standalone Level 1.5 ordinary URL is held for an external client qualifica
     try {
       await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
       const channel = fixture.channels[0];
-      await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
       await bind(page, fixture, await createProfile(page, fixture, 'day', true), true);
       await prepare(page, fixture, 'External Level 1.5 qualification', true);
       await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), true);
@@ -1110,11 +1110,11 @@ for (const variant of [
         await page.request.post('/admin-api/settings/ui/save',
           { form: { language: 'en-us', is_dark_mode: String(variant.dark) }, maxRedirects: 0 });
         if (variant.mode === 'ts') await saveWrapperChoice(page, '', 'en_us', variant.js);
-        await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, variant.js);
+        await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, variant.js);
         const profiles = [await createProfile(page, fixture, 'day', variant.js), await createProfile(page, fixture, 'night', variant.js)];
         const urls: string[] = [];
         for (const [index, profile] of profiles.entries()) {
-          await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, variant.js);
+          await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, variant.js);
           await bind(page, fixture, profile, variant.js);
           urls.push(await prepare(page, fixture, `Per-output delivery ${index}`, variant.js));
           await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), variant.js);
@@ -1225,7 +1225,7 @@ for (const variant of [
         const mixed = await uploadCustomPage(page, channel, 150,
           ['CUSTOM ORIGINAL150', 'NOW %NOW%%%%%%%%%%%%', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%']);
         const clock = await uploadCustomPage(page, channel, 151, ['CLOCK ORIGINAL151', 'TIME %TIME%% FIXED']);
-        await page.goto(`/channels/${channel}/teletext`); await ready(page, variant.js);
+        await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, variant.js);
         await bind(page, fixture, await createProfile(page, fixture, 'day', variant.js), variant.js);
         const url = await prepare(page, fixture, 'Immutable field refresh', variant.js);
         await submit(page, page.getByTestId('teletext-publication-request-form'), text('en_us')('TeletextPublicationRequest'), variant.js);

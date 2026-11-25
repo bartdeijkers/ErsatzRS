@@ -432,6 +432,7 @@ async fn install_and_accept(state: &AppState, root: &Path) -> i64 {
 async fn publish_original(state: &AppState) -> i64 {
     let policy = parse_native_teletext_runtime_policy(POLICY).unwrap();
     let guide = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: GENERATION,
         locale: "nl",
         supported_locales: &["nl"],

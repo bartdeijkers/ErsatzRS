@@ -40,7 +40,7 @@ async function ensureFormOpen(form: Locator): Promise<void> {
 }
 
 async function visit(page: Page, channel: number, javaScriptEnabled: boolean): Promise<void> {
-  await page.goto(`/channels/${channel}/teletext`);
+  await page.goto(`/channels/${channel}/teletext?advanced=1`);
   await expect(page.locator('[data-not-found]')).toHaveCount(0);
   await expect(page.getByTestId('channel-teletext-page')).toBeVisible();
   if (javaScriptEnabled) await waitForHydration(page);

@@ -220,6 +220,7 @@ impl CapturedTeletextGuide {
         locales: &'a [&'a str],
     ) -> SuppliedTeletextGuideContext<'a> {
         SuppliedTeletextGuideContext {
+            page_layout: None,
             generation,
             locale: self.locale,
             supported_locales: locales,

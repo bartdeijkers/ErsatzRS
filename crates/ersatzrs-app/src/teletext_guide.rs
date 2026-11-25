@@ -21,8 +21,10 @@ pub struct TeletextGuideChannel<'a> {
 }
 
 /// Explicit host context; locale membership never normalizes or falls back.
+#[derive(Clone, Copy)]
 pub struct SuppliedTeletextGuideContext<'a> {
     pub generation: &'a str,
+    pub page_layout: Option<&'a str>,
     pub locale: &'a str,
     /// Canonical values supplied by the host's authoritative locale boundary.
     pub supported_locales: &'a [&'a str],
@@ -127,6 +129,10 @@ pub fn build_request_for_schema(
         .collect::<Result<_, _>>()?;
     Ok(wire::TeletextPagesRequest {
         schema_version: expected_schema,
+        page_layout: context
+            .page_layout
+            .filter(|_| expected_schema == 3)
+            .map(str::to_owned),
         generation: context.generation.to_owned(),
         locale: context.locale.to_owned(),
         timezone: context.timezone.to_owned(),

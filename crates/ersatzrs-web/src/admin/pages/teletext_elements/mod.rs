@@ -6,3 +6,5 @@ pub mod data;
 pub mod editor;
 pub mod list;
 pub mod screen;
+
+pub(crate) mod guide_theme;

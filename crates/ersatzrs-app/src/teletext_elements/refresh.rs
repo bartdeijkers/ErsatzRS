@@ -118,6 +118,7 @@ mod tests {
         cells[..6].copy_from_slice(b"\x01OLD!!");
         cells[20..25].copy_from_slice(b"FIXED");
         TeletextCustomPageWire {
+            channel_links: Vec::new(),
             element_id: 7,
             element_revision: 3,
             page: number,

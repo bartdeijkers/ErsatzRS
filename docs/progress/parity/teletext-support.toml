@@ -2,7 +2,7 @@ feature    = 'Teletext support'
 etv_source = 'No teletext-specific policy was located in the 2026-10-10 `$ERSATZTV_SRC` audit at 46118d43313b7828780fbfcfb46e980390ea8b0d; p9a-01 records existing subtitle behavior as the baseline and authored pages as an ErsatzRS extension under ADRs 0120/0121'
 rs_target  = '`crates/ersatzrs-domain`, `crates/ersatzrs-core`, `crates/ersatzrs-app`, `crates/ersatzrs-infra`, `crates/ersatzrs-scanner`, `crates/ersatzrs-ffmpeg`, `crates/ersatzrs-web`, first-party FFmpeg runtime packaging, `crates/ersatzrs-addon-contract`, one new tvguide teletext add-on in the separate ErsatzRS-Addons repository'
 status     = 'In progress'
-adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127', '0133', '0134']
+adr        = ['0120', '0121', '0122', '0123', '0124', '0126', '0127', '0133', '0134', '0140']
 summary = '''
 Current agreed Phase9 delivery Complete2026-11-03: P9A-04/P9B-01/P9B-02 accept
 required Level1/1.5, lossless generic authoring/TTI/metadata, profiles/themes/zones/
@@ -20,6 +20,11 @@ applicable maintainer task/capability is required to resume deferred work.
 The 2026-11-13 parity-debt task separately owns the operational recovery proof
 below. Its open transport and native Windows items do not reopen accepted
 Phase9 engine/release components or resume enhanced-only/editor work.
+
+Atlas (ADR 0140), verified 2026-11-25 with the native host and guide 0.1.4:
+4:3 at 4K, unpublished previews, mixed index and FastText links, TTI reveal,
+number conflicts after reload, one-save publication, stale tabs, themes,
+subpages and server-rendered reading.
 
 Enhanced-only service/resources remain experimental.
 Standalone Level1/1.5 is accepted at p9a-level15; enhanced-only

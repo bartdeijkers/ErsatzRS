@@ -151,6 +151,7 @@ pub(crate) struct NativeTeletextAuthoringInput {
     v1_region: ersatzrs_app::teletext_design_documents::TeletextSavedV1Region,
     transmissions: Vec<LifecycleInput>,
     guide_channel_ids: Option<Vec<i64>>,
+    pub(super) page_layout: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -211,10 +212,16 @@ pub(crate) fn parse_native_teletext_authoring_input(
     check_authoring_bytes(raw)?;
     let dto: AuthoringInput =
         serde_json::from_str(raw).map_err(|_| TeletextAuthoringPolicyError::InvalidJson)?;
+    if dto.page_layout.as_ref().is_some_and(|layout| {
+        dto.input_version != 3 || layout.is_empty() || layout.len() > 16 * 1024
+    }) || (dto.input_version == 3 && dto.page_layout.is_none())
+    {
+        return Err(TeletextAuthoringPolicyError::InvalidJson);
+    }
     let guide_channel_ids = match (dto.input_version, dto.guide_channel_ids.0) {
         (1, None) => None,
-        (1, Some(_)) | (2, None) => return Err(TeletextAuthoringPolicyError::InvalidJson),
-        (2, Some(channels)) => {
+        (1, Some(_)) | (2 | 3, None) => return Err(TeletextAuthoringPolicyError::InvalidJson),
+        (2 | 3, Some(channels)) => {
             check_guide_channels(&channels, policy)?;
             Some(channels)
         }
@@ -236,6 +243,7 @@ pub(crate) fn parse_native_teletext_authoring_input(
         v1_region: dto.v1_region,
         transmissions: dto.resource_transmissions,
         guide_channel_ids,
+        page_layout: dto.page_layout,
     })
 }
 
@@ -471,6 +479,14 @@ struct AuthoringInput {
     resource_transmissions: Vec<LifecycleInput>,
     #[serde(default)]
     guide_channel_ids: OptionalGuideChannels,
+    #[serde(default, deserialize_with = "optional_page_layout")]
+    page_layout: Option<String>,
+}
+
+fn optional_page_layout<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<String>, D::Error> {
+    String::deserialize(d).map(Some)
 }
 
 #[derive(Default)]
@@ -2200,6 +2216,18 @@ mod tests {
     }
 
     #[test]
+    fn atlas_layout_requires_version_three_and_guide_channels() {
+        let policy = authoring_policy(&guide_authoring_fixture());
+        let mut input = guide_authoring_input();
+        input["page_layout"] = json!("[{\"page\":200}]");
+        assert_authoring_input_error(&input, &policy, TeletextAuthoringPolicyError::InvalidJson);
+        input["input_version"] = json!(3);
+        assert!(parse_native_teletext_authoring_input(&input.to_string(), &policy).is_ok());
+        input.as_object_mut().unwrap().remove("guide_channel_ids");
+        assert_authoring_input_error(&input, &policy, TeletextAuthoringPolicyError::InvalidJson);
+    }
+
+    #[test]
     fn authoring_on_input_requires_exact_owner_entry_region_and_lifecycle() {
         let policy = authoring_policy(&authoring_fixture());
         let value = authoring_input(1, "org.example.synthetic", 200);
@@ -2386,7 +2414,7 @@ mod tests {
         version["version"] = json!(3);
         assert_authoring_error(&version, TeletextAuthoringPolicyError::UnsupportedVersion);
         let mut input_version = input.clone();
-        input_version["input_version"] = json!(3);
+        input_version["input_version"] = json!(4);
         assert_authoring_input_error(
             &input_version,
             &policy,

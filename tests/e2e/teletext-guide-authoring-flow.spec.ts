@@ -20,7 +20,7 @@ const databasePath = process.env.E2E_DB_PATH;
 const candidateZip = process.env.ERSATZRS_TVGUIDE_CANDIDATE_ZIP;
 const candidateDigest = candidateZip ? sha256(readFileSync(candidateZip)) : undefined;
 const addonId = 'org.ersatzrs.addon.tvguide-teletext';
-const productionVersion = '0.1.2';
+const productionVersion = process.env.ERSATZRS_TVGUIDE_CANDIDATE_VERSION ?? '0.1.2';
 const cultures = [
   ['en-us', 'en_us'], ['nl', 'nl'], ['pl', 'pl'], ['pt-br', 'pt_br'],
   ['fr-fr', 'fr_fr'], ['de-de', 'de_de'], ['es-es', 'es_es'],
@@ -272,6 +272,239 @@ function savedOriginal(fixture: TeletextChannelFixture, channel: number): SavedO
   return JSON.parse(Buffer.from(row.Document).toString('utf8'));
 }
 
+test('Atlas saves assigned pages, colour keys and subpage timing from the desktop editor', async ({ browser, baseURL }, info) => {
+  test.skip(productionVersion !== '0.1.4', 'Requires an Atlas-capable guide package.');
+  test.setTimeout(180_000);
+  const fixture = new TeletextChannelFixture(databasePath!, { retainPublication: true });
+  const channel = fixture.channels[1];
+  const media = seedSqlGuide(fixture);
+  const themeKey = 'teletext.atlas.guide.theme';
+  const settings = [themeKey, 'pages.language', 'pages.is_dark_mode'].map(key => ({
+    key, previous: fixture.database.prepare('SELECT Value FROM ConfigElement WHERE Key=?').get(key) as { Value: string } | undefined,
+  }));
+  const context = await browser.newContext({ baseURL, viewport: { width: 3840, height: 2160 } });
+  const errors: string[] = [];
+  try {
+    const page = await context.newPage();
+    page.setDefaultTimeout(10_000);
+    page.on('pageerror', e => errors.push(e.message));
+    const setup = await page.request.post('/admin-api/teletext/capacity/apply', {
+      form: { channel_id: channel, profile: 'tvguide-16', confirm_scope: '1' }, maxRedirects: 0,
+    });
+    expect(setup.headers().location).toContain('saved=capacity');
+    const path = `/channels/${channel}/teletext`;
+    await page.goto(path, {timeout: 25_000});
+    const workspace = page.locator('[data-atlas]');
+    await expect(workspace).toHaveAttribute('data-ready', 'true');
+    await expect(workspace.locator('[data-guide-off]')).toBeVisible();
+    await expect(workspace.locator('.atlas-picture [data-destination="201"]')).toBeVisible({timeout:30_000});
+    await workspace.locator('[data-tab="sources"]').click();
+    await workspace.locator('[name="guide_on"]').check();
+    await workspace.locator('[data-tab="pages"]').click();
+    const index = workspace.locator('[data-index]');
+    const picture = workspace.locator('.atlas-picture');
+    const destination = (n: number) => picture.locator('[data-destination="' + n + '"]');
+    await expect(destination(201)).toBeVisible({timeout: 30_000});
+    expect(fixture.database.prepare('SELECT 1 FROM TeletextAcceptedGenerationCurrent WHERE ChannelId=?').get(channel)).toBeUndefined();
+    expect(fixture.database.prepare('SELECT 1 FROM ChannelTeletextBinding WHERE ChannelId=? AND Enabled=1 AND AddonId=?').get(channel, addonId)).toBeUndefined();
+    for (const key of ['red', 'green', 'yellow', 'blue']) {
+      await expect(picture.locator('[data-shortcut=' + key + ']')).toBeVisible();
+    }
+    await destination(201).focus();
+    await page.keyboard.press('Enter');
+    await expect(workspace.locator('#atlas-number')).toHaveValue('201');
+    await picture.locator('[data-shortcut=blue]').click();
+    await expect(workspace.locator('#atlas-number')).toHaveValue('200');
+    const duplicate = index.locator('[data-assign="201"]');
+    await duplicate.fill('200');
+    await page.reload();
+    await expect(duplicate).toHaveValue('200');
+    await index.locator('[data-page="200"] [data-do=open]').click();
+    await workspace.locator('[data-tab="sources"]').click();
+    await workspace.locator('[data-edition] > footer button').click();
+    await expect(duplicate).toBeFocused();
+    await expect(duplicate).toHaveValue('200');
+    expect(await duplicate.evaluate(e => (e as HTMLInputElement).validity.customError)).toBe(true);
+    await duplicate.fill('201');
+    await duplicate.press('Tab');
+    await index.locator('li[data-page="200"] [data-assign]').press('ArrowUp');
+    await expect(index.locator('li[data-page]').first()).toHaveAttribute('data-page','201');
+    await expect(index.locator('li[data-page]').last()).toHaveAttribute('data-page','202');
+    await index.locator('li[data-page="202"] [data-assign]').press('ArrowDown');
+    await expect(index.locator('li[data-page]').first()).toHaveAttribute('data-page','200');
+    const row = workspace.locator('li[data-page="201"]');
+    await row.hover();
+    await row.locator('[data-do="edit"]').click();
+    const dialog = page.locator('[data-editor]');
+    await dialog.locator('a[href="/teletext-elements#guide-theme"]').click();
+    const theme = page.locator('[data-theme-dialog] [data-guide-theme]');
+    await theme.locator('[name=banner]').fill('ATLAS GUIDE');
+    await theme.locator('[name=heading]').selectOption('cyan');
+    await theme.locator('button').click();
+    await expect(theme.locator('[role=status]')).not.toBeEmpty();
+    await page.locator('[data-do=close-theme]').click();
+    await dialog.locator('[name="title"]').fill('Channel guide');
+    await dialog.locator('[name="interval"]').fill('18');
+    await dialog.locator('[data-link-fields] summary').click();
+    await dialog.locator('[name="red"]').selectOption('200');
+    await dialog.locator('button[type="submit"]').click();
+    await row.hover();
+    await row.locator('[data-do="add-sheet"]').first().click();
+    await dialog.locator('[name="title"]').fill('Second sheet');
+    await dialog.locator('button[type="submit"]').click();
+    await workspace.locator('[data-edition] > footer button').click();
+    await expect(page).toHaveURL(/edition=|atlas_error=/, {timeout:45_000});
+    expect(page.url()).toMatch(/edition=[1-9]/);
+    const published = page.url();
+    await expect(workspace.locator('[data-image]')).toBeVisible({timeout: 20_000});
+    await workspace.locator('li[data-page="201"] [data-do="open"]').click();
+    await expect(workspace.locator('[data-colour="red"]')).toHaveText('200');
+    await expect(workspace.locator('[data-counter]')).toHaveText('201 · 1/2');
+    await workspace.locator('[data-do="cycle"]').click();
+    await expect(workspace.locator('[data-do="cycle"]')).toHaveText('Pause');
+    await workspace.locator('[data-do="cycle"]').click();
+    await page.screenshot({path: info.outputPath('atlas-3840x2160.png')});
+    await workspace.locator('[data-edition] > footer button').click();
+    await expect(page).toHaveURL(published);
+    const saved = savedOriginal(fixture,channel);
+    const original = JSON.parse(saved.guide_inputs.v3);
+    expect(JSON.parse(original.page_layout).find((entry: {page: number}) => entry.page===201)).toMatchObject({title:'Channel guide',interval:18,links:{red:200}});
+    expect(JSON.parse(original.page_layout).find((entry: {page: number}) => entry.page===200).theme).toMatchObject({banner:'ATLAS GUIDE',heading:'cyan'});
+    // A stale tab must never replace the accepted edition.
+    const stale = await workspace.locator('[data-edition]').evaluate(form => Object.fromEntries(new FormData(form as HTMLFormElement)));
+    const conflict = await page.request.post('/admin-api/teletext/atlas/save', {form: {...stale, revision: '0'} as Record<string,string>, maxRedirects: 0});
+    expect(conflict.headers().location).toContain('atlas_error=conflict');
+    expect(savedOriginal(fixture,channel)).toEqual(saved);
+    // Switching the draft off still allows browsing; the accepted edition changes on save.
+    await workspace.locator('[data-tab="sources"]').click();
+    await workspace.locator('[name="guide_on"]').uncheck();
+    await workspace.locator('[data-tab="pages"]').click();
+    await expect(workspace.locator('[data-guide-off]')).toBeVisible();
+    await workspace.locator('[data-do="home"]').click();
+    await expect(destination(201)).toBeVisible();
+    expect(fixture.database.prepare('SELECT GenerationId FROM TeletextAcceptedGenerationCurrent WHERE ChannelId=?').get(channel)).toBeDefined();
+    await workspace.locator('[data-tab="sources"]').click();
+    await workspace.locator('[data-edition] > footer button').click();
+    await expect(page).toHaveURL(/guide=off/);
+    expect(fixture.database.prepare('SELECT GenerationId FROM TeletextAcceptedGenerationCurrent WHERE ChannelId=?').get(channel)).toBeUndefined();
+    await workspace.locator('[name="guide_on"]').check();
+    await workspace.locator('[data-edition] > footer button').click();
+    await expect(page).toHaveURL(/edition=[1-9]/, {timeout:45_000});
+    await workspace.locator('[data-tab="pages"]').click();
+    await expect(workspace.locator('li[data-page="201"] [data-do="open"]')).toHaveText('Channel guide');
+    await page.request.post('/admin-api/settings/ui/save', {form:{language:'nl',is_dark_mode:'true'},maxRedirects:0});
+    await page.goto(path);
+    await expect(workspace.locator('[data-edition] > footer button')).toHaveText('Teletekst opslaan');
+    await workspace.locator('li[data-page="201"] [data-do="open"]').click();
+    await expect(workspace.locator('[data-image]')).toBeVisible();
+    const frame = await picture.boundingBox();
+    const bitmap = await picture.locator('img').boundingBox();
+    expect(bitmap!.width / bitmap!.height).toBeCloseTo(4 / 3, 2);
+    expect(bitmap!.height).toBeCloseTo(frame!.height, 0);
+    expect(await picture.locator('img').evaluate(img => new DOMParser().parseFromString(
+      atob((img as HTMLImageElement).src.split(',')[1]),'image/svg+xml').documentElement.getAttribute('preserveAspectRatio'))).toBe('none');
+    const pageRows = index.locator('[data-page] > [data-row]');
+    const positions = () => pageRows.evaluateAll(rows => rows.map(row =>
+      ['[data-number]', '[data-open]', '[data-tools-row]'].map(selector =>
+        row.querySelector(selector)!.getBoundingClientRect().left)));
+    const columns = await positions();
+    expect(columns[0]).toEqual(columns[1]);
+    await row.locator('[data-do=fold]').click();
+    await expect(row.locator('ol > li')).toHaveCount(2);
+    await row.locator('[data-do=edit]').first().hover();
+    expect(await positions()).toEqual(columns);
+    const keypad = workspace.locator('.atlas-remote');
+    const eight = await keypad.locator('[data-digit="8"]').boundingBox();
+    const zero = await keypad.locator('[data-digit="0"]').boundingBox();
+    expect(zero!.x).toBe(eight!.x);
+    expect(zero!.width).toBe(eight!.width);
+    await page.screenshot({path: info.outputPath('atlas-nl-dark-3840x2160.png')});
+    await workspace.locator('.atlas-index').screenshot({path: info.outputPath('atlas-index.png')});
+    await keypad.screenshot({path: info.outputPath('atlas-keypad.png')});
+    await row.locator('[data-do=fold]').click();
+    await page.setViewportSize({width:320,height:800});
+    expect(await index.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await page.setViewportSize({width:390,height:844});
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const plain = await browser.newContext({baseURL, javaScriptEnabled:false});
+    try {
+      const ssr = await plain.newPage();
+      await ssr.goto(path+'?tab=sources');
+      await expect(ssr.locator('[data-panel=sources]')).toBeVisible();
+      await ssr.locator('[data-tab=pages]').click();
+      await expect(ssr.locator('[data-index] a').first()).toBeVisible();
+      await expect(ssr.locator('[data-image]')).toBeVisible();
+    } finally { await plain.close(); }
+
+    // The same uploaded element can be assigned twice, with independent FastText destinations.
+    const elementId = await uploadCustomPage(page, channel, 150, ['ATLAS STATION', 'TITLE \x1bXSECRET']);
+    await page.goto(path);
+    await workspace.locator('[data-do=add]').click();
+    await dialog.locator('[name=template]').selectOption('element:' + elementId);
+    await dialog.locator('[name=page]').fill('250');
+    await dialog.locator('[name=title]').fill('Second station');
+    await dialog.locator('[data-link-fields] summary').click();
+    await dialog.locator('[name=red]').selectOption('201');
+    await dialog.locator('button[type=submit]').click();
+    await row.hover();
+    await row.locator('[data-do=edit]').first().click();
+    if (!await dialog.locator('[name=blue]').isVisible()) await dialog.locator('[data-link-fields] summary').click();
+    await dialog.locator('[name=blue]').selectOption('250');
+    await dialog.locator('button[type=submit]').click();
+    await workspace.locator('[data-edition] > footer button').click();
+    await expect(page).toHaveURL(/edition=[1-9]|atlas_error=/, {timeout:45_000});
+    expect(page.url()).toMatch(/edition=[1-9]/);
+    const libraryState = JSON.parse((await workspace.getAttribute('data-config'))!).custom;
+    expect(libraryState.links.find((link: {page: string}) => link.page === '250')).toMatchObject({issue:null});
+    await workspace.locator('[data-do="home"]').click();
+    await expect(destination(250)).toBeVisible();
+    await destination(250).click();
+    await expect(workspace.locator('[data-image]')).toBeVisible();
+    const concealed = await workspace.locator('[data-image]').getAttribute('src');
+    await picture.click({position:{x:4,y:4}});
+    await expect(workspace.locator('.atlas-digits [data-do=reveal]')).toHaveAttribute('aria-pressed','false');
+    await picture.locator('[data-do=reveal]').first().click();
+    await expect(workspace.locator('[data-image]')).toBeVisible();
+    await expect(workspace.locator('[data-image]')).not.toHaveAttribute('src',concealed!);
+    await workspace.locator('.atlas-digits [data-do=reveal]').click();
+    await expect(workspace.locator('[data-image]')).toHaveAttribute('src',concealed!);
+    await workspace.locator('[data-colour=red]').click();
+    await expect(workspace.locator('#atlas-number')).toHaveValue('201');
+    await workspace.locator('[data-colour=blue]').click();
+    await expect(workspace.locator('#atlas-number')).toHaveValue('250');
+    await workspace.locator('[data-tab=sources]').click();
+    await workspace.locator('[name=guide_on]').uncheck();
+    await Promise.all([
+      page.waitForNavigation({waitUntil:'domcontentloaded',timeout:45_000}),
+      workspace.locator('[data-edition] > footer button').click(),
+    ]);
+    await expect(page).toHaveURL(/tab=sources&(?:edition=|atlas_error=)/);
+    expect(page.url()).toMatch(/edition=[1-9]/);
+    const current = fixture.database.prepare(`SELECT d.Document FROM TeletextAcceptedGenerationCurrent c
+      JOIN TeletextAcceptedGeneration g ON g.Id=c.GenerationId JOIN TeletextPublicationRequest r ON r.Id=g.RequestId
+      JOIN TeletextDesignRevision d ON d.DesignId=r.DesignId AND d.Revision=r.Revision WHERE c.ChannelId=?`).get(channel) as {Document: Uint8Array};
+    const customEdition = JSON.parse(Buffer.from(current.Document).toString()) as SavedOriginal;
+    expect(customEdition.selection.bindings.map(binding => binding.addon_id)).toEqual(['ersatzrs.host.custom-pages']);
+    await workspace.locator('[data-tab=pages]').click();
+    await workspace.locator('li[data-page="250"] [data-do=open]').click();
+    await expect(workspace.locator('[data-image]')).toBeVisible();
+    await page.goto('/teletext-elements');
+    await expect(page.locator('[data-guide-theme]')).toBeVisible();
+    await page.locator('#guide-theme details summary').click();
+    await expect(page.locator('#guide-theme details a[href="/teletext-elements/'+elementId+'"]')).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close().catch(() => undefined);
+    for (const {key, previous} of settings) {
+      if (previous) fixture.database.prepare('REPLACE INTO ConfigElement(Key,Value) VALUES (?,?)').run(key,previous.Value);
+      else fixture.database.prepare('DELETE FROM ConfigElement WHERE Key=?').run(key);
+    }
+    fixture.database.prepare('DELETE FROM Playout WHERE Id=?').run(media);
+    fixture.database.prepare('DELETE FROM MediaSource WHERE Id=?').run(media);
+    fixture.close();
+  }
+});
+
 for (const js of [false, true]) {
   test(`guided channel setup and stale profile repair (JavaScript ${js})`, async ({ browser, baseURL }) => {
     test.setTimeout(120_000);
@@ -286,7 +519,7 @@ for (const js of [false, true]) {
       const errors: string[] = [];
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
-      await page.goto(`/channels/${channel}/teletext`);
+      await page.goto(`/channels/${channel}/teletext?advanced=1`);
       if (js) await waitForHydration(page);
       const check = page.getByTestId('teletext-broadcast-check');
       await check.locator(':scope > summary').press('Enter');
@@ -295,7 +528,7 @@ for (const js of [false, true]) {
       await capacity.locator('[name="confirm_scope"]').check();
       await capacity.getByRole('button').click();
       await expect(page.getByTestId('teletext-feedback')).toHaveAttribute('data-code', 'capacity');
-      await page.goto(`/channels/${channel}/teletext`);
+      await page.goto(`/channels/${channel}/teletext?advanced=1`);
       const guide = page.getByTestId('teletext-guide-setup');
       const editor = page.getByTestId('teletext-full-editor');
       const binding = () => db.prepare('SELECT ProfileId FROM ChannelTeletextBinding WHERE ChannelId=? AND AddonId=?')
@@ -319,7 +552,7 @@ for (const js of [false, true]) {
       // package update does. Preserve the installed payload and its channels.
       db.prepare('UPDATE AddonInstallation SET StateRevision=? WHERE AddonId=?')
         .run('60978c69-8a75-44b1-946a-e2bac7eb3c90', addonId);
-      await page.goto(`/channels/${channel}/teletext`);
+      await page.goto(`/channels/${channel}/teletext?advanced=1`);
       await expect(editor).not.toHaveAttribute('open');
       await guide.getByRole('button', { name: 'Repair programme guide' }).click();
       await expect(guide.getByRole('img')).toBeVisible();
@@ -375,11 +608,11 @@ for (const js of [true, false]) {
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
       const urls: string[] = [];
       await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
-      await page.goto(`/channels/${fixture.channels[0]}/teletext`);
+      await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`);
       await ready(page, js);
       const profiles = [await createProfile(page, fixture, 'classic', js), await createProfile(page, fixture, 'night', js)];
       for (const [index, channel] of fixture.channels.entries()) {
-        await page.goto(`/channels/${channel}/teletext`);
+        await page.goto(`/channels/${channel}/teletext?advanced=1`);
         await ready(page, js);
         const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
         await binding.locator('[name="profile_choice"]').selectOption(`${profiles[index]}:1`);
@@ -553,7 +786,7 @@ type ReceiverGuideMap = { theme: string; entry: number; pages: { address: { page
 async function prepareReceiverGuide(page: Page, fixture: TeletextChannelFixture, channel: number,
   profile: number, night: boolean, guideChannel = fixture.channels[1], effective = false): Promise<ReceiverGuideMap> {
   const text = translation('en_us');
-  await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+  await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
   if (!effective) {
     const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
     await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
@@ -648,7 +881,7 @@ test('production TV-guide ordinary URLs are held for the joint external receiver
       await page.getByRole('button', { name: translation('en_us')('SaveChannel'), exact: true }).click();
       await expect(page).toHaveURL(/\/channels$/); await ready(page, true);
     }
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
     // Establish the real guide-source timeline first; Reset the primary output
     // immediately before publication, without editing any programme timestamps.
@@ -794,7 +1027,7 @@ test('production TV-guide explicit publication and paired ordinary stream output
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
     // Locale remains fixed: it is part of guide source authority, not just UI.
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     const profiles = [await createProfile(page, fixture, 'classic', true), await createProfile(page, fixture, 'night', true)];
     for (const channel of fixture.channels) await resetGuidePlayout(page, fixture, channel);
     const currentSource = fixture.database.prepare(`SELECT Id,Start,Finish,MediaItemId FROM PlayoutItem
@@ -807,7 +1040,7 @@ test('production TV-guide explicit publication and paired ordinary stream output
     const urls: string[] = [];
     const text = translation('en_us');
     for (const [index, channel] of fixture.channels.entries()) {
-      await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
       const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
       await binding.locator('[name="profile_choice"]').selectOption(`${profiles[index]}:1`);
       await submit(page, binding, text('TeletextBindingSave'), true);
@@ -925,10 +1158,10 @@ test('production TV-guide automatic source refresh on one ordinary HTTP response
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
     const channel = fixture.channels[0];
     const source = fixture.channels[1];
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const profile = await createProfile(page, fixture, 'classic', true);
     for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
     await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
     await submit(page, binding, text('TeletextBindingSave'), true);
@@ -1075,10 +1308,10 @@ test('production TV-guide retains last good on source failure and recovers befor
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
     const channel = fixture.channels[0];
     const source = fixture.channels[1];
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const profile = await createProfile(page, fixture, 'classic', true);
     for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
     await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
     await submit(page, binding, text('TeletextBindingSave'), true);
@@ -1331,7 +1564,7 @@ test('production TV-guide follows a natural programme-clock rollover on one ordi
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
     const channel = fixture.channels[0];
     const source = fixture.channels[1];
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const profile = await createProfile(page, fixture, 'classic', true);
     for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
     const sourceRowsBefore = fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start')
@@ -1366,7 +1599,7 @@ test('production TV-guide follows a natural programme-clock rollover on one ordi
       .toEqual(sourceRowsBefore.map(({ MediaItemId, ...unchanged }) => unchanged));
     expect(sourceRows.map(row => row.MediaItemId)).toEqual(sourceMedia);
     expect(fixture.database.prepare('SELECT * FROM PlayoutItem WHERE PlayoutId=? ORDER BY Start').all(channel)).toEqual(outputRows);
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
     await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
     await submit(page, binding, text('TeletextBindingSave'), true);
@@ -1566,10 +1799,10 @@ test('production TV-guide TTI footer concept survives explicit publication and a
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
     const channel = fixture.channels[0];
     const source = fixture.channels[1];
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const profile = await createProfile(page, fixture, 'classic', true);
     for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
     await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
     await submit(page, binding, text('TeletextBindingSave'), true);
@@ -1820,10 +2053,10 @@ test('native Windows packaged TV-guide TTI footer survives publication and autom
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
     const channel = fixture.channels[0];
     const source = fixture.channels[1];
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const profile = await createProfile(page, fixture, 'classic', true);
     for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
     await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
     await submit(page, binding, text('TeletextBindingSave'), true);
@@ -2065,10 +2298,10 @@ test('production TV-guide actual command timeout retains last-good output and re
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
     const channel = fixture.channels[0];
     const source = fixture.channels[1];
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const profile = await createProfile(page, fixture, 'classic', true);
     for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id);
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
     await binding.locator('[name="profile_choice"]').selectOption(`${profile}:1`);
     await submit(page, binding, text('TeletextBindingSave'), true);
@@ -2329,7 +2562,7 @@ test(customLuaFlow
     page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
     const text = translation('en_us');
     await page.request.post('/admin-api/settings/ui/save', { form: { language: 'en-us', is_dark_mode: 'false' }, maxRedirects: 0 });
-    await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
     const classic = await createProfile(page, fixture, 'classic', true), night = await createProfile(page, fixture, 'night', true);
     receipts.profiles = { classic, night }; persist();
     for (const id of fixture.channels) await resetGuidePlayout(page, fixture, id,
@@ -2386,7 +2619,7 @@ test(customLuaFlow
       historicalReads.push({ url, busy_reread: busy }); receipts.historical_reads = historicalReads; persist();
     };
     const prepare = async (effective: boolean, name: string, absent = false, customOnly = false): Promise<string> => {
-      await page.goto(`/channels/${channel}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${channel}/teletext?advanced=1`); await ready(page, true);
       const form = page.getByTestId(effective ? 'teletext-effective-authoring-form' : 'teletext-authoring-form');
       const publishAdvanced = page.getByTestId('teletext-publish-advanced');
       if (await publishAdvanced.getAttribute('open') === null) await publishAdvanced.locator(':scope > summary').click();
@@ -2424,7 +2657,7 @@ test(customLuaFlow
     };
     if (customLuaFlow === 'absent') await addCustom('BASE ORIGINAL');
     for (const id of fixture.channels) {
-      await page.goto(`/channels/${id}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${id}/teletext?advanced=1`); await ready(page, true);
       const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
       await binding.locator('[name="profile_choice"]').selectOption(`${classic}:1`);
       await submit(page, binding, text('TeletextBindingSave'), true);
@@ -2913,7 +3146,7 @@ test(customCycleBoundary
       await page.getByRole('button', { name: translation('en_us')('SaveChannel'), exact: true }).click();
       await expect(page).toHaveURL(/\/channels$/); await ready(page, true);
     }
-    await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+    await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
     await page.getByTestId('teletext-broadcast-check').locator(':scope > summary').click();
     const capacity = page.getByTestId('teletext-capacity-form');
     await capacity.locator('[name="profile"]').selectOption('tvguide-16');
@@ -2930,7 +3163,7 @@ test(customCycleBoundary
         customCycleBoundary ? { seconds: 2, nextRows: ['CLOCK ORIGINAL151 B', 'TIME %TIME%% FIXED', 'DATE %DATE%%%%%%%%'] } : undefined),
     ] : [];
     if (effectiveCustomBoundary) {
-      await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, true);
+      await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, true);
       const binding = page.locator(`[data-addon-id="${addonId}"] [data-testid="teletext-binding-form"]`);
       await binding.locator('[name="profile_choice"]').selectOption(`${profiles[0]}:1`);
       await submit(page, binding, translation('en_us')('TeletextBindingSave'), true);

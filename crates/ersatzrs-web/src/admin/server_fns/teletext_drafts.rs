@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 
 #[path = "teletext_current_guide.rs"]
 mod current_guide;
-pub use current_guide::{load_current_teletext_guide_preview, TeletextCurrentGuidePreviewData};
+pub use current_guide::{
+    load_atlas_guide_preview, load_current_teletext_guide_preview, TeletextCurrentGuidePreviewData,
+};
 
 /// Read-only choices from the complete admitted native service; never edit authority.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -67,6 +69,8 @@ pub struct TeletextObjectDefinitionChoiceObservation {
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeletextDraftPreviewData {
+    #[serde(default)]
+    pub hits: super::teletext_atlas::AtlasHitMap,
     pub channel_id: i64,
     pub design_id: i64,
     pub revision: i64,
@@ -230,6 +234,7 @@ fn project_preview(
         design_id: preview.identity.design_id,
         revision: preview.identity.revision,
         owner: raster.map(ersatzrs_ffmpeg::teletext::TeletextRaster::owner),
+        hits: preview.hits.clone(),
         image_url: raster.map(raster_image).transpose()?,
         effective: preview.scope()
             == crate::host::teletext_authoring::TeletextAuthoringScope::Effective,
@@ -321,7 +326,7 @@ fn project_publication(
 }
 
 #[cfg(feature = "ssr")]
-fn raster_image(
+pub(crate) fn raster_image(
     raster: &ersatzrs_ffmpeg::teletext::TeletextRaster,
 ) -> Result<String, crate::host::teletext_authoring::TeletextAuthoringError> {
     use base64::Engine as _;
@@ -340,7 +345,7 @@ fn raster_image(
         .ok_or_else(error)?;
     let mut svg = String::new();
     svg.try_reserve_exact(maximum).map_err(|_| error())?;
-    write!(svg, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {} {}\" shape-rendering=\"crispEdges\">", raster.width(), raster.height()).map_err(|_| error())?;
+    write!(svg, "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {} {}\" preserveAspectRatio=\"none\" shape-rendering=\"crispEdges\">", raster.width(), raster.height()).map_err(|_| error())?;
     svg.push_str("<defs><pattern id=\"header\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\"><rect width=\"8\" height=\"8\" fill=\"#aaa\"/><path d=\"M0 0L8 8M8 0L0 8\" stroke=\"#777\"/></pattern><pattern id=\"video\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\"><rect width=\"8\" height=\"8\" fill=\"#222\"/><rect width=\"4\" height=\"4\" fill=\"#888\"/></pattern><pattern id=\"unresolved\" width=\"8\" height=\"8\" patternUnits=\"userSpaceOnUse\"><rect width=\"8\" height=\"8\" fill=\"#f0f\"/><path d=\"M0 0L8 8\" stroke=\"#000\"/></pattern></defs>");
     for (y, row) in raster.pixels().chunks_exact(raster.width()).enumerate() {
         let mut start = 0;

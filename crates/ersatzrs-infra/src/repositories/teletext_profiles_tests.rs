@@ -215,6 +215,71 @@ async fn insert_installation(pool: &DbPool, manifest: &AddonManifest) {
 }
 
 #[tokio::test]
+async fn atlas_switch_keeps_the_accepted_binding_until_its_generation_is_selected() {
+    use ersatzrs_core::repositories::TeletextElementRepository;
+    let fixture = Fixture::new().await;
+    let repo =
+        super::super::teletext_elements::SqliteTeletextElementRepository(fixture.repo.0.clone());
+    let profile = fixture.profile("Atlas guide", "day").await;
+    let save = Fixture::binding_save(1, &profile);
+    let revision = repo.save_atlas(1, 0, "[]", &[], Some(&save)).await.unwrap();
+    let working = saved(fixture.repo.channel_invocation_snapshot(1).await.unwrap());
+    assert_eq!(working.bindings.len(), 1);
+    assert!(fixture.repo.channel_bindings(1).await.unwrap().is_empty());
+    assert!(saved(
+        fixture
+            .repo
+            .published_channel_dependencies(1)
+            .await
+            .unwrap()
+    )
+    .bindings
+    .is_empty());
+    let prospective = &working.bindings[0];
+    assert_eq!(
+        saved(
+            fixture
+                .repo
+                .invocation_snapshot(1, ADDON, prospective.binding_revision)
+                .await
+                .unwrap()
+        ),
+        *prospective
+    );
+    // An invalid Off request cannot promote this enabled binding.
+    assert!(!repo
+        .finish_atlas_off(1, revision, None, None)
+        .await
+        .unwrap());
+    assert!(saved(
+        fixture
+            .repo
+            .published_channel_dependencies(1)
+            .await
+            .unwrap()
+    )
+    .bindings
+    .is_empty());
+    let mut tx = crate::db::begin_write(&fixture.repo.0).await.unwrap();
+    assert!(
+        super::super::teletext_elements::apply_atlas_binding(&mut tx, 1)
+            .await
+            .unwrap()
+    );
+    tx.commit().await.unwrap();
+    assert_eq!(
+        saved(
+            fixture
+                .repo
+                .published_channel_dependencies(1)
+                .await
+                .unwrap()
+        ),
+        working
+    );
+}
+
+#[tokio::test]
 async fn profile_contract_uses_highest_supported_capability_in_same_snapshot() {
     for (capabilities, expected) in [
         (vec!["teletext.pages.v1"], TeletextPageContract::V1),

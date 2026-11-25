@@ -475,6 +475,7 @@ impl Fixture {
 
 fn guide<'a>(channels: &'a [TeletextGuideChannel<'a>]) -> SuppliedTeletextGuideContext<'a> {
     SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: GENERATION,
         locale: "nl",
         supported_locales: &["nl"],

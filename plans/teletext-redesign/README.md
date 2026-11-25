@@ -1,0 +1,62 @@
+# Channel teletext · Page atlas
+
+Open [Page atlas](atlas.html) in a browser or view the [3840 × 2160 desktop preview](previews/atlas-4k.webp). The offline prototype uses the fictional Northline channel and keeps demo settings and publication state in browser storage.
+
+## Visual reference for implementation
+
+The default [dark Atlas](atlas.html) matches the live Dutch admin shell reviewed on 2026-11-25. A [light preview](atlas.html?theme=light) uses the admin's light palette. The artwork and fonts are bundled for offline review. The drawer toggle, drawer groups and Teletext elements shortcut work locally. Other application destinations and global search are shown as context.
+
+| Part of Atlas | Production reference | Desktop specification at 100% browser zoom |
+| --- | --- | --- |
+| Shell and navigation | [AppShell](../../crates/ersatzrs-web/src/admin/layout/mod.rs) and [global styles](../../crates/ersatzrs-web/src/admin/style/globals.module.css) | Native 16 px root, 14 px Roboto body, 56 px app bar, 38 px brand mark, 224 px drawer and 30 px main inset. Dark backgrounds are `#121212` for the bar, `#1f1f1f` for surfaces and `#272727` for the workspace. |
+| Title and tabs | [Dashboard title](../../crates/ersatzrs-web/src/admin/home.module.css) and [Settings navigation](../../crates/ersatzrs-web/src/admin/ui/primitives/settings_navigation.module.css) | 24 px green heading. The centered workspace is at most 1600 px wide. Tabs are 44 px high with a 2 px primary underline on the active tab. |
+| Panels and fields | [Settings form](../../crates/ersatzrs-web/src/admin/pages/settings.module.css) | Surface and border tokens, 4 px corner radius and 16 px panel padding. Form inputs are 44 px high. Page numbers use a compact 32 px editing field inside the index. |
+| Actions and dialogs | [Channel editor](../../crates/ersatzrs-web/src/admin/pages/channels/editor.module.css), [buttons](../../crates/ersatzrs-web/src/admin/ui/primitives/button.module.css) and [dialog](../../crates/ersatzrs-web/src/admin/ui/primitives/dialog.module.css) | The channel save action is bottom left, 32 px high. The primary action uses the admin green. Page and theme dialogs use the shared surface, 24 px inset, 4 px corners, shadow and blurred backdrop. Their widths are capped at 448 px and 1024 px respectively. |
+| Teletext content | [Atlas reader composition](atlas.css) | The index, page and keypad sit side by side above 960 px of available workspace. Below that width they stack. The receiver and theme sample use broadcast colours in both admin themes. |
+
+The shell, palette, tabs and button module rules in [style.css](style.css) were matched against the served stylesheet and repository revision `9e3fadee`. Production should consume those components directly. [atlas.css](atlas.css) supplies the reader and keypad layout and maps the offline forms to the admin styles.
+
+In the page index, the up and down arrows assign the first free number in that direction and immediately reorder the list. With 201 and 202 occupied, one step up from 200 assigns 203. Stepping stops at 100 or 899 without wrapping. Typing an occupied number directly identifies the collision and keeps the original assignment.
+
+The left index scrolls independently, with the add action below the list and the channel save action in the footer. In narrow index columns, row actions move below the title. The page index starts with subpages folded. The count and chevron at the right of a page row expand or collapse its subpages independently. Folding a group keeps the current subpage in the preview. Opening [201 · 2/2](atlas.html#p201-2) reveals the late guide in its group, as shown in the [desktop preview](previews/atlas-subpages-4k.webp).
+
+Click a subpage to read it or its pencil to edit its title and template fields. The **+** on the parent adds a subpage and opens the group. The bin on a child removes that subpage after confirmation. The reader arrows **‹** and **›** step through the same list. Renumbering a parent moves all its subpages together and preserves its expanded or collapsed state.
+
+For a page with multiple subpages, open the parent pencil and set **Subpage interval** to a whole number from 1 to 600 seconds (default 10). The interval applies to every subpage of that page. **Apply change** updates the working preview. A thin, empty progress line is visible as soon as the page opens. It spans the full width of the teletext picture, 4 px below it. **Play subpages** fills the line until the next subpage starts and wraps to the first after the last subpage. The playback controls stay in place. Pausing freezes the line and playing resumes from that position. Using an editing or navigation control ends playback. Reduced-motion mode advances the line in whole-second steps. **Teletext opslaan** publishes the interval with the channel's page set in the offline demo.
+
+On the keypad, the arrows beside the number open the next higher or lower page in the visible index. For example, one step up from 202 opens 310 if it is the next listed page. Navigation stops at the first or last page of the current edition. To open a page by typing its number, press **OK** or Enter. In page settings the number field steps by one.
+
+At 3840 × 2160 in Chromium, the full app bar and the first 460 px of the drawer matched the live dashboard screenshot pixel for pixel. Browser-computed styles also matched for the active and inactive Settings tabs, Settings form fields and the channel save button. Live status badges and server version are installation data. The screenshots use a demo shell.
+
+Under **Page settings → Colour buttons**, choose a destination from the page index for each of the four colours. The mapping applies to every subpage of the edited page. **Auto** follows the existing Index, Today, Late or Notes shortcut. **No link** leaves the key inactive. An assigned page shows its number in both the preview strip and the remote. The link follows renumbering and clears if the destination is removed. **Apply change** updates the draft preview and **Teletext opslaan** publishes the mappings.
+
+On page 200, click the four dots to reveal the mystery guest or click the name to hide it again. The remote’s **Show text** and **Hide text** key follows the same state. Moving to another page resets Reveal.
+
+**Voeg pagina(s) toe** starts with a reusable teletext template. Add another entry to configure multiple pages before applying the batch. The pencil beside an existing page opens the same template settings. A programme guide asks for its source channel and programme range. A station card or bulletin asks for its text. The guide index divides the sorted channel pages into subpages of eight destinations each. The index, remote and preview use the same subpage numbers. Required continuation sheets can be retitled and follow the available destinations as the list grows or shrinks. Switching templates replaces their fields only when the operator applies the edit.
+
+**Sources** controls the TV guide for this channel and edits page-to-channel assignments in page-number order. Turning the guide off keeps its page definitions, subpages and assignments editable. Saving excludes guide templates from the published channel and keeps station cards and bulletins available. Re-enabling and saving restores the guide with its settings. Page removal is managed in the page index. A new draft places Northline on 201 and Coastline on 202. Guide subpages inherit their page's source. An explicit subpage source appears directly below the page mapping and can be changed or reset there. Draft rows expose their actions on hover or keyboard focus, or continuously on touch.
+
+### Template library and shared TV guide theme
+
+Review the [page settings](previews/atlas-page-settings-4k.webp) and [theme editor](previews/atlas-theme-4k.webp) at 3840 × 2160. Open the [TV guide theme editor](atlas.html#elements) directly or through **Edit shared TV guide theme** in **Sources**. Each page form groups its template fields in **Page settings** between **Teletext template** and **Page number**. Guide templates also expose the explicitly labelled shared theme editor there. A shared theme save is a separate library action. The banner controls and preview are visible on entry. Expand **Teletext elements** below them to see the add-on and user templates. The **TV guide theme** controls the banner text, banner colour and heading colour with an immediate preview. Saving the shared theme updates working guide pages. **Teletext opslaan** publishes the theme with the channel's pages.
+
+The existing live `/teletext-elements` route lists uploaded elements, whose field bindings are defined in the [domain model](../../crates/ersatzrs-domain/src/teletext/elements.rs). In the inspected installation the list was empty. The TV guide producer generates pages separately. The prototype uses a small offline example catalog. In the proposed production design the existing upload flow remains the entry for user templates. Enabling the TV guide add-on should expose its reusable template definitions in this same catalog, identified by add-on and template ID. Re-enabling or updating the add-on should preserve the user's shared theme. A page instance stores its template identity and its own field values. Channel assignment and publication remain explicit.
+
+**Teletext opslaan** on either **Pages** or **Sources** validates the whole draft and publishes it in one action. Changes on either tab show **Niet-opgeslagen wijzigingen** beside the save button. The confirmation identifies the published edition. A duplicate page number takes the operator back to the field. An empty index takes them to **Voeg pagina(s) toe**. A failed check or storage write preserves the previous edition and leaves the draft editable. Saving the same edition again keeps its generation number.
+
+## Why these tabs
+
+The inspected channel screen already has a guided entry. Expanding the advanced editor brings the page set, guide source, profile bindings, custom pages, check/publish workflow, Lua controls and current guide into one scrolling context. The broadcast check is a separate disclosure near the top. A reviewer must remember where the relevant preview and status were shown.
+
+Atlas follows the Settings navigation convention. Each tab opens one task and the underline identifies the current tab.
+
+## Production implementation
+
+- **Route and navigation.** Carry the selected tab in the URL, reuse the Settings route-tab styling and aria-current contract, and keep the tab active across page previews and POST redirects. The tab strip scrolls horizontally when labels exceed its available width.
+- **Authoring.** Keep channel binding, shared profile edits, custom page links, scripted selection, editorial and experimental resource controls in their owning forms. Shared profile reach and server-wide capacity scope belong beside their respective save actions. An error must open the relevant tab and reveal the affected field.
+- **Publication.** Treat the channel save as the explicit publication request. Validate the complete candidate and select the checked revision against the expected generation. Confirm publication after selection succeeds. Output application is recorded separately by the runtime.
+- **States and verification.** Map loading, empty and failed resource reads to the existing resource-state primitive. For an empty page index, focus the add-pages action. If a page number collides, focus its error. If another editor publishes first, report the conflict. Verify keyboard navigation, focus restoration, current-tab announcement, long localized labels, both themes and the server-rendered form path before production acceptance.
+
+Atlas uses native navigation, semantic figures and optional disclosures. The tabs and draft page index work without JavaScript. The keypad, edition selection and demo saves use a local script. A production port belongs in the channel teletext page and its current guide, draft, readiness and custom-page modules. Reuse existing operations and localize labels through the admin language catalogs. The page-to-channel assignment is a proposed Atlas interaction. Production implementation would need to carry that assignment through guide generation.
+
+[Settings route tabs](../../docs/reference/ui/components/settings-route-tabs.md) · [Channel teletext page](../../crates/ersatzrs-web/src/admin/pages/channels/teletext.rs) · [Teletext parity](../../docs/progress/parity/teletext-support.toml)

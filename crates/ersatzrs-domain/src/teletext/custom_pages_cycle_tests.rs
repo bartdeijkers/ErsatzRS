@@ -2,6 +2,7 @@ use super::*;
 
 fn page(number: u16, subcode: u16, seconds: Option<u16>) -> TeletextCustomPageWire {
     TeletextCustomPageWire {
+        channel_links: Vec::new(),
         element_id: i64::from(number),
         element_revision: 4,
         page: number,

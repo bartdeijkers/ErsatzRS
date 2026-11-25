@@ -147,6 +147,7 @@ pub(super) fn original_with_context() -> Vec<u8> {
         programmes: &[],
     }];
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: GENERATION,
         locale: "nl",
         supported_locales: &["nl"],

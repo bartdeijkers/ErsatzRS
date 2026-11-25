@@ -40,6 +40,46 @@ pub trait TeletextElementRepository: Send + Sync {
         page_number: Option<u16>,
         enabled: bool,
     ) -> Result<EntityId>;
+    /// Edit one existing instance, retaining its settings and template.
+    async fn update_channel_instance(
+        &self,
+        channel: EntityId,
+        link: EntityId,
+        element: EntityId,
+        page: Option<u16>,
+        enabled: bool,
+    ) -> Result<bool>;
+    /// Revision and retained guide definitions for the channel editor.
+    async fn atlas_state(
+        &self,
+        channel: EntityId,
+    ) -> Result<Option<ersatzrs_domain::TeletextAtlasState>>;
+    async fn register_atlas_candidate(
+        &self,
+        channel: EntityId,
+        revision: i64,
+        key: &str,
+        design: i64,
+        design_revision: i64,
+    ) -> Result<bool>;
+    /// Save the working channel definition and replace its enabled library instances in one transaction.
+    async fn save_atlas(
+        &self,
+        channel: EntityId,
+        expected: i64,
+        guide_pages: &str,
+        pages: &[ersatzrs_domain::TeletextAtlasElement],
+        binding: Option<&super::ChannelTeletextBindingSave>,
+    ) -> Result<i64>;
+
+    /// Close an explicit Off edition only while the draft and publication pointers match.
+    async fn finish_atlas_off(
+        &self,
+        channel: EntityId,
+        revision: i64,
+        generation: Option<i64>,
+        pending: Option<i64>,
+    ) -> Result<bool>;
     /// Remove one link of this channel. Returns whether it existed.
     async fn remove_channel_element(&self, channel_id: EntityId, link_id: EntityId)
         -> Result<bool>;

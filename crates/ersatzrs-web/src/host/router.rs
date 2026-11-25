@@ -205,6 +205,18 @@ pub fn build_app(app_state: AppState) -> Router {
                 )),
             )
             .route(
+                "/admin-api/teletext/atlas/theme",
+                post(api::teletext::atlas::save_theme).layer(DefaultBodyLimit::max(4096)),
+            )
+            .route(
+                "/admin-api/teletext/atlas/save",
+                post(api::teletext::atlas::save).layer(DefaultBodyLimit::max(96 * 1024)),
+            )
+            .route(
+                "/admin-api/teletext/atlas/picture",
+                post(api::teletext::atlas::picture).layer(DefaultBodyLimit::max(96 * 1024)),
+            )
+            .route(
                 "/admin-api/teletext/guide/setup",
                 post(api::teletext::setup_guide).layer(DefaultBodyLimit::max(
                     api::teletext::MAX_TELETEXT_FORM_BYTES,

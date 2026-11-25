@@ -164,12 +164,12 @@ for (const javaScriptEnabled of [true, false]) for (const dark of [false, true])
       await pages[0].request.post('/admin-api/settings/ui/save', {
         form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
       });
-      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext`); await ready(pages[0], javaScriptEnabled);
+      await pages[0].goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(pages[0], javaScriptEnabled);
       const day = await profile(pages[0], fixture, 'day', javaScriptEnabled);
       const night = await profile(pages[0], fixture, 'night', javaScriptEnabled);
       const originals: string[] = [];
       for (const [index, theme, selected] of [[0, 'day', day], [1, 'night', night]] as const) {
-        await pages[index].goto(`/channels/${fixture.channels[index]}/teletext`);
+        await pages[index].goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`);
         await ready(pages[index], javaScriptEnabled);
         originals.push(await original(pages[index], fixture, theme, selected, javaScriptEnabled));
       }
@@ -297,12 +297,12 @@ for (const javaScriptEnabled of [true, false]) for (const dark of [false, true])
       await page.request.post('/admin-api/settings/ui/save', {
         form: { language: 'en-us', is_dark_mode: String(dark) }, maxRedirects: 0,
       });
-      await page.goto(`/channels/${fixture.channels[0]}/teletext`); await ready(page, javaScriptEnabled);
+      await page.goto(`/channels/${fixture.channels[0]}/teletext?advanced=1`); await ready(page, javaScriptEnabled);
       const day = await profile(page, fixture, 'day', javaScriptEnabled);
       const night = await profile(page, fixture, 'night', javaScriptEnabled);
       const originals: string[] = [];
       for (const [index, theme, selected] of [[0, 'day', day], [1, 'night', night]] as const) {
-        await page.goto(`/channels/${fixture.channels[index]}/teletext`); await ready(page, javaScriptEnabled);
+        await page.goto(`/channels/${fixture.channels[index]}/teletext?advanced=1`); await ready(page, javaScriptEnabled);
         originals.push(await original(page, fixture, theme, selected, javaScriptEnabled));
       }
       const safe = fixture.safetySnapshot();

@@ -106,6 +106,7 @@ async fn prepare_static_candidate(
     let (locale, timezone, locales) = context_configuration(application, operation, absent).await?;
     let generation = uuid::Uuid::new_v4().to_string();
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: &generation,
         locale,
         supported_locales: &locales,
@@ -247,10 +248,10 @@ fn render_original(
     hold: ersatzrs_core::locking::TeletextWorkHold,
 ) -> Result<TeletextAuthoringPreview, TeletextAuthoringError> {
     check_deadline(deadline)?;
-    let (raster, navigation, pages) = match (restored.encoded(), request.owner) {
+    let (raster, navigation, pages, hits) = match (restored.encoded(), request.owner) {
         (Some(service), Some(owner)) => {
-            let (raster, navigation, pages) = render_service(service, owner, budget)?;
-            (Some(raster), navigation, pages)
+            let (raster, navigation, pages, hits) = render_service(service, owner, budget)?;
+            (Some(raster), navigation, pages, hits)
         }
         (None, None)
             if !restored
@@ -259,7 +260,12 @@ fn render_original(
                 .iter()
                 .any(TeletextEffectiveBindingSnapshot::enabled) =>
         {
-            (None, Vec::new(), Vec::new())
+            (
+                None,
+                Vec::new(),
+                Vec::new(),
+                crate::admin::server_fns::teletext_atlas::AtlasHitMap::default(),
+            )
         }
         _ => return Err(failure(TeletextAuthoringStatus::InvalidInput)),
     };
@@ -276,6 +282,7 @@ fn render_original(
         selection: AuthoringSelection::Effective(restored.selection().clone()),
         publication: None,
         raster,
+        hits,
         navigation,
         pages,
         resource_objects: restored

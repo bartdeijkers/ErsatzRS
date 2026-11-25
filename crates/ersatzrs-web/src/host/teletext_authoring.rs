@@ -57,6 +57,7 @@ use super::teletext_runtime_policy::{
 };
 use super::teletext_work::{self, TeletextWorkError};
 
+pub(crate) mod atlas;
 mod effective;
 mod guide;
 mod refresh;
@@ -204,6 +205,7 @@ pub struct TeletextAuthoringPreview {
     guide_original: bool,
     selection: AuthoringSelection,
     publication: Option<TeletextAuthoringPublicationObservation>,
+    pub(crate) hits: crate::admin::server_fns::teletext_atlas::AtlasHitMap,
     raster: Option<TeletextRaster>,
     navigation: Vec<TeletextNavigationLink>,
     pages: Vec<TeletextPageAddress>,
@@ -960,7 +962,12 @@ async fn prepare_design_inner(
     let owner = input.entry();
     let selection = observed_selection(application, request.channel_id, operation.deadline).await?;
     let selection = checked_selection(selection, &request.selection_digest, &operation).await?;
-    Box::pin(check_custom_pages(application, &selection)).await?;
+    Box::pin(check_custom_pages(
+        application,
+        &selection,
+        input.page_layout.as_deref(),
+    ))
+    .await?;
     let candidate = if input.guide_channel_ids().is_some() {
         guide::prepare_base(
             application,
@@ -1017,6 +1024,7 @@ async fn prepare_design_inner(
 async fn check_custom_pages(
     application: &ApplicationServices,
     selection: &TeletextChannelSelectionSnapshot,
+    guide_layout: Option<&str>,
 ) -> Result<(), TeletextAuthoringError> {
     if !selection
         .bindings
@@ -1026,7 +1034,7 @@ async fn check_custom_pages(
         return Ok(());
     }
     let plan = application
-        .plan_teletext_custom_pages(selection.channel_id, Utc::now())
+        .plan_teletext_custom_pages_with_layout(selection.channel_id, Utc::now(), guide_layout)
         .await
         .map_err(|_| failure(TeletextAuthoringStatus::Unavailable))?;
     if plan.is_ready() {
@@ -1061,6 +1069,7 @@ async fn prepare_static_candidate(
     let locales = super::teletext_guide::supported_locales();
     let generation = uuid::Uuid::new_v4().to_string();
     let context = SuppliedTeletextGuideContext {
+        page_layout: None,
         generation: &generation,
         locale,
         supported_locales: &locales,
@@ -1203,7 +1212,7 @@ fn render_original(
     let owner = request
         .owner
         .ok_or_else(|| failure(TeletextAuthoringStatus::InvalidInput))?;
-    let (raster, navigation, pages) = render_service(service, owner, budget)?;
+    let (raster, navigation, pages, hits) = render_service(service, owner, budget)?;
     check_deadline(deadline)?;
     Ok(TeletextAuthoringPreview {
         identity: TeletextAuthoringIdentity {
@@ -1216,6 +1225,7 @@ fn render_original(
         guide_original: restored.guide_source().is_some() && restored.encoded().is_some(),
         selection: AuthoringSelection::Base(restored.selection().clone()),
         publication: None,
+        hits,
         raster: Some(raster),
         navigation,
         pages,
@@ -1282,10 +1292,11 @@ fn render_service(
         TeletextRaster,
         Vec<TeletextNavigationLink>,
         Vec<TeletextPageAddress>,
+        crate::admin::server_fns::teletext_atlas::AtlasHitMap,
     ),
     TeletextAuthoringError,
 > {
-    let preview = project_teletext_preview(
+    let mut preview = project_teletext_preview(
         service,
         owner,
         TeletextColourPixelOptions {
@@ -1311,6 +1322,7 @@ fn render_service(
             }),
         }
     })?;
+    let hits = std::mem::take(&mut preview.hits);
     let (raster, navigation) = preview.into_parts();
     let pages = service
         .declared()
@@ -1320,7 +1332,7 @@ fn render_service(
         .iter()
         .map(|page| page.address)
         .collect();
-    Ok((raster, navigation.to_vec(), pages))
+    Ok((raster, navigation.to_vec(), pages, hits))
 }
 
 async fn stored_scope(

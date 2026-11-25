@@ -41,7 +41,7 @@ async fn channel_data(
         .ok_or("invalid-input")
 }
 
-async fn setup(
+pub(super) async fn setup(
     app: &ApplicationServices,
     channel: i64,
     pairs: Pairs,
@@ -140,7 +140,7 @@ async fn setup(
     ))
 }
 
-async fn profile_to_bind(
+pub(super) async fn profile_to_bind(
     app: &ApplicationServices,
     channel: i64,
     addon: &TeletextAddonData,
