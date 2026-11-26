@@ -13,12 +13,20 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-26
+
 ### Security
 
 - Update bundled SQLite through sqlx 0.9.1 and `libsqlite3-sys` 0.40,
   resolving RUSTSEC-2026-0459. `cargo deny` no longer ignores that advisory.
 
 ### Changed
+
+- Upgrade the official add-on repository to v0.11.14 before upgrading the host
+  to 1.4.0. It includes TV-guide teletext 0.1.4 and yt-dlp 0.11.14 with host
+  ranges up to `<1.5.0`; earlier add-on versions are capped below 1.4 and are
+  rejected explicitly. Package installation and activation remain separate
+  operator actions.
 
 - Managed playback now uses the published Next 0.2.8 worker
   (`0.2.8-9d4635cf-ersatzrs.1`) on the four required targets, with exact
@@ -6585,7 +6593,8 @@ separate changelog section.
 - Web startup tracing, listen address handling, UTF-8 FFmpeg output validation,
   and FFmpeg version test coverage were tightened.
 
-[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/bartdeijkers/ErsatzRS/compare/v1.0.37-beta...v1.1.0
