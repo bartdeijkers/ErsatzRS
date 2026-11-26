@@ -1,7 +1,8 @@
 diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-channel/src/channel_session.rs
+index 799f1a7..dcca36e 100644
 --- a/crates/ersatztv-channel/src/channel_session.rs
 +++ b/crates/ersatztv-channel/src/channel_session.rs
-@@ -1072,6 +1072,23 @@
+@@ -1148,6 +1148,23 @@ impl ChannelSession {
              return None;
          }
  
@@ -25,7 +26,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
          for input in [
              &mut input_settings.video_input,
              &mut input_settings.audio_input,
-@@ -1079,17 +1096,13 @@
+@@ -1155,17 +1172,13 @@ impl ChannelSession {
              input.in_point = plan.in_point;
              input.out_point = plan.in_point + plan.duration;
          }
@@ -50,7 +51,7 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
          }
          input_settings.video_copy_seek = Some(plan.seek);
  
-@@ -1945,6 +1958,32 @@
+@@ -2035,6 +2048,32 @@ fn shortfall_end(
      (finish - reached > SHORTFALL_TOLERANCE).then_some(reached)
  }
  
@@ -83,10 +84,11 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
  /// Without an out point, the source runs for the scheduled duration.
  fn source_points_ms(item: &PlayoutItem, source: &PlayoutItemSource) -> (u64, u64) {
      let item_duration_ms = (item.finish - item.start).whole_milliseconds() as u64;
-@@ -2080,6 +2119,143 @@
+@@ -2266,6 +2305,143 @@ mod tests {
+         }
      }
  
-     #[test]
++    #[test]
 +    fn copied_subtitle_landing_keeps_cursor_but_not_extended_source_out() {
 +        let ms = Duration::from_millis;
 +        assert_eq!(
@@ -223,7 +225,6 @@ diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-ch
 +        );
 +    }
 +
-+    #[test]
+     #[test]
      fn fallback_duration_is_at_least_the_retry_budget() {
          let minute = Duration::from_mins(1);
-         assert_eq!(fallback_duration(minute, Duration::ZERO), minute);

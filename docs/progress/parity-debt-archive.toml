@@ -5447,3 +5447,21 @@ description = "Identify the vulnerable Windows behavior and fixing revision for 
 discovered  = '2026-11-07'
 evidence    = "Maintainer explicitly approves logging this as later work and resuming UCU13-15 on2026-11-07. Applicability remains unverified; no security acceptance or non-applicability claim. UCU14 owns source/package comparison and the distinct UCU13 Unix-mutex follow-up in tmp/ucu14/security-source-audit/qualification.json. Resume when authoritative upstream advisory/fix details become available; then perform source applicability and affected regression/runtime checks. This debt does not defer any other required gate or authorize unrelated publication. Resolved on 2026-11-21 by maintainer decision: not applicable to ErsatzRS. The maintainer assesses the advisory as specific to the ErsatzTV .NET Windows build, which ErsatzRS does not ship. No ErsatzRS source fix or regression is claimed."
 resolved    = true
+
+[[debt]]
+feature     = 'upstream-baseline-catch-up'
+id          = 'ucu17-next-v028'
+description = 'Qualify, publish and adopt the Next v0.2.8 candidate (rows 310-312) for managed playback under ADR 0135, then advance the Pin table to upstream v26.14.0.'
+discovered  = '2026-11-26'
+evidence    = '''
+Upstream Next v0.2.8 (9d4635cf) carries a4f5f2e "fix: copy keyframe seek" and 2acfa67 "fix: hls audio overlap". Candidate 0.2.8-9d4635cf-ersatzrs.1 in scripts/release/next-patches/row305 keeps all twelve ErsatzRS patches: 0009 is resolved by hand next to the new audio priming offset in pipeline.rs, 0012 moves its workspace pins to 0.2.8, and the others rebase without conflict. The prepare script reproduces the rebased tree from the pinned archive. Locally the patched ffpipeline and ersatztv-channel unit tests pass; combined four-target CI qualification, publication of next-0.2.8-9d4635cf-ersatzrs.1 by the maintainer and managed adoption remain open. v0.2.8 changes no RTSP or image-repeat code, so the 0001 and 0002 retirement conditions are not met.
+
+2026-11-26: PR 210 CI qualified 0.2.8-9d4635cf-ersatzrs.1 on all four required
+targets. Release next-0.2.8-9d4635cf-ersatzrs.1 in bartdeijkers/ErsatzRS-next
+publishes those exact packages without rebuilding (28 assets, digests verified
+against the CI artifacts). scripts/release/next-patches/manifest.json now pins
+them for managed acquisition, and the parity pin advances to v26.14.0
+(1374aaf3). NVIDIA hardware execution keeps its existing hardware prerequisite.
+'''
+adr         = '0135'
+resolved    = true

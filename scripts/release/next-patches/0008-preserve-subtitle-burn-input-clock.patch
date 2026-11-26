@@ -1,9 +1,8 @@
-Preserve subtitle burn source clock. FFmpeg pipeline context rebased for upstream025 selected embedded subtitle index; existing regression expectations unchanged, with the new required fixture field set to zero.
-
 diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video_filter.rs
+index f1d8ce0..6ecbf2f 100644
 --- a/crates/ffpipeline/src/video_filter.rs
 +++ b/crates/ffpipeline/src/video_filter.rs
-@@ -655,10 +655,11 @@
+@@ -698,10 +698,11 @@ impl VideoFilterOp for SubtitlesFilter {
          }
  
          if self.seek > Duration::ZERO {
@@ -18,7 +17,7 @@ diff --git a/crates/ffpipeline/src/video_filter.rs b/crates/ffpipeline/src/video
              ))
          } else {
              Some(format!("subtitles={}", filter_args))
-@@ -1072,6 +1073,99 @@
+@@ -1115,6 +1116,99 @@ mod tests {
      use time::{Date, Month, Time, UtcOffset};
  
      use super::*;

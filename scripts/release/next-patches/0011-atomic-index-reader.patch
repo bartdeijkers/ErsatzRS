@@ -1,5 +1,5 @@
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index 6fe3973..1ff80be 100644
+index 4cac148..3b598da 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
 @@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -9,10 +9,10 @@ index 6fe3973..1ff80be 100644
 +### Added
 +- Optional `ersatzrs.playout-index.v1` indexed playout with immutable day files and reader leases (channel config schema 0.1.6).
  
- ## [0.2.7] - 2026-11-20
+ ## [0.2.8] - 2026-11-25
  ### Fixed
 diff --git a/Cargo.lock b/Cargo.lock
-index 8b9807f..99d236c 100644
+index eece896..27fd1f4 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -154,6 +154,15 @@ version = "2.13.2"
@@ -87,7 +87,7 @@ index 8b9807f..99d236c 100644
   "tempfile",
   "thiserror",
 @@ -476,9 +512,11 @@ name = "ersatztv-playout"
- version = "0.2.7"
+ version = "0.2.8"
  dependencies = [
   "ersatztv-core",
 + "libc",
@@ -146,7 +146,7 @@ index 8b9807f..99d236c 100644
  name = "unicase"
  version = "2.10.0"
 diff --git a/Cargo.toml b/Cargo.toml
-index 39c199d..db24373 100644
+index 417cc76..b399201 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -56,6 +56,7 @@ rstest = "0.26.1"
