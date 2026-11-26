@@ -1,5 +1,5 @@
 diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-channel/src/channel_session.rs
-index 1ff5a55..eec3e0b 100644
+index 401e617..562c0bd 100644
 --- a/crates/ersatztv-channel/src/channel_session.rs
 +++ b/crates/ersatztv-channel/src/channel_session.rs
 @@ -14,8 +14,8 @@ use ersatztv_core::{
@@ -13,7 +13,7 @@ index 1ff5a55..eec3e0b 100644
  };
  use ersatztv_playout::template::expand_template;
  use ffpipeline::copy_decision::{CopyBlocker, CopyDecision};
-@@ -589,13 +589,13 @@ impl ChannelSession {
+@@ -587,13 +587,13 @@ impl ChannelSession {
          let subtitle_source_is_video_source =
              subtitle_source.as_ref().is_some_and(|s| s == &video_source);
  
@@ -30,7 +30,7 @@ index 1ff5a55..eec3e0b 100644
              Some(video_input_source.clone())
          } else {
              subtitle_source
-@@ -667,6 +667,25 @@ impl ChannelSession {
+@@ -665,6 +665,25 @@ impl ChannelSession {
          // consider an item to be live if any of its sources are live;
          // live sources can never seek or work ahead
          let is_live = source_is_live(&video_source) || source_is_live(&audio_source);
@@ -56,7 +56,7 @@ index 1ff5a55..eec3e0b 100644
  
          let (audio, mut video) = stream_output_settings(&self.channel_config.normalization);
          video.transcode.filter_options.libplacebo.shader_cache =
-@@ -845,6 +864,7 @@ impl ChannelSession {
+@@ -843,6 +862,7 @@ impl ChannelSession {
                  start_at_zero,
                  realtime,
                  &video_source,
@@ -64,7 +64,7 @@ index 1ff5a55..eec3e0b 100644
              )
              .await
          } else {
-@@ -1066,6 +1086,7 @@ impl ChannelSession {
+@@ -1063,6 +1083,7 @@ impl ChannelSession {
          start_at_zero: bool,
          realtime: bool,
          video_source: &PlayoutItemSource,
@@ -72,7 +72,7 @@ index 1ff5a55..eec3e0b 100644
      ) -> Option<(OffsetDateTime, bool)> {
          let resume = self.copy_resume.take().filter(|r| {
              !start_at_zero && r.item_id == current_item.id && r.at == self.transcoded_until
-@@ -1101,14 +1122,18 @@ impl ChannelSession {
+@@ -1098,14 +1119,18 @@ impl ChannelSession {
              input_settings.video_input.probe_result.path.clone(),
              video_index,
          );
@@ -99,7 +99,7 @@ index 1ff5a55..eec3e0b 100644
          }
  
          let mut request = CopySeekRequest {
-@@ -1380,6 +1405,7 @@ impl ChannelSession {
+@@ -1377,6 +1402,7 @@ impl ChannelSession {
                  Ok(InputSource::Http(HttpInputSource {
                      uri: expanded_uri,
                      options: HttpInputOptions {
@@ -107,7 +107,7 @@ index 1ff5a55..eec3e0b 100644
                          headers: expanded_headers,
                          user_agent: expanded_ua,
                          timeout_us,
-@@ -1443,15 +1469,12 @@ impl ChannelSession {
+@@ -1440,15 +1466,12 @@ impl ChannelSession {
  
          // live content never seeks. limit it to the remaining schedule interval
          // so pipeline duration and graphics timing end at the same point.
@@ -129,7 +129,7 @@ index 1ff5a55..eec3e0b 100644
          }
  
          let progress_ms = if start_at_zero {
-@@ -1870,6 +1893,7 @@ fn fallback_item(
+@@ -1867,6 +1890,7 @@ fn fallback_item(
                  source: Some(PlayoutItemSource::Lavfi {
                      params: String::from("anullsrc=channel_layout=stereo:sample_rate=48000"),
                      probe_hint: Some(ProbeHint {
@@ -137,7 +137,7 @@ index 1ff5a55..eec3e0b 100644
                          video: Vec::new(),
                          audio: vec![AudioHint {
                              stream_index: 0,
-@@ -1897,6 +1921,7 @@ fn fallback_item(
+@@ -1894,6 +1918,7 @@ fn fallback_item(
                              size.width, size.height
                          ),
                          probe_hint: Some(ProbeHint {
@@ -145,7 +145,7 @@ index 1ff5a55..eec3e0b 100644
                              video: vec![VideoHint {
                                  frame_rate: Some(frame_rate),
                                  ..VideoHint::new(
-@@ -1929,6 +1954,7 @@ fn error_card_track(path: String, duration: Duration) -> TrackSelection {
+@@ -1926,6 +1951,7 @@ fn error_card_track(path: String, duration: Duration) -> TrackSelection {
              in_point_ms: None,
              out_point_ms: None,
              probe_hint: Some(ProbeHint {
@@ -153,7 +153,7 @@ index 1ff5a55..eec3e0b 100644
                  video: Vec::new(),
                  audio: Vec::new(),
                  subtitle: vec![SubtitleHint {
-@@ -2108,6 +2134,64 @@ fn source_points_ms(item: &PlayoutItem, source: &PlayoutItemSource) -> (u64, u64
+@@ -2105,6 +2131,64 @@ fn source_points_ms(item: &PlayoutItem, source: &PlayoutItemSource) -> (u64, u64
      }
  }
  
@@ -218,7 +218,7 @@ index 1ff5a55..eec3e0b 100644
  fn source_is_live(source: &PlayoutItemSource) -> bool {
      matches!(
          source,
-@@ -2255,6 +2339,100 @@ mod tests {
+@@ -2252,6 +2336,100 @@ mod tests {
      use serde_json::json;
      use time::macros::datetime;
  

@@ -1,10 +1,11 @@
+diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.rs
+index ceec036..57dc775 100644
 --- a/crates/ffpipeline/src/pipeline.rs
 +++ b/crates/ffpipeline/src/pipeline.rs
-@@ -379,6 +379,15 @@
-         output_settings: OutputSettings,
+@@ -646,6 +646,15 @@ impl Pipeline {
      ) -> Result<Pipeline, FFPipelineError> {
          let mut final_output_settings = output_settings;
-+
+ 
 +        // A live RTSP reader cannot work ahead to fill the default ten-second
 +        // shortest queue. Keep EOF handling while bounding its startup latency.
 +        let shortest_buffer = (final_output_settings.is_live
@@ -13,10 +14,11 @@
 +                InputSource::Rtsp(_)
 +            ))
 +        .then_some(Duration::from_millis(500));
- 
++
          if let Some(silence) = input_settings.audio_input.silence_if_missing() {
              log::info!(
-@@ -1062,7 +1071,7 @@
+                 "source {} has no audio stream; using silence",
+@@ -1382,7 +1391,7 @@ impl Pipeline {
                  OutputOption::DoNotMapMetadata,
                  OutputOption::Duration(duration),
                  // apad does not end; stop at the end of video
@@ -25,12 +27,10 @@
                  OutputOption::TsOffset(pts_offset),
                  OutputOption::VideoTrackTimeScale(90_000),
                  OutputOption::FrameRate(output_frame_rate),
-@@ -2292,6 +2301,80 @@
-         args.windows(2)
-             .find(|a| a[0] == "-shortest_buf_duration")
+@@ -3018,6 +3027,80 @@ mod tests {
              .map(|a| a[1].as_ref())
-+    }
-+
+     }
+ 
 +    #[test]
 +    fn live_rtsp_bounds_shortest_buffer_without_changing_other_sources() {
 +        use crate::input::{HttpInputOptions, HttpInputSource, RtspInputOptions, RtspInputSource};
@@ -103,6 +103,8 @@
 +                .any(|arg| arg == "-shortest" || arg == "-shortest_buf_duration"),
 +            "{args:?}"
 +        );
-     }
- 
++    }
++
      #[test]
+     fn audio_shares_the_video_input_with_dynamic_qsv_pools() {
+         for runtime_api in [(2, 9), (2, 10), (2, 15)] {

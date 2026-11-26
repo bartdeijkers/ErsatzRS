@@ -1,5 +1,5 @@
 diff --git a/crates/ersatztv-channel/src/channel_session.rs b/crates/ersatztv-channel/src/channel_session.rs
-index 7becc96..3eb1c2a 100644
+index dcca36e..401e617 100644
 --- a/crates/ersatztv-channel/src/channel_session.rs
 +++ b/crates/ersatztv-channel/src/channel_session.rs
 @@ -26,6 +26,7 @@ use ffpipeline::frame_size::FrameSize;
@@ -10,7 +10,7 @@ index 7becc96..3eb1c2a 100644
  };
  use ffpipeline::keyframe_seek::{
      CopySeekRequest, InputStart, Keyframe, KeyframeLocator, plan_copy_seek,
-@@ -780,7 +781,13 @@ impl ChannelSession {
+@@ -789,7 +790,13 @@ impl ChannelSession {
              channel_number: Some(self.channel_config.number().to_owned()),
              video_copy_seek: None,
              video_copy_blockers: Vec::new(),
@@ -24,7 +24,7 @@ index 7becc96..3eb1c2a 100644
  
          let window = input_settings.duration();
          let output_frame_rate = output_settings.frame_rate.clone().or_else(|| {
-@@ -2103,6 +2110,45 @@ fn source_is_live(source: &PlayoutItemSource) -> bool {
+@@ -2111,6 +2118,45 @@ fn source_is_live(source: &PlayoutItemSource) -> bool {
      )
  }
  
@@ -70,7 +70,7 @@ index 7becc96..3eb1c2a 100644
  fn probe_hint_to_result(hint: &ProbeHint, path: String) -> ProbeResult {
      let video = hint.video.iter().map(|v| {
          ProbeResultStream::Video(Box::new(ProbeResultVideoStream {
-@@ -2198,6 +2244,115 @@ mod tests {
+@@ -2206,6 +2252,115 @@ mod tests {
      use serde_json::json;
      use time::macros::datetime;
  
@@ -186,7 +186,7 @@ index 7becc96..3eb1c2a 100644
      use super::*;
  
      #[test]
-@@ -2482,6 +2637,7 @@ mod tests {
+@@ -2490,6 +2645,7 @@ mod tests {
              channel_number: None,
              video_copy_seek: None,
              video_copy_blockers: Vec::new(),
@@ -307,7 +307,7 @@ index 6c887ed..1d3a419 100644
  
  impl InputSettings {
 diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.rs
-index 0699e87..9c6f34d 100644
+index ada9b3f..b4e73c0 100644
 --- a/crates/ffpipeline/src/pipeline.rs
 +++ b/crates/ffpipeline/src/pipeline.rs
 @@ -22,7 +22,7 @@ use crate::global_option::{GlobalOption, LogLevel};
@@ -330,7 +330,7 @@ index 0699e87..9c6f34d 100644
  };
  
  pub const KEYFRAME_INTERVAL_SECONDS: u32 = 2;
-@@ -643,6 +643,9 @@ impl Pipeline {
+@@ -645,6 +645,9 @@ impl Pipeline {
          mut input_settings: InputSettings,
          output_settings: OutputSettings,
      ) -> Result<Pipeline, FFPipelineError> {
@@ -340,7 +340,7 @@ index 0699e87..9c6f34d 100644
          let mut final_output_settings = output_settings;
  
          // A live RTSP reader cannot work ahead to fill the default ten-second
-@@ -731,6 +734,18 @@ impl Pipeline {
+@@ -733,6 +736,18 @@ impl Pipeline {
              }
          };
  
@@ -356,10 +356,10 @@ index 0699e87..9c6f34d 100644
 +                    == input_settings.video_input.out_point - input_settings.video_input.in_point
 +        });
 +
-         let mut pts_offset = final_output_settings.pts_offset;
-         let mut video_seek = input_settings.video_input.in_point;
-         let mut copy_output_options = Vec::new();
-@@ -841,6 +856,16 @@ impl Pipeline {
+         // source rate is not probed; 48 kHz matches loudnorm
+         let sample_rate = final_output_settings
+             .audio
+@@ -858,6 +873,16 @@ impl Pipeline {
              PipelineFilter::Audio(AudioFilter::Pad),
          ];
  
@@ -376,7 +376,7 @@ index 0699e87..9c6f34d 100644
          filters.extend([
              PipelineFilter::Video(
                  LoopFilter {
-@@ -1396,8 +1421,10 @@ impl Pipeline {
+@@ -1413,8 +1438,10 @@ impl Pipeline {
                  OutputOption::VideoBuffer(final_output_settings.video.transcode.buffer),
                  OutputOption::DoNotMapMetadata,
                  OutputOption::Duration(duration),
@@ -389,7 +389,7 @@ index 0699e87..9c6f34d 100644
                  OutputOption::TsOffset(pts_offset),
                  OutputOption::VideoTrackTimeScale(90_000),
                  OutputOption::FrameRate(output_frame_rate),
-@@ -1954,6 +1981,26 @@ impl std::fmt::Display for Pipeline {
+@@ -1976,6 +2003,26 @@ impl std::fmt::Display for Pipeline {
      }
  }
  
@@ -416,7 +416,7 @@ index 0699e87..9c6f34d 100644
  // PGS is 1080p. With no size, ffmpeg uses the video size (e.g. 4K) and scales that canvas on
  // every frame until the first subtitle.
  fn unknown_pgs_canvas_size(stream: &ProbeResultVideoStream) -> Option<FrameSize> {
-@@ -2086,6 +2133,135 @@ fn own_input_keeps_sync(format_name: Option<&str>) -> bool {
+@@ -2108,6 +2155,135 @@ fn own_input_keeps_sync(format_name: Option<&str>) -> bool {
  mod tests {
      use super::*;
  
@@ -552,7 +552,7 @@ index 0699e87..9c6f34d 100644
      #[test]
      fn video_format_parses_ffmpeg_codec_names() {
          for (codec, format) in [
-@@ -2168,6 +2344,7 @@ mod tests {
+@@ -2190,6 +2366,7 @@ mod tests {
              channel_number: None,
              video_copy_seek: None,
              video_copy_blockers: Vec::new(),
@@ -652,10 +652,10 @@ index 6ecbf2f..90b41d4 100644
      fn subtitles_filter_selects_stream_after_the_first() {
          let filter = |subtitle_index| SubtitlesFilter {
 diff --git a/crates/ffpipeline/tests/common/mod.rs b/crates/ffpipeline/tests/common/mod.rs
-index c8d66d1..1c31d1a 100644
+index 9c6079d..dee44e7 100644
 --- a/crates/ffpipeline/tests/common/mod.rs
 +++ b/crates/ffpipeline/tests/common/mod.rs
-@@ -1332,6 +1332,7 @@ pub fn build_input(
+@@ -1335,6 +1335,7 @@ pub fn build_input(
          channel_number: None,
          video_copy_seek: None,
          video_copy_blockers: Vec::new(),

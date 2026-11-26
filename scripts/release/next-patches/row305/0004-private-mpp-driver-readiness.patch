@@ -1,3 +1,5 @@
+diff --git a/crates/libmpp-sys/src/probe.rs b/crates/libmpp-sys/src/probe.rs
+index 21e2b55..3994e71 100644
 --- a/crates/libmpp-sys/src/probe.rs
 +++ b/crates/libmpp-sys/src/probe.rs
 @@ -1,4 +1,6 @@
@@ -7,7 +9,7 @@
  
  pub const MPP_OK: i32 = 0;
  
-@@ -13,22 +15,58 @@
+@@ -13,22 +15,58 @@ pub const MPP_VIDEO_CodingHEVC: i32 = 0x0100_0004;
  pub struct MppLib {
      _lib: Library,
      mpp_check_support_format: unsafe extern "C" fn(ctx_type: i32, coding: i32) -> i32,
@@ -69,6 +71,9 @@
 +        }
      }
  }
+diff --git a/crates/libmpp-sys/tests/private_companion.rs b/crates/libmpp-sys/tests/private_companion.rs
+new file mode 100644
+index 0000000..566ca34
 --- /dev/null
 +++ b/crates/libmpp-sys/tests/private_companion.rs
 @@ -0,0 +1,29 @@

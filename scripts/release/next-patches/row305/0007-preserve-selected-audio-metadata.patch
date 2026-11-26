@@ -1,7 +1,8 @@
 diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.rs
+index 2e0c411..ada9b3f 100644
 --- a/crates/ffpipeline/src/pipeline.rs
 +++ b/crates/ffpipeline/src/pipeline.rs
-@@ -1283,6 +1283,7 @@
+@@ -1735,6 +1735,7 @@ impl Pipeline {
          let mut result: ArgVec = Vec::new();
  
          let mut audio_label = String::from("0:a");
@@ -9,7 +10,7 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
          let mut video_label = String::from("0:v");
          let mut subtitle_label = None;
          let mut graphics_labels = vec![
-@@ -1392,6 +1393,7 @@
+@@ -1874,6 +1875,7 @@ impl Pipeline {
                          }
                      };
                      audio_label = format!("{}:{}", audio_input_index, index);
@@ -17,7 +18,7 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
                  }
                  PipelineInput::Subtitle {
                      input_source,
-@@ -1456,11 +1458,17 @@
+@@ -1942,11 +1944,17 @@ impl Pipeline {
          result.extend(args!["-map", filter_chain.video_label().to_owned()]);
          result.extend(args!["-map", filter_chain.audio_label().to_owned()]);
  
@@ -40,12 +41,10 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
  
          result
      }
-@@ -1762,6 +1770,85 @@
-                 assert!(!args.iter().any(|arg| arg.contains("loop=-1:1")));
-             }
+@@ -2343,6 +2351,85 @@ mod tests {
          }
-+    }
-+
+     }
+ 
 +    #[test]
 +    fn selected_audio_metadata_uses_the_actual_input_before_the_output_filename() {
 +        let shared = multichannel_ac3_input("main.mkv");
@@ -123,6 +122,8 @@ diff --git a/crates/ffpipeline/src/pipeline.rs b/crates/ffpipeline/src/pipeline.
 +            suppression < mapping && mapping + 1 < filename,
 +            "{name}: {args:?}"
 +        );
-     }
- 
++    }
++
      #[test]
+     fn copy_omits_encoder_options() {
+         let mut output = stereo_output();
