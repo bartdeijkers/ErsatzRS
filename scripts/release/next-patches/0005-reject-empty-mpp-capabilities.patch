@@ -1,6 +1,8 @@
+diff --git a/crates/ffpipeline/src/capabilities/rkmpp/probe.rs b/crates/ffpipeline/src/capabilities/rkmpp/probe.rs
+index abd5cbc..05efbf7 100644
 --- a/crates/ffpipeline/src/capabilities/rkmpp/probe.rs
 +++ b/crates/ffpipeline/src/capabilities/rkmpp/probe.rs
-@@ -46,6 +46,14 @@
+@@ -46,6 +46,14 @@ impl RkmppCapabilities {
              }
          }
  
