@@ -20,6 +20,13 @@ release section when tagging a release.
 
 ### Changed
 
+- The Next source candidate now builds from upstream Next v0.2.8 instead of
+  v0.2.7. It keeps all twelve ErsatzRS patches and adds two upstream fixes:
+  video no longer freezes or falls back early after seeking into a copied
+  MKV or MP4 source, and MPEG-TS audio stays in sync where audio overlaps at
+  programme boundaries. Production keeps the Next 0.2.7 worker until the
+  candidate is qualified and published.
+
 - Update dependencies, including Jiff 1.0 (`Zoned` is now `ZonedDateTime`),
   jsonschema 0.62, nix 0.32, gloo-net 0.8, win32job 2.1 and pest 2.9.6.
   Programme times and time-zone handling are unchanged.

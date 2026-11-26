@@ -63,6 +63,14 @@ source/runtime identities, failed history and acceptance receipts.
 """
 
 [[debt]]
+id = 'ucu17-next-v028'
+description = 'Qualify, publish and adopt the Next v0.2.8 candidate (rows 310-312) for managed playback under ADR 0135, then advance the Pin table to upstream v26.14.0.'
+discovered = '2026-11-26'
+adr = '0135'
+evidence = 'Upstream Next v0.2.8 (9d4635cf) carries a4f5f2e "fix: copy keyframe seek" and 2acfa67 "fix: hls audio overlap". Candidate 0.2.8-9d4635cf-ersatzrs.1 in scripts/release/next-patches/row305 keeps all twelve ErsatzRS patches: 0009 is resolved by hand next to the new audio priming offset in pipeline.rs, 0012 moves its workspace pins to 0.2.8, and the others rebase without conflict. The prepare script reproduces the rebased tree from the pinned archive. Locally the patched ffpipeline and ersatztv-channel unit tests pass; combined four-target CI qualification, publication of next-0.2.8-9d4635cf-ersatzrs.1 by the maintainer and managed adoption remain open. v0.2.8 changes no RTSP or image-repeat code, so the 0001 and 0002 retirement conditions are not met.'
+resolved = false
+
+[[debt]]
 id = 'ucu-next-rtsp-patch-retirement'
 description = 'At every Next update, verify the unpatched candidate against live RTSP startup and EOF/handoff acceptance; remove the temporary buffer patch and return to official artifacts when an equivalent upstream correction passes.'
 discovered = '2026-10-06'

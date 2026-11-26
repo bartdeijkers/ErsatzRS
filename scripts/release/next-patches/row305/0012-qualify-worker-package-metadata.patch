@@ -1,10 +1,10 @@
 diff --git a/Cargo.toml b/Cargo.toml
-index db24373..5151484 100644
+index b399201..bf8ac28 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
 @@ -22,6 +22,7 @@ resolver = "3"
  # set by .github/scripts/prep-release.sh
- version = "0.2.7"
+ version = "0.2.8"
  publish = false
 +license = "MIT"
  
@@ -18,10 +18,10 @@ index db24373..5151484 100644
 -ersatztv-core = { path = "crates/ersatztv-core" }
 -ersatztv-playout = { path = "crates/ersatztv-playout" }
 -ffpipeline = { path = "crates/ffpipeline" }
-+ersatztv = { path = "crates/ersatztv", version = "=0.2.7" }
-+ersatztv-core = { path = "crates/ersatztv-core", version = "=0.2.7" }
-+ersatztv-playout = { path = "crates/ersatztv-playout", version = "=0.2.7" }
-+ffpipeline = { path = "crates/ffpipeline", version = "=0.2.7" }
++ersatztv = { path = "crates/ersatztv", version = "=0.2.8" }
++ersatztv-core = { path = "crates/ersatztv-core", version = "=0.2.8" }
++ersatztv-playout = { path = "crates/ersatztv-playout", version = "=0.2.8" }
++ffpipeline = { path = "crates/ffpipeline", version = "=0.2.8" }
  filetime = "0.2"
  futures-core = "0.3.32"
  futures-util = "0.3.32"
@@ -36,15 +36,15 @@ index db24373..5151484 100644
 -libvpl-sys = { path = "crates/libvpl-sys" }
 -libvt-sys = { path = "crates/libvt-sys" }
 -libvulkan-sys = { path = "crates/libvulkan-sys" }
-+libamf-sys = { path = "crates/libamf-sys", version = "=0.2.7" }
-+libcl-sys = { path = "crates/libcl-sys", version = "=0.2.7" }
-+libd3d11-sys = { path = "crates/libd3d11-sys", version = "=0.2.7" }
-+libmpp-sys = { path = "crates/libmpp-sys", version = "=0.2.7" }
-+libnvidia-sys = { path = "crates/libnvidia-sys", version = "=0.2.7" }
-+libva-sys = { path = "crates/libva-sys", version = "=0.2.7" }
-+libvpl-sys = { path = "crates/libvpl-sys", version = "=0.2.7" }
-+libvt-sys = { path = "crates/libvt-sys", version = "=0.2.7" }
-+libvulkan-sys = { path = "crates/libvulkan-sys", version = "=0.2.7" }
++libamf-sys = { path = "crates/libamf-sys", version = "=0.2.8" }
++libcl-sys = { path = "crates/libcl-sys", version = "=0.2.8" }
++libd3d11-sys = { path = "crates/libd3d11-sys", version = "=0.2.8" }
++libmpp-sys = { path = "crates/libmpp-sys", version = "=0.2.8" }
++libnvidia-sys = { path = "crates/libnvidia-sys", version = "=0.2.8" }
++libva-sys = { path = "crates/libva-sys", version = "=0.2.8" }
++libvpl-sys = { path = "crates/libvpl-sys", version = "=0.2.8" }
++libvt-sys = { path = "crates/libvt-sys", version = "=0.2.8" }
++libvulkan-sys = { path = "crates/libvulkan-sys", version = "=0.2.8" }
  log = "0.4"
  quick-xml = "0.42"
  rand = { version = "0.10", features = ["thread_rng"] }
