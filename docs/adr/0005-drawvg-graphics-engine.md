@@ -6,10 +6,7 @@ Accepted
 
 ## Implementation
 
-Partial — in-stream graphics emit `drawvg` filter nodes. Native HLS still
-needs to preserve programme time for Script overlays when a new encoder starts
-mid-programme. The reproduction and closure criteria are in the
-[HLS segmenter parity record](../progress/parity/hls-variant-playlists-segmenter.toml).
+Implemented — in-stream graphics emit `drawvg` filter nodes (feature `drawvg-graphics-engine`).
 
 ## Context
 

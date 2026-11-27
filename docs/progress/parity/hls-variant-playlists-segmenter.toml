@@ -1,7 +1,7 @@
 feature    = 'HLS variant playlists / segmenter'
 etv_source = '`$ERSATZTV_SRC/ErsatzTV.FFmpeg/OutputFormat/OutputFormatHls.cs`, `$ERSATZTV_SRC/ErsatzTV/Controllers/IptvController.cs`, `$ERSATZTV_SRC/ErsatzTV.Application/Streaming/HlsSessionWorker.cs`, `$ERSATZTV_SRC/ErsatzTV.Core/FFmpeg/{FFmpegStreamSelector,HlsPlaylistFilter}.cs`'
 rs_target  = '`crates/ersatzrs-web/src/transport/iptv/{hls,variant,streaming_specs,playlist}.rs`, `crates/ersatzrs-core/src/hls.rs`, `crates/ersatzrs-infra/src/{hls,hls_worker,playback}.rs`, `crates/ersatzrs-ffmpeg`'
-status     = 'In progress'
+status     = 'Ported'
 adr        = ['0015', '0016', '0061', '0084', '0106', '0132']
 summary    = '''
 Native playback checks the remaining item against the normalized output or source frame rate and advances past a sub-frame interval before encoding (row 299).
@@ -67,30 +67,6 @@ cross-player freeze as 4 HLS Segmenter PTS leaps before the fix; after switching
 MPEG-TS HLS appends to a monotonic worker-owned output timestamp offset, the
 same gate passed 64 checks with zero continuity-counter/PTS/DTS/PCR-leap faults
 and audio pip cadence max gap deviation 30 ms.
+Timed Script overlays use elapsed playout-item time across encoder restarts and mid-item tune-in.
 History: `sessions.ndjson`/git.
-'''
-
-[[debt]]
-id          = 'native-hls-script-graphics-clock'
-discovered  = '2026-11-27'
-resolved    = false
-adr         = '0005'
-description = 'When native HLS starts a new FFmpeg process partway through a programme, a timed Script overlay can replay its opening graphic. Pass the elapsed playout-item time to drawvg across tune-in and work-ahead restarts.'
-evidence    = '''
-A viewer reported repeated rating graphics within a film. The schedule had one
-Script attachment per film. Its opening window was 6.5 seconds and its repeat
-interval was 1,200 seconds. An engine switch during the viewing period prevents
-attribution of the reported appearances to a specific engine or HLS segment.
-
-In source revision 4bdf2684, hls_worker.rs limits a work-ahead encode to 44
-seconds. The native playback path passes the generated drawvg filter to the
-pipeline without applying the elapsed programme time. In a synthetic Windows
-FFmpeg 9.1.0 probe, seeking to second 44 produced the same opening frames as
-starting at zero. Applying the 44-second offset around drawvg kept the sampled
-frames clear. This reproduces the filter-clock error at an encoder restart.
-
-Close with decoded native HLS output from one synthetic programme. Verify the
-opening graphic is visible, stays absent after a work-ahead restart at second
-44 and on a mid-programme tune-in outside the display window, and returns
-inside its scheduled repeat window at 1,200 seconds.
 '''

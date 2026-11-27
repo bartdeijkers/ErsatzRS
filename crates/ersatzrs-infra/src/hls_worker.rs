@@ -2546,6 +2546,7 @@ impl HlsSessionWorker {
                 subtitle_input,
                 watermark_inputs,
                 graphics_overlays,
+                Some(elapsed),
                 HlsDiscontinuity::from(discontinuity),
                 Some(opacity_clock),
                 if interval_playback.is_some() {
@@ -4747,6 +4748,7 @@ fn build_hls_command_with_input_explicit_discontinuity(
         subtitle_input,
         watermark_inputs,
         graphics_overlays,
+        None,
         hls_discontinuity,
         opacity_clock,
         input_timeline,
@@ -4775,6 +4777,7 @@ fn build_hls_request_with_input_explicit_discontinuity(
     subtitle_input: Option<InputFile>,
     watermark_inputs: Vec<(InputFile, ersatzrs_ffmpeg::WatermarkOverlay)>,
     graphics_overlays: Vec<GraphicsPipelineOverlay>,
+    graphics_programme_elapsed: Option<Duration>,
     hls_discontinuity: HlsDiscontinuity,
     opacity_clock: Option<WatermarkOpacityClock>,
     input_timeline: HlsInputTimeline,
@@ -4870,6 +4873,14 @@ fn build_hls_request_with_input_explicit_discontinuity(
             request.state.song_progress_start = Some(start_position);
         }
         song.apply(&mut request);
+    }
+    if let Some(elapsed) = graphics_programme_elapsed {
+        // Output-side seeks discard frames after filtering. At the first
+        // presented frame those filters have already advanced by output_start.
+        let filter_position = request.state.output_start.unwrap_or_default();
+        for overlay in &mut request.graphics_overlays {
+            overlay.align_programme_clock(elapsed, filter_position);
+        }
     }
     (playback_profile.profile.hardware_acceleration, request)
 }
@@ -7672,6 +7683,8 @@ async fn cleanup_working_dir(working_dir: &Path) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
+    mod graphics_clock;
+
     use std::process::Stdio;
 
     use super::*;
@@ -7733,6 +7746,7 @@ mod tests {
             }),
             Vec::new(),
             Vec::new(),
+            None,
             HlsDiscontinuity::Absent,
             None,
             HlsInputTimeline::Original,
@@ -10874,6 +10888,7 @@ mod tests {
                 None,
                 Vec::new(),
                 Vec::new(),
+                None,
                 HlsDiscontinuity::Absent,
                 None,
                 HlsInputTimeline::Original,

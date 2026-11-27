@@ -40,6 +40,9 @@ release section when tagging a release.
   in native MPEG-TS HLS when using the software encoder or NVENC with
   source frame timing. A subtitle erase can now coincide with the first
   displayed frame even when audio priming precedes that frame.
+- Native HLS keeps timed graphics on the programme clock when tuning in or
+  restarting the encoder within a programme. Rating icons reappear at the
+  interval set by the script.
 
 ## [1.4.0] - 2026-11-26
 
@@ -49,9 +52,6 @@ release section when tagging a release.
   resolving RUSTSEC-2026-0459. `cargo deny` no longer ignores that advisory.
 
 ### Changed
-
-- Document a known native HLS issue where a rating graphic can reappear during
-  a programme when the segmenter starts another encoder.
 
 - Upgrade the official add-on repository to v0.11.14 before upgrading the host
   to 1.4.0. It includes TV-guide teletext 0.1.4 and yt-dlp 0.11.14 with host

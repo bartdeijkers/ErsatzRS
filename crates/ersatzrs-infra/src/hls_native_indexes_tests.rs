@@ -130,6 +130,7 @@ fn native_request(logical: [i32; 5]) -> (HardwareAccelerationKind, PipelineReque
         None,
         Vec::new(),
         Vec::new(),
+        None,
         HlsDiscontinuity::Absent,
         None,
         HlsInputTimeline::Original,

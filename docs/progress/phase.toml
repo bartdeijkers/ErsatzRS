@@ -96,10 +96,6 @@ Use the authoritative Pin table for ordinary gap discovery. Post-pin rows
 require a new maintainer catch-up selection. Retain the existing open and
 deferred work in its owning parity and milestone records.
 
-Restore programme-relative timing for Script overlays across native HLS
-encoder starts. The reproduction and decoded-output check are recorded under
-`native-hls-script-graphics-clock` in `parity/hls-variant-playlists-segmenter.toml`.
-
 Retained earlier handoffs and independent workstream notes follow. Their
 completed outcomes remain valid; earlier exclusions predate this new task.
 
