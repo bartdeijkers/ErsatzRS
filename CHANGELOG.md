@@ -13,6 +13,34 @@ release section when tagging a release.
 
 ## [Unreleased]
 
+### Added
+
+- Add a repeatable channel 1 playback test with a fresh SQLite database, two
+  AC-3 tones and timed DVB teletext page 888. It checks both the served
+  transport stream and ten minutes of libVLC video and audio output.
+  Frame-locked audio timecodes measure signed A/V offset when sound returns
+  after a track change and throughout playback. The VLC gate allows up
+  to two seconds of silence during a verified audio track change and still
+  checks for interruptions between changes. The test instance sets
+  `ERSATZRS_DISABLE_HDHR_DISCOVERY=1` to leave the
+  LAN discovery port available to the regular server.
+
+### Fixed
+
+- Retain alternate audio tracks when native MPEG-TS HLS automatically selects
+  audio from a local programme. On native Hybrid channels with no explicit
+  source-caption delivery setting, carry selected embedded DVB teletext in
+  the segments so receivers can select subtitle pages such as 888.
+- Preserve the last programme audio samples and the AC-3 packet cadence
+  when a native MPEG-TS segment encoder hands off at an aligned boundary.
+  When a viewer tunes into a local programme mid-airing, align the initial
+  AC-3 encode to the scheduled handoff so the preroll packet does not
+  overlap the next programme's audio.
+- Preserve the original timing between H.264 video and copied DVB teletext
+  in native MPEG-TS HLS when using the software encoder or NVENC with
+  source frame timing. A subtitle erase can now coincide with the first
+  displayed frame even when audio priming precedes that frame.
+
 ## [1.4.0] - 2026-11-26
 
 ### Security

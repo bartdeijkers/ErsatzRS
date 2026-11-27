@@ -27,6 +27,7 @@ pub enum SubtitleTextFormat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubtitleImageFormat {
     Pgs,
+    DvbTeletext,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -305,9 +306,11 @@ impl InputFile {
     #[must_use]
     pub fn with_subtitle_codec(mut self, codec: &str) -> Self {
         let codec = codec.trim().to_ascii_lowercase();
-        self.subtitle_image_format = (self.is_image_based_subtitle
-            && matches!(codec.as_str(), "pgssub" | "hdmv_pgs_subtitle"))
-        .then_some(SubtitleImageFormat::Pgs);
+        self.subtitle_image_format = match (self.is_image_based_subtitle, codec.as_str()) {
+            (true, "pgssub" | "hdmv_pgs_subtitle") => Some(SubtitleImageFormat::Pgs),
+            (true, "dvb_teletext") => Some(SubtitleImageFormat::DvbTeletext),
+            _ => None,
+        };
         self.subtitle_text_format = match codec.as_str() {
             "ass" | "ssa" => Some(SubtitleTextFormat::Ass),
             "webvtt" | "vtt" => Some(SubtitleTextFormat::WebVtt),

@@ -44,6 +44,84 @@ fn h264_request(desired: DesiredVideoState) -> PipelineRequest {
         .with_source_video_stream(SourceVideoStream::new(SourceVideoCodec::H264))
 }
 
+#[test]
+fn alternate_ac3_tracks_preserve_selection_filters_and_language() {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.audio_format = FFmpegProfileAudioFormat::Ac3;
+    let mut english = SourceAudioStream::new(SourceAudioCodec::Ac3).with_index(3);
+    english.language = Some("eng".into());
+    let mut dutch = english.clone().with_index(1);
+    dutch.language = Some("nld".into());
+    let mut request = h264_request(desired).with_source_audio_streams(vec![english, dutch]);
+    request.include_alternate_audio("/media/movie.mkv");
+    let pipeline = SoftwarePipelineBuilder.build(request.clone());
+    let argv = pipeline.command(&request.inputs).arguments.join(" ");
+    assert!(argv.contains("-metadata:s:a:1 language=eng"));
+    insta::assert_snapshot!(argv);
+}
+
+#[test]
+fn embedded_teletext_copy_uses_the_video_demuxer_in_native_mpegts_segments() {
+    let mut desired = DesiredVideoState::h264_1080p();
+    desired.frame_rate = None;
+    desired.audio_format = FFmpegProfileAudioFormat::Ac3;
+    desired.audio_sample_rate = Some(48_000);
+    let mut request = h264_request(desired).with_source_audio_streams(vec![
+        SourceAudioStream::new(SourceAudioCodec::Ac3).with_index(1),
+        SourceAudioStream::new(SourceAudioCodec::Ac3).with_index(2),
+    ]);
+    request.include_alternate_audio("/media/movie.mkv");
+    request.state.duration = Some(Duration::from_secs(16));
+    request.state.output_ts_offset = Some(Duration::from_millis(17_880));
+    request.inputs.push(
+        InputFile::image_subtitle("/media/movie.mkv", SubtitleMethod::Copy)
+            .with_stream_index(4)
+            .with_subtitle_codec("dvb_teletext")
+            .with_original_teletext_pts(),
+    );
+    request.state.output_format = OutputFormat::Hls;
+    request.state.hls = Some(HlsOutput {
+        mpegts_segments: Some(ersatzrs_ffmpeg::HlsMpegTsSegments {
+            producer_playlist: ".private-producer/producer.m3u8".into(),
+            start_number: 0,
+        }),
+        segment_template: "live%06d.ts".into(),
+        init_template: None,
+        playlist_path: "live.m3u8".into(),
+        segment_options: None,
+        is_first_transcode: true,
+        discontinuity: false,
+        troubleshooting: false,
+    });
+    let mut normalized = request.clone();
+    normalized.desired.frame_rate = Some(FrameRate::new(25, 1));
+    let normalized =
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, normalized)
+            .unwrap();
+    assert!(normalized
+        .arguments
+        .windows(2)
+        .any(|a| a == ["-fps_mode:v", "cfr"]));
+    assert!(!normalized.arguments.iter().any(|a| a == "-enc_time_base:v"));
+    let command =
+        ersatzrs_ffmpeg::build_pipeline_command(HardwareAccelerationKind::None, request).unwrap();
+    assert_eq!(
+        command.arguments.iter().filter(|arg| *arg == "-i").count(),
+        1
+    );
+    for pair in [
+        ["-codec:s", "copy"],
+        ["-segment_format", "mpegts"],
+        ["-map", "0:4"],
+        ["-bsf:a", "noise=amount=0:drop=not(n)"],
+        ["-enc_time_base:v", "1:90000"],
+        ["-fps_mode:v", "vfr"],
+    ] {
+        assert!(command.arguments.windows(2).any(|args| args == pair));
+    }
+    insta::assert_snapshot!(command.arguments.join("\n"));
+}
+
 /// Replace every spelling of `output_dir` (raw, forward-slash, and the
 /// filter-escaped `X\:`/`X\\:` drive forms) with `<tmp>` so snapshots taken
 /// on Linux (`/tmp/...`) and Windows (`C:\Users\...\Temp\...`) are identical.

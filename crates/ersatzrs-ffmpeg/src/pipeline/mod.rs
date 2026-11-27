@@ -106,8 +106,8 @@ pub fn av1_output_error(format: OutputFormat) -> Option<&'static str> {
     )
 }
 
-/// One private segment-muxer list owned by an explicit bitmap-Carriage producer.
-/// This typed intent is activated only after the exact Copy caption plan qualifies.
+/// Private segment list for a native MPEG-TS subtitle producer. The segment
+/// muxer keeps copied DVB subtitles and teletext in the same TS as video/audio.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HlsMpegTsSegments {
     pub producer_playlist: String,
@@ -221,6 +221,36 @@ pub struct PipelineRequest {
 }
 
 impl PipelineRequest {
+    /// Keep the preferred track first and expose the other probed audio streams
+    /// of the same physical media input to the receiver.
+    pub fn include_alternate_audio(&mut self, media_path: &str) {
+        let Some(first) = self.source_audio_streams.first() else {
+            return;
+        };
+        let Some(input) = self
+            .inputs
+            .iter_mut()
+            .find(|i| i.kind == InputKind::Audio && i.path == media_path)
+        else {
+            return;
+        };
+        if !input.streams.first().is_some_and(|mapped| {
+            self.source_audio_streams
+                .iter()
+                .any(|s| s.index == mapped.index)
+        }) {
+            input.streams = vec![crate::MediaStream::new(first.index)];
+        }
+        for stream in &self.source_audio_streams {
+            if !input
+                .streams
+                .iter()
+                .any(|mapped| mapped.index == stream.index)
+            {
+                input.streams.push(crate::MediaStream::new(stream.index));
+            }
+        }
+    }
     /// Replace a song's picture while keeping its selected audio and subtitles.
     /// The finite PNG is never sought; seek belongs to the original audio input.
     #[must_use]
@@ -1762,6 +1792,26 @@ fn build_transcode_pipeline(
         &mut filter_chain,
     );
 
+    let ac3_programme_duration = request.state.duration.filter(|_| {
+        request.desired.audio_format == FFmpegProfileAudioFormat::Ac3
+            && request.state.output_format == OutputFormat::Hls
+            && request
+                .state
+                .hls
+                .as_ref()
+                .is_some_and(|hls| hls.mpegts_segments.is_some())
+            && request.desired.video_format != FFmpegProfileVideoFormat::Copy
+            && request.state.output_start.is_none()
+            && !request.state.retained_stream_timestamps
+            && !request.state.end_at_shortest
+            && request
+                .inputs
+                .iter()
+                .any(|input| input.kind == InputKind::Audio)
+            && request.runtime_capabilities.as_ref().is_none_or(|report| {
+                report.has_bitstream_filter("noise") && report.has_filter("adelay")
+            })
+    });
     if request.desired.audio_format != FFmpegProfileAudioFormat::Copy {
         filter_chain.audio.push(normalize_loudness_filter(
             match request.desired.normalize_loudness_mode {
@@ -1777,6 +1827,20 @@ fn build_transcode_pipeline(
         filter_chain.audio.push(audio_resample_filter());
         if request.desired.pad_audio {
             filter_chain.audio.push(audio_pad_filter());
+        }
+        if let Some(duration) = ac3_programme_duration {
+            // The native AC-3 encoder has 256 samples of delay in a
+            // 1,536-sample frame. Start it one whole packet before programme
+            // audio. That first packet then contains only priming, while the
+            // final programme samples fit in their intended output packet.
+            let rates = request
+                .desired
+                .audio_sample_rate
+                .map_or_else(|| "48000|44100|32000".to_owned(), |rate| rate.to_string());
+            filter_chain.audio.push(format!(
+                "atrim=duration={},aformat=sample_rates={rates},adelay=1280S:all=1,asetpts=PTS-1280/SR/TB",
+                format_duration_seconds(duration)
+            ));
         }
     }
 
@@ -1890,6 +1954,12 @@ fn build_transcode_pipeline(
         ));
     }
 
+    if let Some(duration) = ac3_programme_duration {
+        filter_chain.pixel_format.push(format!(
+            "trim=duration={}",
+            format_duration_seconds(duration)
+        ));
+    }
     let is_intel = matches!(
         effective_acceleration,
         HardwareAccelerationKind::Vaapi | HardwareAccelerationKind::Qsv
@@ -1914,6 +1984,30 @@ fn build_transcode_pipeline(
     }
 
     steps.push(PipelineStep::complex_filter(complex.options));
+    if let Some(audio) = request.inputs.iter().find(|i| i.kind == InputKind::Audio) {
+        for (position, mapped) in audio.streams.iter().enumerate().skip(1) {
+            if let Some(stream) = request
+                .source_audio_streams
+                .iter()
+                .find(|s| s.index == mapped.index)
+            {
+                for (key, value) in [
+                    ("language", stream.language.as_deref()),
+                    ("title", stream.title.as_deref()),
+                ] {
+                    if let Some(value) = value {
+                        steps.push(PipelineStep::generic(
+                            "alternate_audio_metadata",
+                            [
+                                format!("-metadata:s:a:{position}"),
+                                format!("{key}={value}"),
+                            ],
+                        ));
+                    }
+                }
+            }
+        }
+    }
     if request
         .inputs
         .iter()
@@ -1927,11 +2021,36 @@ fn build_transcode_pipeline(
             ),
             source_metadata_is_runtime_only,
         ));
+        if ac3_programme_duration.is_some() {
+            steps.push(PipelineStep::generic(
+                "discard_ac3_preroll_packet",
+                ["-bsf:a", "noise=amount=0:drop=not(n)"],
+            ));
+        }
     }
     if let Some(encoder) = subtitle_encoder(&request.inputs) {
         steps.push(encoder);
+        if let Some(duration) = ac3_programme_duration {
+            steps.push(PipelineStep::generic(
+                "subtitle_programme_end",
+                [
+                    "-bsf:s".to_owned(),
+                    format!(
+                        "noise=amount=0:drop='gte(pts*tb,{})'",
+                        format_duration_seconds(duration)
+                    ),
+                ],
+            ));
+        }
     }
 
+    if let Some(duration) = ac3_programme_duration {
+        // FFmpeg's implicit output atrim measures duration from the first
+        // padded frame. The graph already bounds programme video and sound.
+        // Allow the 1280-sample preroll at AC-3's lowest rate (32 kHz), so
+        // the implicit trim also passes the very last programme samples.
+        request.state.duration = Some(duration.saturating_add(Duration::from_millis(40)));
+    }
     add_output_options(
         &mut steps,
         &request.state,
@@ -2417,16 +2536,51 @@ pub fn build_pipeline_command_with_source_bitmap_carriage_plan(
     )
 }
 
+fn copies_embedded_teletext(inputs: &[InputFile]) -> bool {
+    let mut captions = inputs
+        .iter()
+        .filter(|input| input.kind == InputKind::Subtitle);
+    let Some(caption) = captions.next() else {
+        return false;
+    };
+    captions.next().is_none()
+        && caption.subtitle_method == Some(SubtitleMethod::Copy)
+        && caption.subtitle_image_format == Some(crate::SubtitleImageFormat::DvbTeletext)
+        && inputs.iter().any(|input| {
+            input.kind == InputKind::Video && input.source_key() == caption.source_key()
+        })
+}
+
 fn build_pipeline_command_with_optional_source_plan(
     acceleration: HardwareAccelerationKind,
-    request: PipelineRequest,
+    mut request: PipelineRequest,
     capture_plan: bool,
     expected_bitmap_copy: Option<&InputFile>,
 ) -> Result<(FfmpegCommand, Option<crate::SourceTeletextInputPlan>), UnsupportedSource> {
     if let Some(reason) = unsupported_source_reason_for_acceleration(Some(acceleration), &request) {
         return Err(UnsupportedSource { reason });
     }
-    let segments = requested_mpegts_segments(&request, expected_bitmap_copy.is_some())?;
+    let embedded_teletext =
+        expected_bitmap_copy.is_none() && copies_embedded_teletext(&request.inputs);
+    let segments = requested_mpegts_segments(
+        &request,
+        expected_bitmap_copy.is_some() || embedded_teletext,
+    )?;
+    let source_video_clock = embedded_teletext
+        && !request.state.retained_stream_timestamps
+        && request.desired.frame_rate.is_none()
+        && request.desired.video_format == FFmpegProfileVideoFormat::H264
+        && matches!(
+            acceleration,
+            HardwareAccelerationKind::None | HardwareAccelerationKind::Nvenc
+        );
+    // An offset on the outer segment muxer also inflates the first EXTINF
+    // of every new programme. Only the inner transport needs the channel clock.
+    let segment_offset = if segments.is_some() {
+        request.state.output_ts_offset.take()
+    } else {
+        None
+    };
     let desired = request.desired.clone();
     let hls = request.state.hls.clone();
     let inputs = request.inputs.clone();
@@ -2466,7 +2620,7 @@ fn build_pipeline_command_with_optional_source_plan(
     let mut command = generate(&pipeline);
     let mut plan = observe(&pipeline, &command);
     if segments.is_some() {
-        if plan.is_none() {
+        if !embedded_teletext && plan.is_none() {
             return Err(unsupported_segments());
         }
         let hls = hls.as_ref().ok_or_else(unsupported_segments)?;
@@ -2475,10 +2629,16 @@ fn build_pipeline_command_with_optional_source_plan(
             .iter_mut()
             .find(|step| matches!(step, PipelineStep::Generic { name: "hls", .. }))
             .ok_or_else(unsupported_segments)?;
-        *output = mpegts_segments_output(hls, &desired, acceleration)?;
+        *output = mpegts_segments_output(
+            hls,
+            &desired,
+            acceleration,
+            segment_offset,
+            source_video_clock,
+        )?;
         command = generate(&pipeline);
         plan = observe(&pipeline, &command);
-        if plan.is_none() {
+        if !embedded_teletext && plan.is_none() {
             return Err(unsupported_segments());
         }
     }
@@ -2538,7 +2698,7 @@ fn bitmap_carriage_output_options(
 
 fn requested_mpegts_segments(
     request: &PipelineRequest,
-    bitmap: bool,
+    supports_segments: bool,
 ) -> Result<Option<HlsMpegTsSegments>, UnsupportedSource> {
     let Some(segments) = request
         .state
@@ -2548,7 +2708,7 @@ fn requested_mpegts_segments(
     else {
         return Ok(None);
     };
-    if !bitmap
+    if !supports_segments
         || request.state.output_format != OutputFormat::Hls
         || segments.producer_playlist.is_empty()
         || segments.producer_playlist.len() > 4096
@@ -2562,8 +2722,9 @@ fn requested_mpegts_segments(
 
 fn unsupported_segments() -> UnsupportedSource {
     UnsupportedSource {
-        reason: "Private MPEG-TS segments require the exact explicit bitmap-Carriage HLS plan"
-            .into(),
+        reason:
+            "Private MPEG-TS segments require bound bitmap carriage or same-input DVB teletext copy"
+                .into(),
     }
 }
 
@@ -4996,12 +5157,27 @@ fn mpegts_segments_output(
     hls: &HlsOutput,
     desired: &DesiredVideoState,
     acceleration: HardwareAccelerationKind,
+    offset: Option<Duration>,
+    source_video_clock: bool,
 ) -> Result<PipelineStep, UnsupportedSource> {
     let segments = hls
         .mpegts_segments
         .as_ref()
         .ok_or_else(unsupported_segments)?;
     let mut options = hls_encoding_options(desired, acceleration);
+    if source_video_clock {
+        // The first video frame can start between frame-rate ticks (e.g. after
+        // AC-3 priming). Copied teletext retains that fractional TS timestamp.
+        options.extend(["-enc_time_base:v", "1:90000", "-fps_mode:v", "vfr"].map(str::to_owned));
+    }
+    let mut inner_options =
+        mpegts_muxing_options(desired).hls_segment_options(hls.segment_options.as_deref());
+    if let Some(offset) = offset.filter(|_| desired.video_format != FFmpegProfileVideoFormat::Copy)
+    {
+        inner_options.push_str(":output_ts_offset=");
+        inner_options.push_str(&format_duration_seconds(offset));
+        inner_options.push('s');
+    }
     options.extend([
         "-f".into(),
         "segment".into(),
@@ -5018,7 +5194,7 @@ fn mpegts_segments_output(
         "-segment_start_number".into(),
         segments.start_number.to_string(),
         "-segment_format_options".into(),
-        mpegts_muxing_options(desired).hls_segment_options(hls.segment_options.as_deref()),
+        inner_options,
         "-segment_list".into(),
         segments.producer_playlist.clone(),
         hls.segment_template.clone(),

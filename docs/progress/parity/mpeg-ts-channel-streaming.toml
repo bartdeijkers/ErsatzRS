@@ -77,3 +77,17 @@ description = 'An accelerated two-item provider proof showed explicit `mode=ts-l
 discovered  = '2026-08-17'
 evidence    = 'Original bounded provider proof reported EIO and Illegal seek after file 0; Hybrid crossed two items with 307,772 packets and zero faults. UCU-05 reproduced legacy EIO/ENOSYS using local synthetic media. Per-entry multiple_requests=1 fixes the isolated chunked HTTP fixture and yields a 20.497-second real-server legacy capture with 141,215 packets and zero transport faults. Focused concat tests and the reviewed snapshot pass (da26145b). Confirmation of the original provider case remains open.'
 resolved    = false
+
+[[debt]]
+id          = 'native-hybrid-selectable-source-tracks'
+description = 'Retain both selectable AC-3 tracks and embedded DVB teletext subtitle page 888 for two five-minute local airings on native MPEG-TS Hybrid with the seeded 1080p SDR profile.'
+discovered  = '2026-11-27'
+evidence    = 'The packaged baseline lost the second track and page in segment zero. The Windows candidate retained both audio PIDs and page 888 in the first and last sampled HLS segments and all 6,003 received PMTs. One libVLC session presented all 15,000 frames and all 120 subtitle boundaries on time, with 59 audible track changes. See docs/testresults_playback/202611271156_channel-one-test-results.md.'
+resolved    = true
+
+[[debt]]
+id          = 'native-hybrid-ac3-frame-cadence-and-vlc-switching'
+description = 'Preserve the AC-3 frame cadence across native HLS encoder handoffs and meet the documented PCM silence and switch-latency limits on the real VLC output.'
+discovered  = '2026-11-27'
+evidence    = 'The 15:54 Windows run passed two complete channel 1 airings with the maintainer-approved allowance of up to 2 s silence during a verified VLC selection. All 59 switches met the revised limit (maximum silence 1.818 s), with zero missing PCM outside those intervals. Both transmitted AC-3 PIDs retained cadence, all 15,000 video frames and 120 subtitle boundaries passed, and all 421 receiver A/V windows decoded (largest absolute offset 12.444 ms). Historical runs retain their original limits. See docs/testresults_playback/202611271554_channel-one-test-results.md.'
+resolved    = true

@@ -1,0 +1,8 @@
+{
+  "url": "http://127.0.0.1:52508/iptv/channel/1.ts",
+  "protocol": "HTTP unicast MPEG-TS",
+  "port": 52508,
+  "db": "state/gate.db",
+  "server": "ersatzrs-web.exe",
+  "buffering_ms": 1000
+}

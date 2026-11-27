@@ -1,0 +1,12 @@
+{
+  "presentations": 15000,
+  "player_duration_s": 600.001,
+  "errors": [],
+  "holds": [],
+  "repeated": 0,
+  "reversed": 0,
+  "max_presentation_interval_ms": 43.0,
+  "missing": [],
+  "buffering": [],
+  "http_connections": 1
+}

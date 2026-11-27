@@ -1,5 +1,5 @@
 //! Row292: a scanned-away automatic provider caption must not replace programme AV.
-use super::super::caption_publication_runtime_tests::{assert_programme_video, barrier};
+use super::super::{assert_programme_video, caption_publication_runtime_tests::barrier};
 use super::*;
 
 struct Inputs<'a> {

@@ -82,6 +82,7 @@ impl<'a> ComplexFilterBuilder<'a> {
         filter_chain: &FilterChain,
     ) -> (Vec<String>, Option<String>, String, String) {
         let mut audio_label = "0:a".to_owned();
+        let mut alternate_audio_labels = Vec::new();
         let mut video_label = "0:v".to_owned();
         let mut watermark_labels = Vec::<String>::new();
         let mut subtitle_label = None::<String>;
@@ -256,6 +257,16 @@ impl<'a> ComplexFilterBuilder<'a> {
                     graph_parts.push(format!("[{audio_label}]{filters}[a]"));
                     "[a]".clone_into(&mut audio_label);
                 }
+                for (position, alternate) in audio.streams.iter().enumerate().skip(1) {
+                    let input = format!("{input_index}:{}", alternate.index);
+                    if filters.is_empty() {
+                        alternate_audio_labels.push(input);
+                    } else {
+                        let output = format!("[a{position}]");
+                        graph_parts.push(format!("[{input}]{filters}{output}"));
+                        alternate_audio_labels.push(output);
+                    }
+                }
             }
         }
 
@@ -271,6 +282,9 @@ impl<'a> ComplexFilterBuilder<'a> {
             .any(|input| input.kind == InputKind::Audio)
         {
             options.extend(["-map".to_owned(), audio_label.clone()]);
+            for label in alternate_audio_labels {
+                options.extend(["-map".to_owned(), label]);
+            }
         }
 
         for subtitle in self.inputs.iter().filter(|input| {

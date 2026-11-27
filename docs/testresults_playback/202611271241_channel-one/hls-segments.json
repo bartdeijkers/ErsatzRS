@@ -1,0 +1,38 @@
+[
+  {
+    "stage": "hls-start",
+    "segment": "live000000.ts",
+    "ac3_pids": [
+      "0x101",
+      "0x102"
+    ],
+    "page888": true
+  },
+  {
+    "stage": "hls-start",
+    "segment": "live000001.ts",
+    "ac3_pids": [
+      "0x101",
+      "0x102"
+    ],
+    "page888": true
+  },
+  {
+    "stage": "hls-pair",
+    "segment": "live000149.ts",
+    "ac3_pids": [
+      "0x101",
+      "0x102"
+    ],
+    "page888": true
+  },
+  {
+    "stage": "hls-pair",
+    "segment": "live000150.ts",
+    "ac3_pids": [
+      "0x101",
+      "0x102"
+    ],
+    "page888": true
+  }
+]

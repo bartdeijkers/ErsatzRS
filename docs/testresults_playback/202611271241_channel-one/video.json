@@ -1,0 +1,247 @@
+{
+  "presentations": 14969,
+  "player_duration_s": 599.999,
+  "errors": [
+    {
+      "index": 5386,
+      "frame": 5386,
+      "previous": 5385,
+      "time_text": "03:35.44",
+      "gap_ms": 107.0
+    },
+    {
+      "index": 5387,
+      "frame": 5388,
+      "previous": 5386,
+      "time_text": "03:35.52",
+      "gap_ms": 21.0
+    },
+    {
+      "index": 5418,
+      "frame": 5418,
+      "previous": 5418,
+      "time_text": "03:36.72",
+      "gap_ms": 65.0
+    },
+    {
+      "index": 5419,
+      "frame": 5421,
+      "previous": 5418,
+      "time_text": "03:36.84",
+      "gap_ms": 7.0
+    },
+    {
+      "index": 5434,
+      "frame": 5437,
+      "previous": 5435,
+      "time_text": "03:37.48",
+      "gap_ms": 64.0
+    },
+    {
+      "index": 5448,
+      "frame": 5451,
+      "previous": 5450,
+      "time_text": "03:38.04",
+      "gap_ms": 109.0
+    },
+    {
+      "index": 5449,
+      "frame": 5453,
+      "previous": 5451,
+      "time_text": "03:38.12",
+      "gap_ms": 3.0
+    },
+    {
+      "index": 5452,
+      "frame": 5457,
+      "previous": 5455,
+      "time_text": "03:38.28",
+      "gap_ms": 61.0
+    },
+    {
+      "index": 5468,
+      "frame": 5473,
+      "previous": 5472,
+      "time_text": "03:38.92",
+      "gap_ms": 118.0
+    },
+    {
+      "index": 5469,
+      "frame": 5475,
+      "previous": 5473,
+      "time_text": "03:39.00",
+      "gap_ms": 8.0
+    },
+    {
+      "index": 5471,
+      "frame": 5477,
+      "previous": 5476,
+      "time_text": "03:39.08",
+      "gap_ms": 116.0
+    },
+    {
+      "index": 5472,
+      "frame": 5479,
+      "previous": 5477,
+      "time_text": "03:39.16",
+      "gap_ms": 4.0
+    },
+    {
+      "index": 5479,
+      "frame": 5487,
+      "previous": 5485,
+      "time_text": "03:39.48",
+      "gap_ms": 14.0
+    },
+    {
+      "index": 5493,
+      "frame": 5502,
+      "previous": 5500,
+      "time_text": "03:40.08",
+      "gap_ms": 18.0
+    },
+    {
+      "index": 5569,
+      "frame": 5579,
+      "previous": 5577,
+      "time_text": "03:43.16",
+      "gap_ms": 33.0
+    },
+    {
+      "index": 5572,
+      "frame": 5584,
+      "previous": 5581,
+      "time_text": "03:43.36",
+      "gap_ms": 115.0
+    },
+    {
+      "index": 5596,
+      "frame": 5609,
+      "previous": 5607,
+      "time_text": "03:44.36",
+      "gap_ms": 17.0
+    },
+    {
+      "index": 5650,
+      "frame": 5663,
+      "previous": 5662,
+      "time_text": "03:46.52",
+      "gap_ms": 364.0
+    },
+    {
+      "index": 5651,
+      "frame": 5671,
+      "previous": 5663,
+      "time_text": "03:46.84",
+      "gap_ms": 4.0
+    },
+    {
+      "index": 5692,
+      "frame": 5712,
+      "previous": 5711,
+      "time_text": "03:48.48",
+      "gap_ms": 235.0
+    },
+    {
+      "index": 5693,
+      "frame": 5717,
+      "previous": 5712,
+      "time_text": "03:48.68",
+      "gap_ms": 13.0
+    },
+    {
+      "index": 5977,
+      "frame": 6001,
+      "previous": 6000,
+      "time_text": "04:00.04",
+      "gap_ms": 201.0
+    },
+    {
+      "index": 5978,
+      "frame": 6001,
+      "previous": 6001,
+      "time_text": "04:00.04",
+      "gap_ms": 122.0
+    },
+    {
+      "index": 5979,
+      "frame": 6008,
+      "previous": 6001,
+      "time_text": "04:00.32",
+      "gap_ms": 4.0
+    },
+    {
+      "index": 5981,
+      "frame": 6011,
+      "previous": 6009,
+      "time_text": "04:00.44",
+      "gap_ms": 50.0
+    },
+    {
+      "index": 5983,
+      "frame": 6013,
+      "previous": 6012,
+      "time_text": "04:00.52",
+      "gap_ms": 131.0
+    },
+    {
+      "index": 5984,
+      "frame": 6015,
+      "previous": 6013,
+      "time_text": "04:00.60",
+      "gap_ms": 14.0
+    }
+  ],
+  "holds": [
+    {
+      "frame": 5418,
+      "start_s": 216.768,
+      "duration_ms": 72.0
+    },
+    {
+      "frame": 6001,
+      "start_s": 240.22,
+      "duration_ms": 126.0
+    }
+  ],
+  "repeated": 2,
+  "reversed": 0,
+  "max_presentation_interval_ms": 364.0,
+  "missing": [
+    5387,
+    5419,
+    5420,
+    5436,
+    5452,
+    5456,
+    5474,
+    5478,
+    5486,
+    5501,
+    5578,
+    5582,
+    5583,
+    5608,
+    5664,
+    5665,
+    5666,
+    5667,
+    5668,
+    5669,
+    5670,
+    5713,
+    5714,
+    5715,
+    5716,
+    6002,
+    6003,
+    6004,
+    6005,
+    6006,
+    6007,
+    6010,
+    6014
+  ],
+  "buffering": [],
+  "http_connections": 1
+}

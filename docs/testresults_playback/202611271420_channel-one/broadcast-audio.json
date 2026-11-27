@@ -1,0 +1,1043 @@
+{
+  "clock": "decoded received-TS sample PTS relative to video frame zero",
+  "block_ms": 4,
+  "tone_dbfs": -36,
+  "silence_rms_dbfs": -48,
+  "tracks": [
+    {
+      "pid": "0x101",
+      "frequency_hz": 750,
+      "blocks": 149999,
+      "unexpected_block_starts_s": [
+        299.99466666666666,
+        599.9946666666667
+      ],
+      "silent_block_starts_s": [
+        299.99466666666666,
+        599.9946666666667
+      ],
+      "switches": [
+        {
+          "planned_s": 10,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 20,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 30,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 40,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 50,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 60,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 70,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 80,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 90,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 100,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 110,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 120,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 130,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 140,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 150,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 160,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 170,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 180,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 190,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 200,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 210,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 220,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 230,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 240,
+          "blocks": 452,
+          "expected_tone_blocks": 452,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 250,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 260,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 270,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 280,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 290,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 300,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 310,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 320,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 330,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 340,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 350,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 360,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 370,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 380,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 390,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 400,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 410,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 420,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 430,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 440,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 450,
+          "blocks": 456,
+          "expected_tone_blocks": 456,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 460,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 470,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 480,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 490,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 500,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 510,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 520,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 530,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 540,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 550,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 560,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 570,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 580,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 590,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        }
+      ]
+    },
+    {
+      "pid": "0x102",
+      "frequency_hz": 1500,
+      "blocks": 149999,
+      "unexpected_block_starts_s": [
+        299.99466666666666,
+        599.9946666666667
+      ],
+      "silent_block_starts_s": [
+        299.99466666666666,
+        599.9946666666667
+      ],
+      "switches": [
+        {
+          "planned_s": 10,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 20,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 30,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 40,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 50,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 60,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 70,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 80,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 90,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 100,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 110,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 120,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 130,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 140,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 150,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 160,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 170,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 180,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 190,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 200,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 210,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 220,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 230,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 240,
+          "blocks": 452,
+          "expected_tone_blocks": 452,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 250,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 260,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 270,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 280,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 290,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 300,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 310,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 320,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 330,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 340,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 350,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 360,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 370,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 380,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 390,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 400,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 410,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 420,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 430,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 440,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 450,
+          "blocks": 456,
+          "expected_tone_blocks": 456,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 460,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 470,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 480,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 490,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 500,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 510,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 520,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 530,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 540,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 550,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 560,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 570,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 580,
+          "blocks": 453,
+          "expected_tone_blocks": 453,
+          "silent_blocks": 0
+        },
+        {
+          "planned_s": 590,
+          "blocks": 457,
+          "expected_tone_blocks": 457,
+          "silent_blocks": 0
+        }
+      ]
+    }
+  ],
+  "vlc_switch_flushes": [
+    {
+      "planned_s": 10,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 20,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 30,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 40,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 50,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 60,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 70,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 80,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 90,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1799.567
+    },
+    {
+      "planned_s": 100,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 110,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 120,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 130,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1799.567
+    },
+    {
+      "planned_s": 140,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 150,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 160,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 170,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 180,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 190,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 200,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 210,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 220,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 230,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1799.567
+    },
+    {
+      "planned_s": 240,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1782.567
+    },
+    {
+      "planned_s": 250,
+      "command_to_flush_ms": 1.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 260,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1785.567
+    },
+    {
+      "planned_s": 270,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 280,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 290,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 300,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 310,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 320,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 330,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 340,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1785.567
+    },
+    {
+      "planned_s": 350,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1799.567
+    },
+    {
+      "planned_s": 360,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 370,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 380,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 390,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1799.567
+    },
+    {
+      "planned_s": 400,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 410,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 420,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 430,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 440,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 450,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1798.567
+    },
+    {
+      "planned_s": 460,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 470,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 480,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1784.567
+    },
+    {
+      "planned_s": 490,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 500,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 510,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 520,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1785.567
+    },
+    {
+      "planned_s": 530,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 540,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 550,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1800.567
+    },
+    {
+      "planned_s": 560,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1783.567
+    },
+    {
+      "planned_s": 570,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    },
+    {
+      "planned_s": 580,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1785.567
+    },
+    {
+      "planned_s": 590,
+      "command_to_flush_ms": 0.0,
+      "last_queued_buffer_end_after_flush_ms": 1801.567
+    }
+  ]
+}

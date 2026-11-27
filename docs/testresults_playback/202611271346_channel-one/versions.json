@@ -1,0 +1,12 @@
+{
+  "python": "3.13.12",
+  "numpy": "2.5.5",
+  "pillow": "13.0.0",
+  "python-vlc": "3.0.21203",
+  "ffmpeg": "ffmpeg version n9.1-ErsatzRS-2.1.0 Copyright (c) 2000-2026 the FFmpeg developers",
+  "ffprobe": "ffprobe version n9.1-ErsatzRS-2.1.0 Copyright (c) 2007-2026 the FFmpeg developers",
+  "tsduck": "tsp: TSDuck - The MPEG Transport Stream Toolkit - version 3.44-4676",
+  "server_sha256": "bd330c4379b6285ca104de2b4e792f5e78ff5f785edc92de9188b3a5f037c155",
+  "scanner_sha256": "7176bfcd1db2e32fada78c5797ccefba429859fec9c7ebedc73bf2890130c4d8",
+  "fixture_sha256": "bce61f654839c86a4c9add2341279f242e83bc22a09dcef2af60ad9652b771ee"
+}

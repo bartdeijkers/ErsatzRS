@@ -10,7 +10,10 @@ use ersatzrs_domain::{
 
 use super::{external, ActiveHlsItem, DbPool, HlsSessionWorker, RepositoryResult};
 use crate::playback::source_teletext::runtime::{self, RuntimeSelectionContext, Selection};
-use crate::repositories::{common::decode_enum_column, SqlxResultExt as _};
+use crate::repositories::{
+    common::{decode_enum_column, encode_enum},
+    SqlxResultExt as _,
+};
 
 pub(super) use crate::playback::source_teletext::runtime::SourceTeletextPlaybackInterval;
 
@@ -47,6 +50,26 @@ impl From<&ActiveHlsItem> for CaptionOccurrence {
 }
 
 impl HlsSessionWorker {
+    /// A configured Burn or bitmap delivery keeps its existing decoder path.
+    /// On an unconfigured Hybrid channel retain the source teletext PES in TS.
+    pub(super) async fn copy_embedded_teletext(&self, pool: &DbPool) -> RepositoryResult<bool> {
+        if self.output_format != ersatzrs_ffmpeg::OutputFormat::Hls {
+            return Ok(false);
+        }
+        sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM Channel c
+               WHERE c.Id=? AND c.StreamingEngine=? AND c.StreamingMode=?
+               AND NOT EXISTS (SELECT 1 FROM ConfigElement e
+                   WHERE e.Key='channel.' || lower(c.UniqueId) || '.source_caption_delivery'))",
+        )
+        .bind(self.channel_id)
+        .bind(encode_enum(StreamingEngine::Legacy))
+        .bind(encode_enum(StreamingMode::TransportStreamHybrid))
+        .fetch_one(pool)
+        .await
+        .repository()
+    }
+
     /// Share the application's existing teletext preparation admission before
     /// starting the worker. Playback itself retains its transcode reservation.
     ///
@@ -223,7 +246,7 @@ impl HlsSessionWorker {
         } else {
             StreamingMode::HttpLiveStreamingSegmenter
         };
-        let selected = runtime::select(RuntimeSelectionContext {
+        let selected = Box::pin(runtime::select(RuntimeSelectionContext {
             source_teletext_delivery: delivery,
             pool,
             locker,
@@ -237,7 +260,7 @@ impl HlsSessionWorker {
             streaming_mode,
             playback_interval: request.playback_interval,
             deadline: external::deadline(self),
-        })
+        }))
         .await;
         let Ok(selected) = selected else {
             tracing::warn!(
