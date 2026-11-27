@@ -50,6 +50,9 @@ release section when tagging a release.
 
 ### Changed
 
+- Document a known native HLS issue where a rating graphic can reappear during
+  a programme when the segmenter starts another encoder.
+
 - Upgrade the official add-on repository to v0.11.14 before upgrading the host
   to 1.4.0. It includes TV-guide teletext 0.1.4 and yt-dlp 0.11.14 with host
   ranges up to `<1.5.0`; earlier add-on versions are capped below 1.4 and are
