@@ -22,8 +22,8 @@ release section when tagging a release.
 
 ### Changed
 
-- Upgrade the official add-on repository to v0.11.14 before upgrading the host
-  to 1.4.0. It includes TV-guide teletext 0.1.4 and yt-dlp 0.11.14 with host
+- Upgrade the official add-on repository to v0.11.15 before upgrading the host
+  to 1.4.0. It includes TV-guide teletext 0.1.6 and yt-dlp 0.11.14 with host
   ranges up to `<1.5.0`; earlier add-on versions are capped below 1.4 and are
   rejected explicitly. Package installation and activation remain separate
   operator actions.
