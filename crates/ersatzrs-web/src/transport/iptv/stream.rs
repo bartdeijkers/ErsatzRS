@@ -184,6 +184,7 @@ struct MpegTsScriptRenderData {
     ffmpeg_path: String,
     muxrate_bps: i64,
     pcr_period_ms: u32,
+    preserve_teletext_pts: bool,
 }
 
 pub async fn serve_transport_stream(
@@ -3629,6 +3630,11 @@ async fn segmenter_wrapper_command(
                 build_mpegts_segmenter_wrapper_command_for_paced_bitmap(
                     hls_url, metadata, aac_latm_audio, Some(wrapper_muxrate_bps),
                 )
+            } else if wrapper_preserves_teletext_pts(state, channel).await
+            {
+                ersatzrs_ffmpeg::build_mpegts_segmenter_wrapper_command_for_teletext(
+                    hls_url, metadata, aac_latm_audio, Some(wrapper_muxrate_bps),
+                )
             } else {
                 build_mpegts_segmenter_wrapper_command(
                     hls_url, metadata, aac_latm_audio, Some(wrapper_muxrate_bps),
@@ -4428,6 +4434,18 @@ fn mpeg_ts_wrapper_muxrate_bps(playback_profile: &PlaybackProfile) -> i64 {
     MpegTsMuxingOptions::from_bitrates(video_kbps, audio_kbps).muxrate_bps
 }
 
+async fn wrapper_preserves_teletext_pts(state: &AppState, channel: &Channel) -> bool {
+    channel.streaming_engine == ersatzrs_domain::StreamingEngine::Legacy
+        && channel.streaming_mode == StreamingMode::TransportStreamHybrid
+        && state
+            .ffmpeg_runtime
+            .read()
+            .await
+            .capabilities
+            .teletext_decoder
+            .preserves_original_pts()
+}
+
 async fn configured_mpegts_script_command(
     state: &AppState,
     channel: &Channel,
@@ -4470,6 +4488,7 @@ async fn configured_mpegts_script_command(
             ffmpeg_path: ersatzrs_ffmpeg::ffmpeg_path(),
             muxrate_bps,
             pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
+            preserve_teletext_pts: wrapper_preserves_teletext_pts(state, channel).await,
         },
     )
     .await
@@ -4592,6 +4611,14 @@ fn render_mpegts_script_template(template: &str, data: &MpegTsScriptRenderData) 
     let muxrate = data.muxrate_bps.to_string();
     let pcr_period = data.pcr_period_ms.to_string();
     template
+        .replace(
+            "{{ TeletextTimestampFlag }}",
+            if data.preserve_teletext_pts {
+                "+preserve_teletext_pts"
+            } else {
+                ""
+            },
+        )
         .replace("{{ HlsUrl }}", &data.hls_url)
         .replace("{{HlsUrl}}", &data.hls_url)
         .replace("{{ ChannelName }}", &data.channel_name)
@@ -9665,6 +9692,7 @@ mod tests {
                 ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
                 muxrate_bps: 9_830_400,
                 pcr_period_ms: 20,
+                preserve_teletext_pts: false,
             },
         );
 
@@ -9683,6 +9711,7 @@ mod tests {
             ffmpeg_path: "ffmpeg".into(),
             muxrate_bps: 12_000_000,
             pcr_period_ms: MPEGTS_PCR_PERIOD_MS,
+            preserve_teletext_pts: false,
         };
         for name in [None, Some(" ".into()), Some("missing-script".into())] {
             let script = MpegTsScript {
@@ -9835,6 +9864,7 @@ mod tests {
                 ffmpeg_path: "/opt/ffmpeg/bin/ffmpeg".to_owned(),
                 muxrate_bps: 9_830_400,
                 pcr_period_ms: 20,
+                preserve_teletext_pts: false,
             },
         )
         .await
@@ -9880,6 +9910,7 @@ mod tests {
             ffmpeg_path: "outils été/映像/ffmpeg".into(),
             muxrate_bps: 9_830_400,
             pcr_period_ms: 20,
+            preserve_teletext_pts: true,
         };
         for (name, template) in [
             (

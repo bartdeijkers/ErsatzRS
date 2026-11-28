@@ -1,5 +1,8 @@
 # TSDuck playback gate (E2E)
 
+For the two-airing channel 1 test with audio switching and rendered DVB
+subtitles, follow [Test channel 1 playback in VLC](../../docs/how-to/test-channel-one-vlc.md).
+
 ## Protected DRCS editor dependency trial
 
 Use the same pinned QTM1.0/cac2167 binary, image, Qt6.10.2 SDK and visible X11

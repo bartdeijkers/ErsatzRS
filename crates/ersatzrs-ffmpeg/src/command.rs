@@ -3,7 +3,7 @@ use crate::{
     map_all_streams, mpegts_muxrate, mpegts_output, mpegts_pcr_period, no_demux_decode_delay,
     no_scene_detect, no_standard_input, no_stats, pipe_output, standard_format_flags,
     EnvironmentVariable, InputFile, InputKind, MpegTsMuxingOptions, MpegTsOutputPolicy,
-    OutputMetadata, PipelineStep, MPEGTS_PCR_PERIOD_MS,
+    OutputMetadata, PipelineStep, SubtitleMethod, MPEGTS_PCR_PERIOD_MS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,7 +67,31 @@ pub fn build_mpegts_segmenter_wrapper_command(
     aac_latm_audio: bool,
     muxrate_bps: Option<i64>,
 ) -> FfmpegCommand {
-    segmenter_wrapper_command(hls_url, metadata, aac_latm_audio, muxrate_bps, true)
+    segmenter_wrapper_command(
+        hls_url,
+        metadata,
+        aac_latm_audio,
+        muxrate_bps,
+        WrapperInput::Ordinary,
+    )
+}
+
+/// Keep source teletext PES timestamps as the HLS demuxer opens each TS segment.
+/// The caller must check this managed `FFmpeg` capability before using the flag.
+#[must_use]
+pub fn build_mpegts_segmenter_wrapper_command_for_teletext(
+    hls_url: impl Into<String>,
+    metadata: &OutputMetadata,
+    aac_latm_audio: bool,
+    muxrate_bps: Option<i64>,
+) -> FfmpegCommand {
+    segmenter_wrapper_command(
+        hls_url,
+        metadata,
+        aac_latm_audio,
+        muxrate_bps,
+        WrapperInput::Teletext,
+    )
 }
 
 /// Remux an already-paced native bitmap segment producer without a second
@@ -85,7 +109,20 @@ pub fn build_mpegts_segmenter_wrapper_command_for_paced_bitmap(
     aac_latm_audio: bool,
     muxrate_bps: Option<i64>,
 ) -> FfmpegCommand {
-    segmenter_wrapper_command(hls_url, metadata, aac_latm_audio, muxrate_bps, false)
+    segmenter_wrapper_command(
+        hls_url,
+        metadata,
+        aac_latm_audio,
+        muxrate_bps,
+        WrapperInput::PacedBitmap,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum WrapperInput {
+    Ordinary,
+    Teletext,
+    PacedBitmap,
 }
 
 fn segmenter_wrapper_command(
@@ -93,7 +130,7 @@ fn segmenter_wrapper_command(
     metadata: &OutputMetadata,
     aac_latm_audio: bool,
     muxrate_bps: Option<i64>,
-    ordinary_input_policy: bool,
+    policy: WrapperInput,
 ) -> FfmpegCommand {
     let mut input = InputFile::video(hls_url);
     if aac_latm_audio {
@@ -101,7 +138,7 @@ fn segmenter_wrapper_command(
             .input_options
             .extend(["-c:a".to_owned(), "aac_latm".to_owned()]);
     }
-    if ordinary_input_policy {
+    if !matches!(policy, WrapperInput::PacedBitmap) {
         input.add_readrate("1.0");
         // Match the six-second HLS remux burst in upstream v26.11.3; keep it
         // below the Next producer's twelve-second lookahead, then resume pacing.
@@ -116,13 +153,19 @@ fn segmenter_wrapper_command(
         hide_banner(),
         loglevel_error(),
         no_stats(),
-        if ordinary_input_policy {
-            standard_format_flags()
-        } else {
-            PipelineStep::global(
+        match policy {
+            WrapperInput::Ordinary => standard_format_flags(),
+            WrapperInput::Teletext => PipelineStep::global(
+                "source_teletext_format_flags",
+                [
+                    "-fflags",
+                    "+genpts+discardcorrupt+igndts+preserve_teletext_pts",
+                ],
+            ),
+            WrapperInput::PacedBitmap => PipelineStep::global(
                 "paced_bitmap_format_flags",
                 ["-fflags", "+genpts+discardcorrupt"],
-            )
+            ),
         },
         map_all_streams(),
         copy_all_streams(),
@@ -338,14 +381,22 @@ pub(crate) fn physical_input_options(
         .iter()
         .any(|owner| owner.source_key() == input.source_key())
     {
-        if selected_bitmap_burn_input(inputs).is_some_and(|subtitle| {
-            subtitle.teletext_timestamp_policy == crate::TeletextTimestampPolicy::OriginalPes
-                && subtitle
-                    .streams
-                    .first()
-                    .is_some_and(|stream| stream.source_teletext_page.is_some())
+        let copy_original_teletext = inputs.iter().any(|subtitle| {
+            subtitle.subtitle_method == Some(SubtitleMethod::Copy)
+                && subtitle.subtitle_image_format == Some(crate::SubtitleImageFormat::DvbTeletext)
+                && subtitle.teletext_timestamp_policy == crate::TeletextTimestampPolicy::OriginalPes
                 && subtitle.source_key() == input.source_key()
-        }) {
+        });
+        if copy_original_teletext
+            || selected_bitmap_burn_input(inputs).is_some_and(|subtitle| {
+                subtitle.teletext_timestamp_policy == crate::TeletextTimestampPolicy::OriginalPes
+                    && subtitle
+                        .streams
+                        .first()
+                        .is_some_and(|stream| stream.source_teletext_page.is_some())
+                    && subtitle.source_key() == input.source_key()
+            })
+        {
             // Preserve the caller's existing flag value; repeated CLI fflags
             // keys replace each other rather than merging their text.
             let prefix = if index == 0 { prefix } else { &[] };
@@ -642,6 +693,18 @@ mod tests {
             "mpegts_segmenter_wrapper_default",
             command.arguments.join(" ")
         );
+    }
+
+    #[test]
+    fn mpegts_teletext_wrapper_keeps_original_pes_in_the_hls_children() {
+        let command = build_mpegts_segmenter_wrapper_command_for_teletext(
+            "http://localhost:8409/iptv/channel/1.m3u8?mode=segmenter",
+            &OutputMetadata::default(),
+            false,
+            Some(10_368_000),
+        );
+        assert!(command.mpegts_output_policy().is_some());
+        insta::assert_snapshot!(command.arguments.join(" "));
     }
 
     #[test]

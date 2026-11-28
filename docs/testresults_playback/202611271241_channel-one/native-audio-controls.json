@@ -1,0 +1,61 @@
+{
+  "native-received-excerpt": {
+    "demux": "ts",
+    "file_caching_ms": 1000,
+    "source": "received-excerpt.ts",
+    "tracks": [
+      257,
+      258
+    ],
+    "switches": [
+      {
+        "media_ms": 2600,
+        "selection": 0,
+        "latency_ms": 1838.7,
+        "gap_between_tones_ms": 1840.18
+      },
+      {
+        "media_ms": 4681,
+        "selection": 0,
+        "latency_ms": 1834.42,
+        "gap_between_tones_ms": 1839.05
+      }
+    ],
+    "peak_levels_dbfs": [
+      -17.49728262170096,
+      -17.54274620978447
+    ],
+    "input_sha256": "7486deb29e26177e57c6edbec9b75806ff94fa5ee629adaf6a7c1e0429661193"
+  },
+  "native-avformat-window": {
+    "demux": "avformat",
+    "file_caching_ms": 35,
+    "source": "short-mux-lead.ts",
+    "tracks": [
+      1,
+      2
+    ],
+    "switches": [
+      {
+        "media_ms": 2512,
+        "selection": 0,
+        "latency_ms": 272.3,
+        "gap_between_tones_ms": 280.99
+      },
+      {
+        "media_ms": 4752,
+        "selection": 0,
+        "latency_ms": 272.78,
+        "gap_between_tones_ms": 276.66
+      }
+    ],
+    "peak_levels_dbfs": [
+      -17.99217463378693,
+      -17.797017509754763
+    ],
+    "input_sha256": "9c4d7b4313e4aad8355a764d4f993b0c2102acc347e98e6a85e99ae992a9f95a"
+  },
+  "receiver": "Windows x64, libVLC 3.0.24, mmdevice, process-include-only WASAPI loopback",
+  "clock": "Commands timestamped with QueryPerformanceCounter via perf_counter_ns. WASAPI packet positions use QPC in 100 ns units.",
+  "analysis": "4 ms windows, 48 kHz stereo PCM averaged to mono, stronger of 750 and 1500 Hz above -42 dBFS. Gap is the interval from the last old-tone window end to the first new-tone window start. These diagnostic controls use file playback."
+}

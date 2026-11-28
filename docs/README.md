@@ -49,6 +49,7 @@ package requirements and the separately installed tools each add-on needs.
 - [Keep channel content updated with a smart collection](how-to/keep-channel-content-updated-with-a-smart-collection.md)
 - [Build a channel from a collection](how-to/build-a-channel-from-a-collection.md)
 - [Connect an IPTV client](how-to/connect-an-iptv-client.md)
+- [Test channel 1 playback in VLC](how-to/test-channel-one-vlc.md)
 - [Schedule extras and alternate versions](how-to/schedule-content-variants.md)
 - [Admin navigation](reference/admin-navigation.md)
 - [HTTP endpoints](reference/http-endpoints.md)

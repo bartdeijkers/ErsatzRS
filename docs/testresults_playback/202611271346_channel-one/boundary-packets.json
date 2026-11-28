@@ -1,0 +1,159 @@
+{
+  "clock_hz": 90000,
+  "measurement_boundaries_absolute_pts": [
+    1715760,
+    28715760,
+    55715760
+  ],
+  "received_ac3": [
+    {
+      "pid": "0x101",
+      "first_capture_pts": 126000,
+      "last_capture_pts": 56525040,
+      "boundaries": [
+        {
+          "boundary_pts": 1715760,
+          "preceding_packet_pts": 1712880,
+          "following_packet_pts": 1715760,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 28715760,
+          "preceding_packet_pts": 28712880,
+          "following_packet_pts": 28715760,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 55715760,
+          "preceding_packet_pts": 55712880,
+          "following_packet_pts": 55715760,
+          "step_ticks": 2880
+        }
+      ]
+    },
+    {
+      "pid": "0x102",
+      "first_capture_pts": 126000,
+      "last_capture_pts": 56525040,
+      "boundaries": [
+        {
+          "boundary_pts": 1715760,
+          "preceding_packet_pts": 1712880,
+          "following_packet_pts": 1715760,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 28715760,
+          "preceding_packet_pts": 28712880,
+          "following_packet_pts": 28715760,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 55715760,
+          "preceding_packet_pts": 55712880,
+          "following_packet_pts": 55715760,
+          "step_ticks": 2880
+        }
+      ]
+    }
+  ],
+  "teletext": [
+    {
+      "capture": "source",
+      "programme_s": 0,
+      "video_pts": 126480,
+      "closest_subtitle_pts": 126480,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "source",
+      "programme_s": 5,
+      "video_pts": 576480,
+      "closest_subtitle_pts": 576480,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "source",
+      "programme_s": 295,
+      "video_pts": 26676480,
+      "closest_subtitle_pts": 26676480,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "received",
+      "programme_s": 0,
+      "video_pts": 1715760,
+      "closest_subtitle_pts": 1716240,
+      "offset_ticks": 480
+    },
+    {
+      "capture": "received",
+      "programme_s": 5,
+      "video_pts": 2165760,
+      "closest_subtitle_pts": 2166240,
+      "offset_ticks": 480
+    },
+    {
+      "capture": "received",
+      "programme_s": 295,
+      "video_pts": 28265760,
+      "closest_subtitle_pts": 28266240,
+      "offset_ticks": 480
+    },
+    {
+      "capture": "received",
+      "programme_s": 300,
+      "video_pts": 28715760,
+      "closest_subtitle_pts": 28716240,
+      "offset_ticks": 480
+    },
+    {
+      "capture": "received",
+      "programme_s": 305,
+      "video_pts": 29165760,
+      "closest_subtitle_pts": 29166240,
+      "offset_ticks": 480
+    },
+    {
+      "capture": "received",
+      "programme_s": 595,
+      "video_pts": 55265760,
+      "closest_subtitle_pts": 55266240,
+      "offset_ticks": 480
+    }
+  ],
+  "hls_pes_offsets": [
+    {
+      "stage": "hls-start",
+      "segment": "live000000.ts",
+      "subtitle_offset_from_nearest_video_pts_ticks": [
+        -960,
+        840
+      ]
+    },
+    {
+      "stage": "hls-start",
+      "segment": "live000001.ts",
+      "subtitle_offset_from_nearest_video_pts_ticks": [
+        -960,
+        840
+      ]
+    },
+    {
+      "stage": "hls-pair",
+      "segment": "live000150.ts",
+      "subtitle_offset_from_nearest_video_pts_ticks": [
+        -1320,
+        480
+      ]
+    },
+    {
+      "stage": "hls-pair",
+      "segment": "live000151.ts",
+      "subtitle_offset_from_nearest_video_pts_ticks": [
+        -1320,
+        480
+      ]
+    }
+  ]
+}

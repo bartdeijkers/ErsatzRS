@@ -16,6 +16,12 @@ const EMBEDDED_CARGO_TOML: &str = include_str!("../../Cargo.toml");
 const DEVELOPMENT_ROUTES_ENV: &str = "ERSATZRS_ENABLE_DEVELOPMENT_ROUTES";
 const STREAMING_ADDR_ENV: &str = "ERSATZRS_STREAMING_ADDR";
 
+/// Parallel local installations can opt out of the shared LAN discovery port.
+#[allow(clippy::disallowed_methods)] // Discovery socket binding is a startup option.
+pub(crate) fn hdhr_discovery_disabled() -> bool {
+    std::env::var("ERSATZRS_DISABLE_HDHR_DISCOVERY").is_ok_and(|value| value == "1")
+}
+
 /// Optional public streaming-only listener; absence retains shared service.
 #[allow(clippy::disallowed_methods)] // Listener binding is intentionally startup environment-only.
 pub(crate) fn streaming_listen_addr() -> Result<Option<std::net::SocketAddr>, String> {

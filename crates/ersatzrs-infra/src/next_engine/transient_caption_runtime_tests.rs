@@ -126,8 +126,7 @@ async fn preview_case(root: &Path, clip: &Path, prepared: bool, convert: bool, r
     assert!(playlist.contains("#EXT-X-ENDLIST"));
     let segment =
         assert_text_playlist(&request.output, &playlist, convert && !removed, false).await;
-    super::caption_publication_runtime_tests::assert_programme_video(&ffmpeg, &segment, &label)
-        .await;
+    assert_programme_video(&ffmpeg, &segment, &label).await;
     assert_text_video_and_audio(&ffmpeg, &segment, !convert && !removed).await;
     println!(
         "row292 preview {label} programme=blue audio=nld880 captions={} cleanup=joined",

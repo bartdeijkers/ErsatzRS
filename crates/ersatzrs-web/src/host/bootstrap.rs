@@ -34,6 +34,8 @@ const MUXRATE_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FF
 const PCR_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"{{ FFmpegPath }}\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -i \"{{ HlsUrl }}\" -map 0 -c copy -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"{{ ChannelName }}\" -f mpegts pipe:1\n";
 const READBURST_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"$ETV_FFMPEG_PATH\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -readrate_initial_burst 6 -i \"$ETV_HLS_URL\" -map 0 -c copy -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"$ETV_CHANNEL_NAME\" -f mpegts pipe:1\n";
 const READBURST_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"%ETV_FFMPEG_PATH%\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -readrate_initial_burst 6 -i \"%ETV_HLS_URL%\" -map 0 -c copy -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"%ETV_CHANNEL_NAME%\" -f mpegts pipe:1\n";
+const SPARSE_DEFAULT_MPEGTS_RUN_SH: &[u8] = b"#! /bin/sh\n\n\"$ETV_FFMPEG_PATH\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -readrate_initial_burst 6 -i \"$ETV_HLS_URL\" -map 0 -c copy -max_interleave_delta 100000 -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"$ETV_CHANNEL_NAME\" -f mpegts pipe:1\n";
+const SPARSE_DEFAULT_MPEGTS_RUN_BAT: &[u8] = b"\xEF\xBB\xBF@echo off\n\n\"%ETV_FFMPEG_PATH%\" -nostdin -threads 1 -hide_banner -loglevel error -nostats -fflags +genpts+discardcorrupt+igndts -readrate 1.0 -readrate_initial_burst 6 -i \"%ETV_HLS_URL%\" -map 0 -c copy -max_interleave_delta 100000 -muxrate {{ MuxRate }} -pcr_period {{ PcrPeriod }} -metadata service_provider=\"ErsatzTV\" -metadata service_name=\"%ETV_CHANNEL_NAME%\" -f mpegts pipe:1\n";
 const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
     DefaultMpegTsScriptFile {
         name: "mpegts.yml",
@@ -48,6 +50,7 @@ const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
             MUXRATE_DEFAULT_MPEGTS_RUN_SH,
             PCR_DEFAULT_MPEGTS_RUN_SH,
             READBURST_DEFAULT_MPEGTS_RUN_SH,
+            SPARSE_DEFAULT_MPEGTS_RUN_SH,
         ],
     },
     DefaultMpegTsScriptFile {
@@ -58,6 +61,7 @@ const DEFAULT_MPEGTS_SCRIPT_FILES: &[DefaultMpegTsScriptFile] = &[
             MUXRATE_DEFAULT_MPEGTS_RUN_BAT,
             PCR_DEFAULT_MPEGTS_RUN_BAT,
             READBURST_DEFAULT_MPEGTS_RUN_BAT,
+            SPARSE_DEFAULT_MPEGTS_RUN_BAT,
         ],
     },
 ];
@@ -281,7 +285,8 @@ pub async fn run() {
 
     let task_handles = super::tasks::spawn_background_tasks(
         super::tasks::HdhrTaskInputs {
-            enabled: !app_state.legacy_streaming_key_configured,
+            enabled: !app_state.legacy_streaming_key_configured
+                && !super::config::hdhr_discovery_disabled(),
             device_uuid: app_state.device_uuid,
             tuner_count: app_state.tuner_count.clone(),
             listen_port: listeners.streaming_addr.port(),
@@ -731,11 +736,18 @@ async fn seed_default_mpegts_script_in(folder: &std::path::Path) -> io::Result<(
         if tokio::fs::try_exists(&path).await? {
             if !script_file.legacy_contents.is_empty() {
                 let existing = tokio::fs::read(&path).await?;
-                if script_file
-                    .legacy_contents
-                    .iter()
-                    .any(|legacy| existing == *legacy)
-                {
+                // Windows packages can seed the same known batch template with CRLF.
+                let batch_lf = (script_file.name == "run.bat")
+                    .then(|| {
+                        std::str::from_utf8(&existing)
+                            .ok()
+                            .map(|s| s.replace("\r\n", "\n"))
+                    })
+                    .flatten();
+                if script_file.legacy_contents.iter().any(|legacy| {
+                    existing == *legacy
+                        || batch_lf.as_ref().is_some_and(|s| s.as_bytes() == *legacy)
+                }) {
                     tokio::fs::write(path, script_file.contents).await?;
                 }
             }
@@ -1394,6 +1406,27 @@ mod tests {
         assert!(run_bat.contains("ETV_FFMPEG_PATH"));
         assert!(run_bat.contains("MuxRate"));
         assert!(run_bat.contains("PcrPeriod"));
+    }
+
+    #[tokio::test]
+    async fn seed_default_mpegts_script_upgrades_shipped_teletext_timestamp_templates() {
+        let root = tempfile::tempdir().unwrap();
+        let batch = std::str::from_utf8(SPARSE_DEFAULT_MPEGTS_RUN_BAT)
+            .unwrap()
+            .replace('\n', "\r\n");
+        tokio::fs::write(root.path().join("run.bat"), batch)
+            .await
+            .unwrap();
+        tokio::fs::write(root.path().join("run.sh"), SPARSE_DEFAULT_MPEGTS_RUN_SH)
+            .await
+            .unwrap();
+        seed_default_mpegts_script_in(root.path()).await.unwrap();
+        for name in ["run.bat", "run.sh"] {
+            let updated = tokio::fs::read_to_string(root.path().join(name))
+                .await
+                .unwrap();
+            assert!(updated.contains("{{ TeletextTimestampFlag }}"));
+        }
     }
 
     #[tokio::test]

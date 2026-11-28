@@ -1,0 +1,74 @@
+{
+  "errors": {
+    "discontinuities": 0,
+    "pts-leap": 0,
+    "dts-leap": 0,
+    "pcr-leap": 0,
+    "invalid-syncs": 0,
+    "transport-errors": 0
+  },
+  "ac3_pids": [
+    "0x101",
+    "0x102"
+  ],
+  "pmt_repetitions": 6001,
+  "max_pmt_interval_s": 0.1000925925925926,
+  "video_timestamps": {
+    "frames": 15000,
+    "min_step_s": 0.03999999999996362,
+    "max_step_s": 0.04000000000007731,
+    "irregular_steps": 0,
+    "missing_counters": [],
+    "repeated_counters": 0,
+    "reversed_counters": 0
+  },
+  "video_format": {
+    "codec_name": "h264",
+    "width": 1920,
+    "height": 1080,
+    "field_order": "progressive",
+    "r_frame_rate": "25/1",
+    "color_space": "bt709",
+    "color_transfer": "bt709"
+  },
+  "audio_timestamps": {
+    "0x101": {
+      "packets": 18750,
+      "min_step_s": 0.031977999999980966,
+      "max_step_s": 0.03202200000000133,
+      "nonmonotonic": 0,
+      "irregular_steps": []
+    },
+    "0x102": {
+      "packets": 18750,
+      "min_step_s": 0.031977999999980966,
+      "max_step_s": 0.03202200000000133,
+      "nonmonotonic": 0,
+      "irregular_steps": []
+    }
+  },
+  "mux_reference_bps": 10368000,
+  "pcr_ok_jitter": [
+    30250,
+    0
+  ],
+  "page888": true,
+  "timed_cues": true,
+  "caption_pts_status": "PASS",
+  "network_arrival_jitter": "NIET GEMETEN",
+  "programme_starts": [
+    [
+      19.324933,
+      23230784
+    ],
+    [
+      319.324933,
+      412030764
+    ],
+    [
+      619.324933,
+      800830744
+    ]
+  ],
+  "continuity_findings": []
+}

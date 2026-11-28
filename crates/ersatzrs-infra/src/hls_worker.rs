@@ -1232,6 +1232,46 @@ impl HlsSessionWorker {
                     continue;
                 }
             };
+            let mut playback_profile =
+                match self.startup_read(self.load_playback_profile(&pool)).await {
+                    Ok(Some(profile)) => profile,
+                    Ok(None) => {
+                        tracing::warn!(
+                            channel_number = %self.channel_number,
+                            "channel has no playback ffmpeg profile; delaying hls worker"
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                    Err(error) => {
+                        tracing::warn!(
+                            %error,
+                            channel_number = %self.channel_number,
+                            "failed to load playback ffmpeg profile; delaying hls worker"
+                        );
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+            // A new local viewer can join a finite programme between AC-3
+            // frames. Include up to one extra packet of real content at tune-in
+            // so the first scheduled handoff ends on the audio packet grid.
+            let mut decision = decision;
+            if is_first
+                && !decision.start_at_zero
+                && self.output_format == OutputFormat::Hls
+                && active.external.is_none()
+                && active.remote_stream.is_none()
+                && playback_profile.profile.transcode_audio
+                && playback_profile.profile.audio_format == FFmpegProfileAudioFormat::Ac3
+                && playback_profile.profile.transcode_video
+            {
+                decision.request_time = ac3_tune_in_time(
+                    &active,
+                    decision.request_time,
+                    playback_profile.profile.audio_sample_rate,
+                );
+            }
             let elapsed = if decision.start_at_zero {
                 Duration::ZERO
             } else {
@@ -1372,27 +1412,6 @@ impl HlsSessionWorker {
                     continue;
                 }
             }
-            let mut playback_profile =
-                match self.startup_read(self.load_playback_profile(&pool)).await {
-                    Ok(Some(profile)) => profile,
-                    Ok(None) => {
-                        tracing::warn!(
-                            channel_number = %self.channel_number,
-                            "channel has no playback ffmpeg profile; delaying hls worker"
-                        );
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                        continue;
-                    }
-                    Err(error) => {
-                        tracing::warn!(
-                            %error,
-                            channel_number = %self.channel_number,
-                            "failed to load playback ffmpeg profile; delaying hls worker"
-                        );
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                        continue;
-                    }
-                };
             let Ok(target_frame_rate) = self
                 .startup_read(self.load_target_frame_rate(&pool, "hls worker"))
                 .await
@@ -1897,6 +1916,14 @@ impl HlsSessionWorker {
             {
                 audio_selection = audio_selection.with_complete_source_audio(&source_audio_streams);
             }
+            let include_alternate_audio = self.output_format == OutputFormat::Hls
+                && active.external.is_none()
+                && active.remote_stream.is_none()
+                && !active.has_pinned_stream_selection
+                && script_audio.is_none()
+                && custom_selection
+                    .as_ref()
+                    .is_none_or(|selection| selection.audio_stream_index.is_none());
             let mut source_caption = None;
             let subtitle = if active.has_pinned_stream_selection {
                 if let Some(stream_index) = active.subtitle_stream_index {
@@ -2065,7 +2092,49 @@ impl HlsSessionWorker {
                 } else {
                     None
                 };
-            let subtitle_input = live_subtitle_input.or_else(|| {
+            let copy_teletext = if active.external.is_none()
+                && active.remote_stream.is_none()
+                && subtitle.as_ref().is_some_and(|s| {
+                    s.subtitle_kind == crate::metadata::subtitle_kind::EMBEDDED
+                        && s.codec.as_deref() == Some("dvb_teletext")
+                        && s.stream_index >= 0
+                }) {
+                match self.startup_read(self.copy_embedded_teletext(&pool)).await {
+                    Ok(copy) => copy,
+                    Err(error) => {
+                        tracing::warn!(%error,"cannot resolve embedded HLS teletext delivery");
+                        break;
+                    }
+                }
+            } else {
+                false
+            };
+            let embedded_input = if copy_teletext {
+                // This PID belongs to the original demuxer, not an independently decoded page.
+                source_caption = None;
+                subtitle
+                    .as_ref()
+                    .and_then(|s| usize::try_from(s.stream_index).ok())
+                    .map(|index| {
+                        let input = InputFile::image_subtitle(
+                            active.media_path.clone(),
+                            ersatzrs_ffmpeg::SubtitleMethod::Copy,
+                        )
+                        .with_stream_index(index)
+                        .with_subtitle_codec("dvb_teletext");
+                        if live_runtime_capabilities
+                            .teletext_decoder
+                            .preserves_original_pts()
+                        {
+                            input.with_original_teletext_pts()
+                        } else {
+                            input
+                        }
+                    })
+            } else {
+                None
+            };
+            let subtitle_input = embedded_input.or(live_subtitle_input).or_else(|| {
                 source_caption
                     .as_ref()
                     .map(|source| source.input())
@@ -2503,6 +2572,9 @@ impl HlsSessionWorker {
             } else {
                 Ok(())
             };
+            if include_alternate_audio {
+                request.include_alternate_audio(&active.media_path);
+            }
             crate::playback::apply_live_input_eof_policy(&mut request, is_live_remote);
             apply_hls_bootstrap_readburst(
                 &mut request,
@@ -2514,7 +2586,7 @@ impl HlsSessionWorker {
                 source.delivery() == ersatzrs_domain::SourceTeletextCaptionDelivery::DvbSubtitles
             });
             let mut producer_failed = false;
-            let producer_playlist = if bitmap_source.is_some() {
+            let producer_playlist = if bitmap_source.is_some() || copy_teletext {
                 let _ = self.trim_playlist_for_append(discontinuity).await;
                 if let Ok(playlist) = producer_playlist::MpegTsProducerPlaylist::prepare(
                     &self.working_dir,
@@ -5462,6 +5534,28 @@ fn hls_transcode_request_time(
     } else {
         transcoded_until
     }
+}
+
+fn ac3_tune_in_time(
+    active: &ActiveHlsItem,
+    request: DateTime<Utc>,
+    sample_rate_khz: i32,
+) -> DateTime<Utc> {
+    let packet_ns: u32 = match sample_rate_khz {
+        48 => 32_000_000,
+        32 => 48_000_000,
+        _ => return request,
+    };
+    let Some(remaining) = remaining_item_duration(active, request, false) else {
+        return request;
+    };
+    if request <= active.playout_start || remaining.is_zero() {
+        return request;
+    }
+    let remainder = u32::try_from(remaining.as_nanos() % u128::from(packet_ns))
+        .expect("remainder is smaller than the u32 packet duration");
+    let preroll = (packet_ns - remainder) % packet_ns;
+    (request - ersatzrs_time::Duration::nanoseconds(i64::from(preroll))).max(active.playout_start)
 }
 
 fn remaining_item_duration(
@@ -9572,6 +9666,23 @@ mod tests {
                 None
             );
         }
+    }
+
+    #[test]
+    fn first_ac3_seek_preserves_the_scheduled_finish_on_a_packet_boundary() {
+        let start = DateTime::UNIX_EPOCH;
+        let finish = start + ersatzrs_time::Duration::seconds(300);
+        let active = active_hls_item_for_window(start, finish);
+        let join = finish - ersatzrs_time::Duration::microseconds(17_926_144);
+        let aligned = ac3_tune_in_time(&active, join, 48);
+
+        assert_eq!(
+            aligned,
+            finish - ersatzrs_time::Duration::milliseconds(17_952)
+        );
+        assert_eq!(ac3_tune_in_time(&active, aligned, 48), aligned);
+        assert_eq!(ac3_tune_in_time(&active, start, 48), start);
+        assert_eq!(ac3_tune_in_time(&active, join, 0), join);
     }
 
     #[test]

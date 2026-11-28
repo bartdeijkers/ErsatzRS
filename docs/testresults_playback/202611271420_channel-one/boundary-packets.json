@@ -1,0 +1,121 @@
+{
+  "clock_hz": 90000,
+  "measurement_boundaries_absolute_pts": [
+    1739280,
+    28739280,
+    55739280
+  ],
+  "teletext": [
+    {
+      "capture": "source",
+      "programme_s": 0,
+      "video_pts": 126480,
+      "closest_subtitle_pts": 126480,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "source",
+      "programme_s": 5,
+      "video_pts": 576480,
+      "closest_subtitle_pts": 576480,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "source",
+      "programme_s": 295,
+      "video_pts": 26676480,
+      "closest_subtitle_pts": 26676480,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "received",
+      "programme_s": 0,
+      "video_pts": 1739280,
+      "closest_subtitle_pts": 1739280,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "received",
+      "programme_s": 5,
+      "video_pts": 2189280,
+      "closest_subtitle_pts": 2189280,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "received",
+      "programme_s": 295,
+      "video_pts": 28289280,
+      "closest_subtitle_pts": 28289280,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "received",
+      "programme_s": 300,
+      "video_pts": 28739280,
+      "closest_subtitle_pts": 28739280,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "received",
+      "programme_s": 305,
+      "video_pts": 29189280,
+      "closest_subtitle_pts": 29189280,
+      "offset_ticks": 0
+    },
+    {
+      "capture": "received",
+      "programme_s": 595,
+      "video_pts": 55289280,
+      "closest_subtitle_pts": 55289280,
+      "offset_ticks": 0
+    }
+  ],
+  "received_ac3": [
+    {
+      "pid": "0x101",
+      "boundaries": [
+        {
+          "boundary_pts": 1739280,
+          "preceding_packet_pts": 1738800,
+          "following_packet_pts": 1741680,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 28739280,
+          "preceding_packet_pts": 28738800,
+          "following_packet_pts": 28741680,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 55739280,
+          "preceding_packet_pts": 55738800,
+          "following_packet_pts": 55741680,
+          "step_ticks": 2880
+        }
+      ]
+    },
+    {
+      "pid": "0x102",
+      "boundaries": [
+        {
+          "boundary_pts": 1739280,
+          "preceding_packet_pts": 1738800,
+          "following_packet_pts": 1741680,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 28739280,
+          "preceding_packet_pts": 28738800,
+          "following_packet_pts": 28741680,
+          "step_ticks": 2880
+        },
+        {
+          "boundary_pts": 55739280,
+          "preceding_packet_pts": 55738800,
+          "following_packet_pts": 55741680,
+          "step_ticks": 2880
+        }
+      ]
+    }
+  ]
+}

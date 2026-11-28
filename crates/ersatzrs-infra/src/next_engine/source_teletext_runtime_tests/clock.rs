@@ -283,11 +283,12 @@ pub(super) async fn check(
     );
     let first_output_pts = actual["packets"][0]["pts"].as_i64().unwrap();
     let landed_source_ticks = first_output_pts - shift - origin;
-    assert!(first_output_pts >= 0 && landed_source_ticks >= 0);
-    // Pinned Next0.2.2 render_subtitle_segment fixes the offset using the two
-    // independently truncated millisecond coordinates, clamps below zero and
-    // nudges the MPEGTS timestamp map by one tick. No timing tolerance is used.
-    let offset_ms = first_output_pts / 90 - landed_source_ticks / 90;
+    assert!(landed_source_ticks >= 0);
+    // On the first pass Next starts WebVTT at stream time zero. Its copy seek
+    // cuts 2 ms before the keyframe DTS. With this fixture's unreordered
+    // video the first packet therefore presents at 180 ticks on the TS clock.
+    assert_eq!(first_output_pts, 180, "unexpected first copied frame PTS");
+    let offset_ms = -(landed_source_ticks / 90);
     let mapped = |value: i64| 1 + (value + offset_ms).max(0) * 90;
     let join = i64::try_from(seek).unwrap();
     let finish = i64::try_from(end).unwrap();

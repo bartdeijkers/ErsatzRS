@@ -198,29 +198,3 @@ async fn mutate_caption(pool: &crate::db::DbPool, caption: &Path, case: &str) {
         _ => panic!("unknown caption case"),
     }
 }
-
-pub(super) async fn assert_programme_video(ffmpeg: &Path, segment: &Path, case: &str) {
-    let mut command = Command::new(ffmpeg);
-    command
-        .args(["-v", "error", "-nostdin", "-i"])
-        .arg(segment)
-        .args([
-            "-map",
-            "0:v:0",
-            "-frames:v",
-            "1",
-            "-vf",
-            "scale=1:1:flags=area",
-            "-pix_fmt",
-            "rgb24",
-            "-f",
-            "rawvideo",
-            "pipe:1",
-        ]);
-    let pixel = tool(command).await;
-    assert_eq!(pixel.len(), 3);
-    assert!(
-        pixel[2] > 150 && pixel[0] < 100 && pixel[1] < 100,
-        "row292 published-caption change replaced programme video: case={case} rgb={pixel:?}"
-    );
-}

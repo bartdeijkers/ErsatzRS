@@ -13,6 +13,32 @@ mod source_teletext_runtime_tests;
 #[path = "caption_publication_runtime_tests.rs"]
 mod caption_publication_runtime_tests;
 
+pub(super) async fn assert_programme_video(ffmpeg: &Path, segment: &Path, case: &str) {
+    let mut command = Command::new(ffmpeg);
+    command
+        .args(["-v", "error", "-nostdin", "-i"])
+        .arg(segment)
+        .args([
+            "-map",
+            "0:v:0",
+            "-frames:v",
+            "1",
+            "-vf",
+            "scale=1:1:flags=area",
+            "-pix_fmt",
+            "rgb24",
+            "-f",
+            "rawvideo",
+            "pipe:1",
+        ]);
+    let pixel = tool(command).await;
+    assert_eq!(pixel.len(), 3);
+    assert!(
+        pixel[2] > 150 && pixel[0] < 100 && pixel[1] < 100,
+        "row292 published-caption change replaced programme video: case={case} rgb={pixel:?}"
+    );
+}
+
 const CUES: &str = "1\n00:00:00,000 --> 00:00:05,000\nBEFORE SEEK\n\n2\n00:00:05,000 --> 00:00:55,000\nNext text conversion proof\n\n3\n00:00:55,000 --> 00:01:00,000\nAFTER SEEK\n";
 
 async fn generate_text_clip(ffmpeg: &Path, folder: &Path) -> PathBuf {
