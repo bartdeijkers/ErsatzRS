@@ -473,14 +473,31 @@ impl GraphicsPipelineOverlay {
     /// output timestamps. Native image inputs prepare their own source phases.
     #[must_use]
     pub fn with_programme_offset(mut self, offset: std::time::Duration) -> Self {
-        if !offset.is_zero() {
-            if let Self::Drawvg { filter, .. } | Self::Drawtext { filter, .. } = &mut self {
-                let offset = offset.as_secs_f64();
-                *filter =
-                    format!("settb=AVTB,setpts=PTS+{offset}/TB,{filter},setpts=PTS-{offset}/TB");
-            }
-        }
+        self.align_programme_clock(offset, std::time::Duration::ZERO);
         self
+    }
+
+    /// Align the frame filter's clock at the first presented frame, then
+    /// restore the incoming timestamps for downstream filters and the muxer.
+    pub fn align_programme_clock(
+        &mut self,
+        programme_elapsed: std::time::Duration,
+        filter_position: std::time::Duration,
+    ) {
+        if programme_elapsed == filter_position {
+            return;
+        }
+        if let Self::Drawvg { filter, .. } | Self::Drawtext { filter, .. } = self {
+            let (shift, restore) = if programme_elapsed > filter_position {
+                ('+', '-')
+            } else {
+                ('-', '+')
+            };
+            let offset = programme_elapsed.abs_diff(filter_position).as_secs_f64();
+            *filter = format!(
+                "settb=AVTB,setpts=PTS{shift}{offset}/TB,{filter},setpts=PTS{restore}{offset}/TB"
+            );
+        }
     }
 
     pub(crate) const fn z_index(&self) -> i32 {

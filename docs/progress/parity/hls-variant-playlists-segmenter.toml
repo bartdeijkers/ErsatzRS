@@ -67,5 +67,6 @@ cross-player freeze as 4 HLS Segmenter PTS leaps before the fix; after switching
 MPEG-TS HLS appends to a monotonic worker-owned output timestamp offset, the
 same gate passed 64 checks with zero continuity-counter/PTS/DTS/PCR-leap faults
 and audio pip cadence max gap deviation 30 ms.
+Timed Script overlays use elapsed playout-item time across encoder restarts and mid-item tune-in.
 History: `sessions.ndjson`/git.
 '''

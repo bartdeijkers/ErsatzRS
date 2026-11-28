@@ -5465,3 +5465,32 @@ them for managed acquisition, and the parity pin advances to v26.14.0
 '''
 adr         = '0135'
 resolved    = true
+
+[[debt]]
+feature     = 'hls-variant-playlists-segmenter'
+id          = 'native-hls-script-graphics-clock'
+discovered  = '2026-11-27'
+resolved    = true
+adr         = '0005'
+description = 'When native HLS starts a new FFmpeg process partway through a programme, a timed Script overlay can replay its opening graphic. Pass the elapsed playout-item time to drawvg across tune-in and work-ahead restarts.'
+evidence    = '''
+A viewer reported repeated rating graphics within a film. The schedule had one
+Script attachment per film. Its opening window was 6.5 seconds and its repeat
+interval was 1,200 seconds. An engine switch during the viewing period prevents
+attribution of the reported appearances to a specific engine or HLS segment.
+
+In source revision 4bdf2684, hls_worker.rs limits a work-ahead encode to 44
+seconds. The native playback path passes the generated drawvg filter to the
+pipeline without applying the elapsed programme time. In a synthetic Windows
+FFmpeg 9.1.0 probe, seeking to second 44 produced the same opening frames as
+starting at zero. Applying the 44-second offset around drawvg kept the sampled
+frames clear. This reproduces the filter-clock error at an encoder restart.
+
+Resolved on Windows with FFmpeg 9.1.0. The HLS request builder maps the
+first presented frame to elapsed playout-item time and restores the incoming
+timestamps after the frame filter. The graphics_clock tests cover input-side,
+output-side and retained-input timing. Decoded HLS frames from one synthetic
+programme with a ten-second source in-point show the opening graphic, clear
+frames after encoder starts at 44 and 185 seconds, and its scheduled return
+as the generation starting at second 1,199 crosses 1,200 seconds.
+'''

@@ -40,6 +40,9 @@ release section when tagging a release.
   in native MPEG-TS HLS when using the software encoder or NVENC with
   source frame timing. A subtitle erase can now coincide with the first
   displayed frame even when audio priming precedes that frame.
+- Native HLS keeps timed graphics on the programme clock when tuning in or
+  restarting the encoder within a programme. Rating icons reappear at the
+  interval set by the script.
 
 ## [1.4.0] - 2026-11-26
 

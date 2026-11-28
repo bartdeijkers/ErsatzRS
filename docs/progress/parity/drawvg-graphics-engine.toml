@@ -13,4 +13,5 @@ Findings 02/04/05/09 are locally accepted (ADRs 0114/0112/0111/0115): five-kind
 YAML/native preview, programme context and JPEG XL repeat/phase/alpha. Exact
 Motion pixel placement and final YAML/alpha/timing/independent real-font
 typography have local acceptance under finding 09b and ADR 0114.
+Native HLS preserves programme time for Script overlays across encoder restarts.
 '''
